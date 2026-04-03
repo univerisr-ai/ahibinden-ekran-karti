@@ -3,7 +3,9 @@ import { chromium } from "playwright";
 
 const TARGET_URL =
   process.env.TARGET_URL || "https://www.sahibinden.com/ekran-karti-masaustu";
-const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
+const AUTHORIZED_USER_ID = String(
+  process.env.TELEGRAM_USER_ID || process.env.TELEGRAM_CHAT_ID || ""
+).trim();
 const PLAYWRIGHT_CHANNEL = String(process.env.PLAYWRIGHT_CHANNEL || "").trim();
 const BOT_TOKENS = [
   process.env.TELEGRAM_BOT_TOKEN_1,
@@ -17,8 +19,8 @@ const SCREENSHOT_PATH = `${ARTIFACTS_DIR}/sahibinden-ekran-karti.png`;
 const HTML_PATH = `${ARTIFACTS_DIR}/page.html`;
 
 function assertConfig() {
-  if (!TELEGRAM_CHAT_ID) {
-    throw new Error("Missing TELEGRAM_CHAT_ID secret.");
+  if (!AUTHORIZED_USER_ID) {
+    throw new Error("Missing TELEGRAM_USER_ID secret.");
   }
 
   if (BOT_TOKENS.length === 0) {
@@ -159,10 +161,10 @@ function formatNow() {
   }).format(new Date());
 }
 
-async function sendPhoto(token, caption) {
+async function sendPhoto(token, chatId, caption) {
   const imageBytes = await readFile(SCREENSHOT_PATH);
   const form = new FormData();
-  form.set("chat_id", TELEGRAM_CHAT_ID);
+  form.set("chat_id", String(chatId));
   form.set("caption", caption.slice(0, 1024));
   form.set(
     "photo",
@@ -173,10 +175,10 @@ async function sendPhoto(token, caption) {
   await telegramApi(token, "sendPhoto", { form });
 }
 
-async function sendMessage(token, text) {
+async function sendMessage(token, chatId, text) {
   await telegramApi(token, "sendMessage", {
     json: {
-      chat_id: TELEGRAM_CHAT_ID,
+      chat_id: String(chatId),
       text: text.slice(0, 4096),
     },
   });
@@ -188,7 +190,7 @@ function pickLatestCommand(botStates) {
   for (const state of botStates) {
     for (const update of state.updates) {
       const message = update.message;
-      if (!message || String(message.chat?.id) !== TELEGRAM_CHAT_ID) {
+      if (!message || String(message.from?.id) !== AUTHORIZED_USER_ID) {
         continue;
       }
 
@@ -200,6 +202,7 @@ function pickLatestCommand(botStates) {
       candidates.push({
         token: state.token,
         botIndex: state.index,
+        chatId: message.chat.id,
         updateId: update.update_id,
         text,
       });
@@ -256,7 +259,7 @@ async function main() {
       `Baslik: ${title || "bulunamadi"}`,
     ].join("\n");
 
-    await sendPhoto(latestCommand.token, caption);
+    await sendPhoto(latestCommand.token, latestCommand.chatId, caption);
     console.log("Screenshot sent to Telegram.");
   } catch (error) {
     const message =
@@ -266,6 +269,7 @@ async function main() {
     if (latestCommand) {
       await sendMessage(
         latestCommand.token,
+        latestCommand.chatId,
         `GitHub sunucusu ekran goruntusunu alamadi: ${message}`
       ).catch(() => {});
     }

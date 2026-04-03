@@ -80,7 +80,9 @@ GitHub'da `Settings > Secrets and variables > Actions` icine sunlari ekle:
 
 - `TELEGRAM_BOT_TOKEN_1`
 - `TELEGRAM_BOT_TOKEN_2`
-- `TELEGRAM_CHAT_ID`
+- `TELEGRAM_USER_ID`
+
+`TELEGRAM_CHAT_ID` eski ad olarak desteklenir, ama yeni kurulumda `TELEGRAM_USER_ID` kullanmak daha dogrudur.
 
 ### Kullanimi
 
@@ -88,10 +90,16 @@ GitHub'da `Settings > Secrets and variables > Actions` icine sunlari ekle:
 2. `Run workflow` ile bir kez elle calistirip ilk testi yap.
 3. Daha sonra Telegram'dan bota su tur mesajlar atabilirsin:
    - `ekran`
+   - `/ekran`
    - `/shot`
    - `kontrol`
    - `sahibinden`
-4. Workflow mesaji gorurse ekran goruntusunu Telegram'a geri yollar.
+4. Workflow mesaji gorurse ekran goruntusunu ayni sohbete geri yollar.
+
+Grup icinde kullaniyorsan slash komutu kullanmak daha guvenlidir. Ornek:
+
+- `/ekran`
+- `/shot`
 
 ### Onemli sinir
 
