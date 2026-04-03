@@ -119,6 +119,7 @@ Bu yontem:
 - Google sunucusunda zamanlanmis tetikleyici ile ilerler
 - sahibinden'in kendi e-posta bildirimlerini izler
 - yeni bildirim gelince Telegram'a metin ve link yollar
+- birden fazla hesabi merkez Gmail'de toplamak icin uygundur
 - scraping yapmaz, ekran goruntusu almaya calismaz
 
 ### Nasil kurulur
@@ -128,8 +129,13 @@ Bu yontem:
 3. Google hesabinda `script.google.com` uzerinden yeni bir Apps Script projesi olustur.
 4. `apps-script/sahibinden-telegram-relay.gs` dosyasindaki kodu yapistir.
 5. `TELEGRAM_BOT_TOKEN` ve `TELEGRAM_CHAT_ID` alanlarini doldur.
-6. `setupEveryFiveMinutesTrigger()` fonksiyonunu bir kez calistir.
-7. Bundan sonra yeni sahibinden e-postalari Telegram'a duser.
+6. Birden fazla hesabin varsa her Gmail hesabindan merkez adrese yonlendirme ac.
+7. Istersen Gmail plus alias kullan:
+   - `merkez+hesap1@gmail.com`
+   - `merkez+hesap2@gmail.com`
+8. Script icindeki `ACCOUNT_ALIASES` alanini bu aliaslara gore doldur.
+9. `setupEveryFiveMinutesTrigger()` fonksiyonunu bir kez calistir.
+10. Bundan sonra yeni sahibinden e-postalari Telegram'a duser.
 
 ### Neden bunu oneriyorum
 

@@ -48,6 +48,7 @@ jobs:
         env:
           PLAYWRIGHT_CHANNEL: ${{ steps.chrome.outputs.channel }}
           TARGET_URL: https://www.sahibinden.com/ekran-karti-masaustu
+          SCRAPEOPS_API_KEY: ${{ secrets.SCRAPEOPS_API_KEY }}
           TELEGRAM_USER_ID: ${{ secrets.TELEGRAM_USER_ID }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
