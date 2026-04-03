@@ -104,3 +104,33 @@ Grup icinde kullaniyorsan slash komutu kullanmak daha guvenlidir. Ornek:
 ### Onemli sinir
 
 Bu yapi gercek zamanli degildir. GitHub Actions zamanlanmis workflow'lari en sik 5 dakikada bir calisir. Yani Telegram'dan mesaj attiktan sonra cevap genelde birkaç dakika icinde gelir.
+
+## Daha saglam yontem: sahibinden bildirimlerini Telegram'a dusurme
+
+GitHub tarafi sahibinden'in bot korumasina takildigi icin, daha guvenilir secenek sahibinden'in kendi bildirimlerini kullanmaktir.
+
+Bu repo icinde hazir Google Apps Script dosyasi:
+
+- `apps-script/sahibinden-telegram-relay.gs`
+
+Bu yontem:
+
+- PC kapaliyken de calisir
+- Google sunucusunda zamanlanmis tetikleyici ile ilerler
+- sahibinden'in kendi e-posta bildirimlerini izler
+- yeni bildirim gelince Telegram'a metin ve link yollar
+- scraping yapmaz, ekran goruntusu almaya calismaz
+
+### Nasil kurulur
+
+1. sahibinden'de aramani `Favori Arama` olarak kaydet.
+2. E-posta bildirimini ac.
+3. Google hesabinda `script.google.com` uzerinden yeni bir Apps Script projesi olustur.
+4. `apps-script/sahibinden-telegram-relay.gs` dosyasindaki kodu yapistir.
+5. `TELEGRAM_BOT_TOKEN` ve `TELEGRAM_CHAT_ID` alanlarini doldur.
+6. `setupEveryFiveMinutesTrigger()` fonksiyonunu bir kez calistir.
+7. Bundan sonra yeni sahibinden e-postalari Telegram'a duser.
+
+### Neden bunu oneriyorum
+
+Sahibinden yardim iceriklerinde `Favori Aramalarim` ile uygun ilan geldiginde e-posta ve mobil bildirim alinabildigi yaziyor. Bu resmi yontem, GitHub veya baska bulut IP'lerinin bot dogrulamasina takilmasindan daha guvenilir.
