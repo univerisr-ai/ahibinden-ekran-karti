@@ -1,0 +1,24 @@
+name: Visit sahibinden ekran karti
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *"
+
+jobs:
+  visit-page:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request ekran karti page
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://www.sahibinden.com/ekran-karti-masaustu"
+          STATUS="$(curl --silent --show-error --location --output page.html --write-out '%{http_code}' --max-time 30 "$URL")"
+          SIZE="$(wc -c < page.html)"
+          echo "HTTP status: $STATUS"
+          echo "Downloaded bytes: $SIZE"
+          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 400 ]; then
+            echo "Request failed."
+            exit 1
+          fi

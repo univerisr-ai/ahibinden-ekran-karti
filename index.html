@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ekran Karti Yonlendirme</title>
+  <meta http-equiv="refresh" content="0;url=https://www.sahibinden.com/ekran-karti-masaustu">
+  <style>
+    :root {
+      --bg: #f4f0e8;
+      --card: #fffaf1;
+      --ink: #1c1a16;
+      --accent: #c46a1c;
+      --accent-dark: #8b4911;
+      --line: #e4d7c2;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(196, 106, 28, 0.18), transparent 32%),
+        radial-gradient(circle at bottom right, rgba(139, 73, 17, 0.12), transparent 28%),
+        linear-gradient(180deg, #f7f2ea 0%, var(--bg) 100%);
+    }
+
+    .card {
+      width: min(680px, 100%);
+      padding: 40px 32px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: rgba(255, 250, 241, 0.94);
+      box-shadow: 0 18px 50px rgba(67, 46, 28, 0.12);
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 5vw, 3.4rem);
+      line-height: 1;
+      letter-spacing: -0.04em;
+    }
+
+    p {
+      margin: 0 auto 18px;
+      max-width: 40ch;
+      font-size: 1.05rem;
+      line-height: 1.65;
+    }
+
+    .button {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 14px 22px;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 700;
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+      box-shadow: 0 10px 24px rgba(139, 73, 17, 0.25);
+    }
+
+    .small {
+      margin-top: 20px;
+      font-size: 0.92rem;
+      color: rgba(28, 26, 22, 0.78);
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Sahibinden Ekran Karti</h1>
+    <p>
+      Bu sayfa acildigi anda dogrudan sahibinden.com icindeki ekran karti listesine gider.
+    </p>
+    <a class="button" href="https://www.sahibinden.com/ekran-karti-masaustu">
+      Hemen Ac
+    </a>
+    <p class="small">
+      GitHub Pages ile calisir. Sadece yonlendirme yapar, ekstra islem yapmaz.
+    </p>
+  </main>
+  <script>
+    window.location.replace("https://www.sahibinden.com/ekran-karti-masaustu");
+  </script>
+</body>
+</html>
