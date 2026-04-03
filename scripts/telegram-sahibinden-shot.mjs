@@ -135,6 +135,11 @@ async function captureArtifacts() {
     viewport: { width: 1440, height: 1100 },
     userAgent:
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    proxy: {
+      server: "http://proxy.scrapeops.io:8339",
+      username: "scrapeops",
+      password: "4cd90769-9c97-492d-8d65-56e284c0afaa"
+    }
   });
 
   const page = await context.newPage();

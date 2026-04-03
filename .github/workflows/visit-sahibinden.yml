@@ -14,7 +14,8 @@ jobs:
         run: |
           set -euo pipefail
           URL="https://www.sahibinden.com/ekran-karti-masaustu"
-          STATUS="$(curl --silent --show-error --location --output page.html --write-out '%{http_code}' --max-time 30 "$URL")"
+          PROXY="http://scrapeops:4cd90769-9c97-492d-8d65-56e284c0afaa@proxy.scrapeops.io:8339"
+          STATUS="$(curl -x "$PROXY" --silent --show-error --location --output page.html --write-out '%{http_code}' --max-time 60 "$URL")"
           SIZE="$(wc -c < page.html)"
           TITLE="$(grep -oP '(?<=<title>).*?(?=</title>)' page.html | head -n 1 || true)"
           HASH="$(sha256sum page.html | awk '{print $1}')"
