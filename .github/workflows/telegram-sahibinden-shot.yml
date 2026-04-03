@@ -1,0 +1,62 @@
+name: Telegram sahibinden screenshot
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+concurrency:
+  group: telegram-sahibinden-screenshot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  poll-telegram:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Detect Chrome
+        id: chrome
+        shell: bash
+        run: |
+          if command -v google-chrome >/dev/null 2>&1; then
+            echo "channel=chrome" >> "$GITHUB_OUTPUT"
+          else
+            echo "channel=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Playwright
+        shell: bash
+        run: |
+          npm init -y
+          npm install playwright@1.54.2
+          if [ -z "${{ steps.chrome.outputs.channel }}" ]; then
+            npx playwright install --with-deps chromium
+          fi
+
+      - name: Poll Telegram and send screenshot
+        env:
+          PLAYWRIGHT_CHANNEL: ${{ steps.chrome.outputs.channel }}
+          TARGET_URL: https://www.sahibinden.com/ekran-karti-masaustu
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
+          TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
+        run: node scripts/telegram-sahibinden-shot.mjs
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-sahibinden-artifacts
+          path: artifacts/
+          if-no-files-found: ignore

@@ -1,9 +1,10 @@
 # GitHub'da sahibinden ekran karti yonlendirme ve duzenli ziyaret
 
-Bu proje iki parca halinde calisir:
+Bu proje uc parca halinde calisir:
 
 1. GitHub Pages icin tek sayfalik yonlendirme sitesi
 2. GitHub Actions ile duzenli araliklarda sadece ilgili sayfaya istek atan workflow
+3. Telegram'dan komut gelince GitHub sunucusunda ekran goruntusu alip geri gonderen workflow
 
 Her iki parca da su adresi kullanir:
 
@@ -59,3 +60,39 @@ GitHub'in resmi dokumanina gore `schedule` ile calisan workflow'lar:
 - Public repolarda 60 gun etkinlik olmazsa otomatik durdurulabilir
 
 Yani bu yapi mumkundur, ama tamami Pages ile degil; Pages + Actions birlikte calisir.
+
+## Telegram ile ekran goruntusu alma
+
+`.github/workflows/telegram-sahibinden-shot.yml` ve
+`scripts/telegram-sahibinden-shot.mjs` dosyalari hazirdir.
+
+Bu yapi:
+
+- GitHub sunucusunda calisir
+- PC kapali olsa bile devam eder
+- Telegram mesajlarini en sik 5 dakikada bir kontrol eder
+- Komut gorurse sahibinden ekran karti sayfasinin ekran goruntusunu ceker
+- Goruntuyu ayni Telegram bota geri yollar
+
+### GitHub Secrets
+
+GitHub'da `Settings > Secrets and variables > Actions` icine sunlari ekle:
+
+- `TELEGRAM_BOT_TOKEN_1`
+- `TELEGRAM_BOT_TOKEN_2`
+- `TELEGRAM_CHAT_ID`
+
+### Kullanimi
+
+1. `Actions` sekmesinde `Telegram sahibinden screenshot` workflow'unu etkinlestir.
+2. `Run workflow` ile bir kez elle calistirip ilk testi yap.
+3. Daha sonra Telegram'dan bota su tur mesajlar atabilirsin:
+   - `ekran`
+   - `/shot`
+   - `kontrol`
+   - `sahibinden`
+4. Workflow mesaji gorurse ekran goruntusunu Telegram'a geri yollar.
+
+### Onemli sinir
+
+Bu yapi gercek zamanli degildir. GitHub Actions zamanlanmis workflow'lari en sik 5 dakikada bir calisir. Yani Telegram'dan mesaj attiktan sonra cevap genelde birkaç dakika icinde gelir.
