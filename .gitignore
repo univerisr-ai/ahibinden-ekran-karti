@@ -1,0 +1,4 @@
+node_modules/
+artifacts/
+sahibinden_test*.html
+test_*.html
