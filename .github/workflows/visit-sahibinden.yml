@@ -16,9 +16,19 @@ jobs:
           URL="https://www.sahibinden.com/ekran-karti-masaustu"
           STATUS="$(curl --silent --show-error --location --output page.html --write-out '%{http_code}' --max-time 30 "$URL")"
           SIZE="$(wc -c < page.html)"
+          TITLE="$(grep -oP '(?<=<title>).*?(?=</title>)' page.html | head -n 1 || true)"
+          HASH="$(sha256sum page.html | awk '{print $1}')"
           echo "HTTP status: $STATUS"
           echo "Downloaded bytes: $SIZE"
+          echo "Page title: ${TITLE:-not found}"
+          echo "Page sha256: $HASH"
           if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 400 ]; then
             echo "Request failed."
             exit 1
           fi
+
+      - name: Upload downloaded page
+        uses: actions/upload-artifact@v4
+        with:
+          name: sahibinden-ekran-karti-page
+          path: page.html

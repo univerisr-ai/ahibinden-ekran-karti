@@ -36,6 +36,8 @@ Bu workflow:
 - Her 6 saatte bir otomatik calisir
 - Sadece `https://www.sahibinden.com/ekran-karti-masaustu` adresine istek atar
 - HTTP durum kodunu ve inen veri boyutunu loglar
+- Sayfa basligini ve dosya hash degerini loglar
+- Indirilen HTML'i artifact olarak saklar
 
 GitHub'da acmak icin:
 
@@ -44,6 +46,7 @@ GitHub'da acmak icin:
 3. Workflow'lari etkinlestir.
 4. `Visit sahibinden ekran karti` workflow'unu ac.
 5. Istersen `Run workflow` ile elle test et.
+6. Calisan job icinde `Artifacts` bolumunden indirilen `page.html` dosyasini gorebilirsin.
 
 ## Onemli not
 
