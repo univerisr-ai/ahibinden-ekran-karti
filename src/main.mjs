@@ -25,6 +25,37 @@ import { evaluateAllListings, selectTopOpportunities, fallbackSelection } from '
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // ─── Telegram Mesaj Gönderici ────────────────────────────────
+async function postTelegramChunk(chunk, parseMode = 'Markdown') {
+  const payload = {
+    chat_id: TELEGRAM_CHAT_ID,
+    text: chunk,
+    disable_web_page_preview: true,
+  };
+  if (parseMode) {
+    payload.parse_mode = parseMode;
+  }
+
+  const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  let body = null;
+  try {
+    body = await response.json();
+  } catch {
+    body = null;
+  }
+
+  if (!response.ok || !body?.ok) {
+    const description = body?.description || `${response.status} ${response.statusText}`.trim();
+    return { ok: false, error: description };
+  }
+
+  return { ok: true };
+}
+
 async function sendTelegram(text) {
   if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) {
     console.log('  ⚠️ Telegram token/chat ID tanımlı değil, mesaj gönderilemedi.');
@@ -41,16 +72,16 @@ async function sendTelegram(text) {
     }
 
     for (const chunk of chunks) {
-      await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: TELEGRAM_CHAT_ID,
-          text: chunk,
-          parse_mode: 'Markdown',
-          disable_web_page_preview: true,
-        }),
-      });
+      let sendResult = await postTelegramChunk(chunk, 'Markdown');
+      if (!sendResult.ok && /parse|markdown/i.test(sendResult.error || '')) {
+        console.log('  ⚠️ Telegram Markdown parse hatası, düz metin fallback deneniyor.');
+        sendResult = await postTelegramChunk(chunk, null);
+      }
+
+      if (!sendResult.ok) {
+        throw new Error(sendResult.error || 'Telegram sendMessage başarısız');
+      }
+
       await sleep(500);
     }
 

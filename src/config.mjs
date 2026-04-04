@@ -7,11 +7,16 @@
 import 'dotenv/config';
 
 // ─── ScrapeOps API Key Rotasyonu ─────────────────────────────
+export const STRICT_SINGLE_KEY_MODE = (process.env.STRICT_SINGLE_KEY_MODE || 'true').toLowerCase() === 'true';
 const rawKeys = (process.env.SCRAPEOPS_API_KEYS || process.env.SCRAPEOPS_API_KEY || '').trim();
-export const SCRAPEOPS_KEYS = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
+const parsedKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
+export const SCRAPEOPS_KEYS = STRICT_SINGLE_KEY_MODE ? parsedKeys.slice(0, 1) : parsedKeys;
 if (SCRAPEOPS_KEYS.length === 0) {
   console.error('❌ SCRAPEOPS_API_KEYS tanımlı değil! GitHub Secrets kontrol edin.');
   process.exit(1);
+}
+if (STRICT_SINGLE_KEY_MODE && parsedKeys.length > 1) {
+  console.log('  ⚙️ STRICT_SINGLE_KEY_MODE aktif: sadece ilk ScrapeOps key kullanılacak.');
 }
 
 // ─── Session Numarası (Her çalışmada benzersiz) ─────────────
@@ -23,7 +28,7 @@ export const TELEGRAM_TOKEN =
   process.env.TELEGRAM_BOT_TOKEN_1 ||
   process.env.TELEGRAM_BOT_TOKEN_2 ||
   '';
-export const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
+export const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_USER_ID || '';
 
 // ─── AI Provider ─────────────────────────────────────────────
 export const AI_PROVIDER = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
@@ -123,6 +128,7 @@ export function getActiveSegments() {
 }
 
 export default {
+  STRICT_SINGLE_KEY_MODE,
   SCRAPEOPS_KEYS,
   SESSION_NUMBER,
   TELEGRAM_TOKEN,

@@ -5,6 +5,7 @@
 import { ProxyAgent } from 'undici';
 import {
   SCRAPEOPS_KEYS,
+  STRICT_SINGLE_KEY_MODE,
   SESSION_NUMBER,
   SCRAPEOPS_PROXY_SCHEME,
   SCRAPEOPS_PROXY_HOST,
@@ -116,6 +117,15 @@ function buildApiUrlForKey(key, targetUrl, unlock = false) {
 }
 
 function findNextAvailableKey(excludeKey = null) {
+  if (STRICT_SINGLE_KEY_MODE) {
+    const onlyKey = SCRAPEOPS_KEYS[0] || null;
+    if (!onlyKey || exhaustedKeys.has(onlyKey)) {
+      return null;
+    }
+    keyCursor = 0;
+    return onlyKey;
+  }
+
   if (exhaustedKeys.size >= SCRAPEOPS_KEYS.length) {
     return null;
   }
