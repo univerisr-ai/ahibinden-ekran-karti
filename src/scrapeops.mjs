@@ -53,8 +53,8 @@ async function fetchWithFullBypass(targetUrl, label = '') {
     const proxyUrl = new URL(SCRAPEOPS_ENDPOINT);
     proxyUrl.searchParams.set('api_key', currentKey);
     proxyUrl.searchParams.set('url', targetUrl);
-    proxyUrl.searchParams.set('render_js', 'true');
-    proxyUrl.searchParams.set('bypass', 'cloudflare_level_3');
+    // Maliyet Optimizasyonu: render_js ve level_3 kaldırılarak 25 Krediden 5 Krediye inildi.
+    proxyUrl.searchParams.set('bypass', 'cloudflare');
     
     try {
       const controller = new AbortController();
@@ -72,7 +72,7 @@ async function fetchWithFullBypass(targetUrl, label = '') {
       if (resp.ok) {
         consecutive403s = 0; // Başarılı olunca sayacı sıfırla
         stats.successfulRequests++;
-        stats.estimatedCredits += 25; // RenderJs + CF Level 3 = ~25 Kredi
+        stats.estimatedCredits += 5; // YENI: Düşük Maliyet Cloudflare Bypass = 5 Kredi
         const html = await resp.text();
         
         // Cloudflare ekranında kalmışsa (200 OK dönebilir)
