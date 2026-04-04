@@ -4,20 +4,22 @@
  *  Tüm modülleri sırayla çağırır, zamanı ölçer, Telegram raporu atar
  * ═══════════════════════════════════════════════════════════════
  */
-import pLimit from 'p-limit';
 import {
   SESSION_NUMBER,
   TELEGRAM_TOKEN,
   TELEGRAM_CHAT_ID,
   CONCURRENCY_LIMIT,
+  TARGET_LISTINGS_PER_RUN,
+  MAX_REQUESTS_PER_RUN,
   BYPASS_AI,
   AI_PROVIDER,
   GEMINI_API_KEY,
   OPENROUTER_API_KEY,
   getActiveSegments,
 } from './config.mjs';
-import { initSession, scrapeSegment, getStats } from './scrapeops.mjs';
-import { parseAllPages, deduplicateListings, filterInvalidListings } from './parser.mjs';
+import { fileURLToPath } from 'node:url';
+import { initSession, scrapeSegment, getStats, isRequestBudgetExhausted, isRunHalted } from './scrapeops.mjs';
+import { parseAllPages, deduplicateListings, filterInvalidListings, getLastFilterStats } from './parser.mjs';
 import { evaluateAllListings, selectTopOpportunities, fallbackSelection } from './ai_evaluator.mjs';
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -59,21 +61,33 @@ async function sendTelegram(text) {
 }
 
 // ─── Rapor Formatı Oluştur ──────────────────────────────────
-function buildReport(stats, totalRaw, totalClean, topDeals, elapsedSec) {
+function buildReport(stats, totalRaw, totalClean, topDeals, elapsedSec, runMeta) {
   const minutes = Math.floor(elapsedSec / 60);
   const seconds = Math.floor(elapsedSec % 60);
   const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
 
+  const stopReason = runMeta.targetReached
+    ? '🎯 hedef ilanda durduruldu'
+    : runMeta.budgetStopped
+      ? '⛔ istek bütçesinde durduruldu'
+      : runMeta.hardStopped
+        ? '⛔ tek deneme başarısız, koşu durduruldu'
+      : runMeta.allKeysExhausted
+        ? '💀 tüm keyler devre dışı'
+        : '✅ normal tamamlandı';
+
   let report = `📊 *EKRAN KARTI FIRSAT RAPORU*\n`;
   report += `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
   report += `📈 *Genel İstatistikler*\n`;
-  report += `• Taranan Segment   : ${getActiveSegments().length}\n`;
+  report += `• Taranan Segment   : ${runMeta.scannedSegments}/${runMeta.totalSegments}\n`;
   report += `• Bulunan Toplam    : ${totalRaw.toLocaleString('tr')} ilan\n`;
   report += `• Tekrarsız İlan    : ${totalClean.toLocaleString('tr')} ilan\n`;
   report += `• Geçen Süre        : ${minutes} dk ${seconds} sn\n`;
   report += `• HTTP İstekleri     : ${stats.totalRequests} (✅${stats.successfulRequests} ❌${stats.failedRequests})\n`;
+  report += `• İstek Limiti      : ${stats.totalRequests}/${MAX_REQUESTS_PER_RUN}\n`;
   report += `• Proxy Maliyeti    : ~${stats.estimatedCredits.toLocaleString('tr')} kredi\n`;
   report += `• AI Analizi        : ${BYPASS_AI ? '⏭️ Atlandı' : '✅ Tamamlandı'}\n`;
+  report += `• Durum             : ${stopReason}\n`;
   report += `• Session           : #${SESSION_NUMBER}\n\n`;
 
   if (topDeals.length > 0) {
@@ -139,41 +153,59 @@ async function main() {
 
   // ── ADIM 2: Fiyat segmentlerine göre paralel çekim ────────
   const segments = getActiveSegments();
-  console.log(`\n  📋 ${segments.length} segment paralel çekilecek (concurrency: ${CONCURRENCY_LIMIT})`);
+  console.log(`\n  📋 ${segments.length} segment taranacak (concurrency: ${CONCURRENCY_LIMIT}, request cap: ${MAX_REQUESTS_PER_RUN})`);
 
-  const limit = pLimit(CONCURRENCY_LIMIT);
-  const segmentResults = await Promise.allSettled(
-    segments.map(([priceMin, priceMax]) =>
-      limit(() => scrapeSegment(priceMin, priceMax, true))
-    )
-  );
-
-  // ── ADIM 3: HTML sayfalarını parse et ─────────────────────
+  // ── ADIM 3: Segmentleri çek + parse et (erken durdurma destekli) ──
   console.log('\n  ════════════════════════════════════════════');
-  console.log('  📄 HTML PARSE EDİLİYOR');
+  console.log('  📄 HTML ÇEKİM + PARSE');
   console.log('  ════════════════════════════════════════════');
 
   let allListings = [];
   let totalPages = 0;
+  let scannedSegments = 0;
+  let targetReached = false;
 
-  for (let i = 0; i < segmentResults.length; i++) {
-    const result = segmentResults[i];
-    const [priceMin, priceMax] = segments[i];
+  const segmentDetails = [];
+
+  for (const [priceMin, priceMax] of segments) {
+    if (isRequestBudgetExhausted() || isRunHalted()) {
+      break;
+    }
+
     const segLabel = `${priceMin.toLocaleString('tr')}-${priceMax.toLocaleString('tr')} TL`;
+    const segmentResult = await scrapeSegment(priceMin, priceMax, true);
+    scannedSegments += 1;
 
-    if (result.status === 'fulfilled' && result.value) {
-      const { htmlPages = [], totalFound = 0 } = result.value;
-      totalPages += htmlPages.length;
+    const htmlPages = segmentResult?.htmlPages || [];
+    const totalFound = segmentResult?.totalFound || 0;
 
-      if (htmlPages.length > 0) {
-        const { listings } = parseAllPages(htmlPages, segLabel);
-        allListings.push(...listings);
-        console.log(`  ✅ ${segLabel}: ${listings.length} ilan parse edildi`);
-      }
+    totalPages += htmlPages.length;
+
+    let parsedCount = 0;
+    if (htmlPages.length > 0) {
+      const { listings } = parseAllPages(htmlPages, segLabel);
+      parsedCount = listings.length;
+      allListings.push(...listings);
+      console.log(`  ✅ ${segLabel}: ${parsedCount} ilan parse edildi`);
     } else {
-      console.log(`  ❌ ${segLabel}: Segment başarısız — ${result.reason?.message || 'Bilinmeyen hata'}`);
+      console.log(`  ⚠️ ${segLabel}: HTML alınamadı veya boş döndü`);
+    }
+
+    segmentDetails.push({
+      segment: segLabel,
+      totalFound,
+      pages: htmlPages.length,
+      parsed: parsedCount,
+    });
+
+    if (allListings.length >= TARGET_LISTINGS_PER_RUN) {
+      targetReached = true;
+      console.log(`  🎯 Hedefe ulaşıldı: ${allListings.length.toLocaleString('tr')} ham ilan (hedef: ${TARGET_LISTINGS_PER_RUN.toLocaleString('tr')})`);
+      break;
     }
   }
+
+  const skippedSegments = Math.max(0, segments.length - scannedSegments);
 
   // ── ADIM 4: Temizlik + Deduplikasyon ──────────────────────
   const totalRaw = allListings.length;
@@ -181,6 +213,11 @@ async function main() {
 
   allListings = filterInvalidListings(allListings);
   console.log(`  🧹 Geçerli ilan sayısı: ${allListings.length.toLocaleString('tr')}`);
+
+  const filterStats = getLastFilterStats();
+  console.log(
+    `  🔎 Filtre redleri : ID=${filterStats.missingId} Fiyat=${filterStats.invalidPrice} Başlık=${filterStats.missingTitle}`
+  );
 
   allListings = deduplicateListings(allListings);
   const totalClean = allListings.length;
@@ -216,37 +253,62 @@ async function main() {
   // ── ADIM 6: Rapor ─────────────────────────────────────────
   const elapsedSec = (Date.now() - startTime) / 1000;
   const stats = getStats();
+  const runMeta = {
+    scannedSegments,
+    totalSegments: segments.length,
+    skippedSegments,
+    targetReached,
+    budgetStopped: !!stats.budgetStopped,
+    hardStopped: !!stats.runHalted,
+    haltReason: stats.haltReason || '',
+    allKeysExhausted: !!stats.allKeysExhausted,
+    targetListings: TARGET_LISTINGS_PER_RUN,
+  };
 
   console.log('');
   console.log('  ═══════════════════════════════════════════════════════');
   console.log('  📊 SONUÇ ÖZETİ');
   console.log('  ═══════════════════════════════════════════════════════');
+  console.log(`  Taranan segment  : ${runMeta.scannedSegments}/${runMeta.totalSegments} (atlanan: ${runMeta.skippedSegments})`);
   console.log(`  Ham ilan        : ${totalRaw.toLocaleString('tr')}`);
   console.log(`  Tekrarsız ilan  : ${totalClean.toLocaleString('tr')}`);
   console.log(`  HTTP istekleri   : ${stats.totalRequests} (✅${stats.successfulRequests} ❌${stats.failedRequests})`);
+  console.log(`  İstek limiti     : ${stats.totalRequests}/${MAX_REQUESTS_PER_RUN}`);
   console.log(`  Proxy kredisi    : ~${stats.estimatedCredits.toLocaleString('tr')}`);
   console.log(`  Toplam süre      : ${Math.floor(elapsedSec / 60)} dk ${Math.floor(elapsedSec % 60)} sn`);
   console.log(`  En iyi fırsatlar : ${topDeals.length} ilan`);
+  if (runMeta.targetReached) {
+    console.log('  Durum            : 🎯 hedef ilan sayısında kontrollü durdu');
+  } else if (runMeta.budgetStopped) {
+    console.log('  Durum            : ⛔ request bütçesinde kontrollü durdu');
+  } else if (runMeta.hardStopped) {
+    console.log(`  Durum            : ⛔ tek deneme başarısız (${runMeta.haltReason || 'neden bilinmiyor'})`);
+  } else if (runMeta.allKeysExhausted) {
+    console.log('  Durum            : 💀 key havuzu devre dışı kaldı');
+  }
   console.log('  ═══════════════════════════════════════════════════════');
 
   // Telegram raporu gönder
-  const report = buildReport(stats, totalRaw, totalClean, topDeals, elapsedSec);
+  const report = buildReport(stats, totalRaw, totalClean, topDeals, elapsedSec, runMeta);
   await sendTelegram(report);
 
   // JSON çıktısı — GitHub Actions artifact olarak kaydedilebilir
   const outputData = {
     timestamp: new Date().toISOString(),
     stats,
+    runMeta,
     totalRaw,
     totalClean,
     topDeals,
+    segmentDetails,
+    totalPages,
     allListings: allListings.slice(0, 500), // İlk 500'ü kaydet (artifact boyut limiti)
     elapsedSeconds: elapsedSec,
   };
 
   // stdout'a JSON yaz (Actions artifact veya debug için)
   const fs = await import('fs');
-  const outputPath = new URL('../output.json', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
+  const outputPath = fileURLToPath(new URL('../output.json', import.meta.url));
   fs.writeFileSync(outputPath, JSON.stringify(outputData, null, 2), 'utf-8');
   console.log(`\n  💾 Sonuçlar kaydedildi: output.json`);
 

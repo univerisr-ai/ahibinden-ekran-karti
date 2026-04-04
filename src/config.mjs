@@ -8,19 +8,11 @@ import 'dotenv/config';
 
 // ─── ScrapeOps API Key Rotasyonu ─────────────────────────────
 const rawKeys = (process.env.SCRAPEOPS_API_KEYS || process.env.SCRAPEOPS_API_KEY || '').trim();
-const SCRAPEOPS_KEYS = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
+export const SCRAPEOPS_KEYS = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
 if (SCRAPEOPS_KEYS.length === 0) {
   console.error('❌ SCRAPEOPS_API_KEYS tanımlı değil! GitHub Secrets kontrol edin.');
   process.exit(1);
 }
-
-let _keyIndex = 0;
-export function getNextKey() {
-  const key = SCRAPEOPS_KEYS[_keyIndex % SCRAPEOPS_KEYS.length];
-  _keyIndex++;
-  return key;
-}
-export function resetKeyIndex() { _keyIndex = 0; }
 
 // ─── Session Numarası (Her çalışmada benzersiz) ─────────────
 export const SESSION_NUMBER = Math.floor(10000 + Math.random() * 90000);
@@ -37,13 +29,27 @@ export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 // ─── Sahibinden Ayarları ─────────────────────────────────────
 export const BASE_URL = 'https://www.sahibinden.com/ekran-karti-masaustu';
 export const ITEMS_PER_PAGE = 50;
-export const MAX_PAGES_PER_SEGMENT = 20;
+export const MAX_PAGES_PER_SEGMENT = parseInt(process.env.MAX_PAGES_PER_SEGMENT || '8', 10);
+
+// ─── ScrapeOps Proxy (Proxy-Only Mod) ───────────────────────
+export const SCRAPEOPS_PROXY_SCHEME = process.env.SCRAPEOPS_PROXY_SCHEME || 'http';
+export const SCRAPEOPS_PROXY_HOST = process.env.SCRAPEOPS_PROXY_HOST || 'proxy.scrapeops.io';
+export const SCRAPEOPS_PROXY_PORT = parseInt(process.env.SCRAPEOPS_PROXY_PORT || '8339', 10);
+export const SCRAPEOPS_PROXY_USER = process.env.SCRAPEOPS_PROXY_USER || 'scrapeops';
 
 // ─── Performans Ayarları ─────────────────────────────────────
-export const CONCURRENCY_LIMIT = parseInt(process.env.CONCURRENCY_LIMIT || '5', 10);
+export const CONCURRENCY_LIMIT = parseInt(process.env.CONCURRENCY_LIMIT || '1', 10);
 export const REQUEST_DELAY_MS = parseInt(process.env.REQUEST_DELAY_MS || '800', 10);
-export const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '4', 10);
+// Her sayfa istegi: sadece 1 deneme, hata olursa kosu durur.
+export const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '1', 10);
 export const RETRY_BASE_DELAY_MS = 2000;
+export const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS || '45000', 10);
+
+// ─── Bütçe / Hedef Ayarları ──────────────────────────────────
+// 2500 ilan hedefi için yaklaşık 50 sayfa gerekir (50 ilan/sayfa).
+export const TARGET_LISTINGS_PER_RUN = parseInt(process.env.TARGET_LISTINGS_PER_RUN || '2500', 10);
+export const MAX_REQUESTS_PER_RUN = parseInt(process.env.MAX_REQUESTS_PER_RUN || '55', 10);
+export const PROXY_CREDIT_PER_REQUEST = parseFloat(process.env.PROXY_CREDIT_PER_REQUEST || '1');
 
 // ─── Fiyat Segmentleri (TL) ─────────────────────────────────
 // Sahibinden sorgu başına max 1000 ilan gösterir.
@@ -74,7 +80,7 @@ export const AI_TOP_RESULTS = 5;            // Rapordaki en iyi ilan sayısı
 // GitHub Actions'tan opsiyonel olarak geçilebilir
 export const CUSTOM_MIN_PRICE = process.env.CUSTOM_MIN_PRICE ? parseInt(process.env.CUSTOM_MIN_PRICE) : null;
 export const CUSTOM_MAX_PRICE = process.env.CUSTOM_MAX_PRICE ? parseInt(process.env.CUSTOM_MAX_PRICE) : null;
-export const BYPASS_AI = (process.env.BYPASS_AI || 'false').toLowerCase() === 'true';
+export const BYPASS_AI = (process.env.BYPASS_AI || 'true').toLowerCase() === 'true';
 
 /**
  * Aktif fiyat segmentlerini döndürür.
@@ -102,14 +108,21 @@ export default {
   BASE_URL,
   ITEMS_PER_PAGE,
   MAX_PAGES_PER_SEGMENT,
+  SCRAPEOPS_PROXY_SCHEME,
+  SCRAPEOPS_PROXY_HOST,
+  SCRAPEOPS_PROXY_PORT,
+  SCRAPEOPS_PROXY_USER,
   CONCURRENCY_LIMIT,
   REQUEST_DELAY_MS,
   MAX_RETRIES,
   RETRY_BASE_DELAY_MS,
+  REQUEST_TIMEOUT_MS,
+  TARGET_LISTINGS_PER_RUN,
+  MAX_REQUESTS_PER_RUN,
+  PROXY_CREDIT_PER_REQUEST,
   PRICE_SEGMENTS,
   AI_CHUNK_SIZE,
   AI_DELAY_BETWEEN_CHUNKS_MS,
   AI_TOP_RESULTS,
-  getNextKey,
   getActiveSegments,
 };

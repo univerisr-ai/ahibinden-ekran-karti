@@ -7,6 +7,12 @@
 import * as cheerio from 'cheerio';
 
 const BASE_SITE = 'https://www.sahibinden.com';
+let lastFilterStats = {
+  missingId: 0,
+  invalidPrice: 0,
+  missingTitle: 0,
+  kept: 0,
+};
 
 // ─── Fiyat Normalizasyonu ────────────────────────────────────
 // "12.500 TL" → 12500 (number)
@@ -14,10 +20,33 @@ export function normalizePrice(priceStr) {
   if (!priceStr) return 0;
   // "12.500 TL" → "12500"
   const cleaned = priceStr
-    .replace(/[^\d.,]/g, '')   // Harfleri ve TL'yi kaldır
-    .replace(/\./g, '')         // Binlik noktaları kaldır
-    .replace(',', '.');         // Decimal virgülü noktaya çevir
+    .replace(/\u00A0/g, ' ')
+    .replace(/[^\d.,\s]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
   return parseFloat(cleaned) || 0;
+}
+
+export function extractListingId(url = '') {
+  if (!url) return '';
+
+  let match = url.match(/-(\d{6,})(?:\/detay)?(?:[/?#]|$)/i);
+  if (match) return match[1];
+
+  match = url.match(/\/(\d{6,})(?:\/detay)?(?:[/?#]|$)/i);
+  if (match) return match[1];
+
+  match = url.match(/[?&](?:id|ilan_id|listingId)=(\d{6,})/i);
+  return match ? match[1] : '';
+}
+
+function firstElement($root, selectors) {
+  for (const selector of selectors) {
+    const found = $root.find(selector).first();
+    if (found.length) return found;
+  }
+  return null;
 }
 
 // ─── Tek Sayfa Parse ─────────────────────────────────────────
@@ -49,7 +78,7 @@ export function parseListingPage(html, segmentLabel = '') {
   }
 
   // İlan satırlarını parse et
-  $('tr.searchResultsItem').each((_, row) => {
+  $('tr.searchResultsItem, tr[class*="searchResultsItem"]').each((_, row) => {
     const $row = $(row);
     const classes = ($row.attr('class') || '').split(/\s+/);
 
@@ -58,24 +87,33 @@ export function parseListingPage(html, segmentLabel = '') {
     if (skipClasses.some(c => classes.includes(c))) return;
 
     // Başlık ve link
-    const titleEl = $row.find('a.classifiedTitle').first().length
-      ? $row.find('a.classifiedTitle').first()
-      : $row.find('td.searchResultsTitleValue a').first();
+    const titleEl = firstElement($row, [
+      'a.classifiedTitle',
+      'td.searchResultsTitleValue a',
+      'a[href*="/ilan/"]',
+    ]);
 
-    if (!titleEl.length) return;
+    if (!titleEl || !titleEl.length) return;
 
-    const href = (titleEl.attr('href') || '').trim();
+    const href = (titleEl.attr('href') || titleEl.attr('data-href') || '').trim();
     const baslik = titleEl.text().trim();
 
     // İlan ID — URL'den çıkar
-    const idMatch = href.match(/(?:-|\/)(\d{7,})(?:\/|$)/);
-    const ilan_id = idMatch ? idMatch[1] : '';
+    const ilan_id = extractListingId(href);
 
     // Fiyat
-    const priceEl = $row.find('td.searchResultsPriceValue span').first().length
-      ? $row.find('td.searchResultsPriceValue span').first()
-      : $row.find('td.searchResultsPriceValue div').first();
-    const fiyatStr = priceEl.length ? priceEl.text().trim() : '';
+    const priceEl = firstElement($row, [
+      'td.searchResultsPriceValue span',
+      'td.searchResultsPriceValue div',
+      'td.searchResultsPriceValue',
+      '[class*="searchResultsPrice"]',
+    ]);
+    let fiyatStr = priceEl && priceEl.length ? priceEl.text().trim() : '';
+    if (!fiyatStr) {
+      const rowText = $row.text().replace(/\s+/g, ' ');
+      const fallback = rowText.match(/(\d{1,3}(?:[.\s]\d{3})*(?:,\d+)?\s*TL)/i);
+      fiyatStr = fallback ? fallback[1] : '';
+    }
     const fiyat = normalizePrice(fiyatStr);
 
     // Konum
@@ -94,7 +132,12 @@ export function parseListingPage(html, segmentLabel = '') {
       ? (imgEl.attr('src') || imgEl.attr('data-src') || '')
       : '';
 
-    const url = href.startsWith('http') ? href : `${BASE_SITE}${href}`;
+    let url = '';
+    try {
+      url = href ? new URL(href, BASE_SITE).toString() : '';
+    } catch {
+      url = href.startsWith('http') ? href : `${BASE_SITE}${href}`;
+    }
 
     listings.push({
       ilan_id,
@@ -126,15 +169,47 @@ export function deduplicateListings(allListings) {
 
 // ─── Temel Filtre — Bozuk/Anlamsız ilanları temizle ─────────
 export function filterInvalidListings(listings) {
-  return listings.filter(item => {
-    // ID'si yok ise atla
-    if (!item.ilan_id) return false;
-    // Fiyatı 0 veya çok absürt olanlari atla
-    if (item.fiyat <= 0) return false;
-    // Başlığı boş ise atla
-    if (!item.baslik || item.baslik.length < 3) return false;
-    return true;
-  });
+  const stats = {
+    missingId: 0,
+    invalidPrice: 0,
+    missingTitle: 0,
+    kept: 0,
+  };
+
+  const filtered = [];
+
+  for (const item of listings) {
+    const normalized = { ...item };
+    normalized.ilan_id = normalized.ilan_id || extractListingId(normalized.url || '');
+    if (!normalized.ilan_id) {
+      stats.missingId += 1;
+      continue;
+    }
+
+    const price = normalized.fiyat > 0
+      ? normalized.fiyat
+      : normalizePrice(normalized.fiyat_str || '');
+    if (!(price > 0)) {
+      stats.invalidPrice += 1;
+      continue;
+    }
+    normalized.fiyat = price;
+
+    if (!normalized.baslik || normalized.baslik.trim().length < 3) {
+      stats.missingTitle += 1;
+      continue;
+    }
+
+    filtered.push(normalized);
+    stats.kept += 1;
+  }
+
+  lastFilterStats = stats;
+  return filtered;
+}
+
+export function getLastFilterStats() {
+  return { ...lastFilterStats };
 }
 
 // ─── Toplu Parse: Birden fazla HTML sayfasını işle ───────────
@@ -153,8 +228,10 @@ export function parseAllPages(htmlPages, segmentLabel = '') {
 
 export default {
   normalizePrice,
+  extractListingId,
   parseListingPage,
   parseAllPages,
   deduplicateListings,
   filterInvalidListings,
+  getLastFilterStats,
 };

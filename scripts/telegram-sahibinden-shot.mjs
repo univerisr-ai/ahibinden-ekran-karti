@@ -120,9 +120,13 @@ async function acknowledgeUpdates(token, maxUpdateId) {
   });
 }
 
-const SCRAPEOPS_API_KEY = process.env.SCRAPEOPS_API_KEY || "4cd90769-9c97-492d-8d65-56e284c0afaa";
+const SCRAPEOPS_API_KEY = String(process.env.SCRAPEOPS_API_KEY || "").trim();
 
 async function fetchViaScrapeOps(targetUrl) {
+  if (!SCRAPEOPS_API_KEY) {
+    throw new Error("Missing SCRAPEOPS_API_KEY secret.");
+  }
+
   const params = new URLSearchParams({
     api_key: SCRAPEOPS_API_KEY,
     url: targetUrl,

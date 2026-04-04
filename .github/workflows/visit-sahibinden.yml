@@ -2,8 +2,6 @@ name: Visit sahibinden ekran karti
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 */6 * * *"
 
 jobs:
   visit-page:
@@ -11,10 +9,12 @@ jobs:
     steps:
       - name: Request ekran karti page
         shell: bash
+        env:
+          SCRAPEOPS_API_KEY: ${{ secrets.SCRAPEOPS_API_KEY }}
         run: |
           set -euo pipefail
           URL="https://www.sahibinden.com/ekran-karti-masaustu"
-          PROXY="http://scrapeops:4cd90769-9c97-492d-8d65-56e284c0afaa@proxy.scrapeops.io:8339"
+          PROXY="http://scrapeops:${SCRAPEOPS_API_KEY}@proxy.scrapeops.io:8339"
           STATUS="$(curl -x "$PROXY" --silent --show-error --location --output page.html --write-out '%{http_code}' --max-time 60 "$URL")"
           SIZE="$(wc -c < page.html)"
           TITLE="$(grep -oP '(?<=<title>).*?(?=</title>)' page.html | head -n 1 || true)"
