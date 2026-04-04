@@ -1,0 +1,20 @@
+# V3 Cookie Generator — Python Bağımlılıkları
+
+# Temel
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Telegram Bot
+python-telegram-bot>=21.0
+
+# Tarayıcı Otomasyon (ana yöntemler)
+nodriver>=0.38
+seleniumbase>=4.30
+camoufox[geoip]>=0.4
+playwright>=1.45
+
+# HTTP TLS Impersonation (scraping aşaması)
+curl_cffi>=0.7
+
+# Sanal Ekran (GCP Linux)
+PyVirtualDisplay>=3.0

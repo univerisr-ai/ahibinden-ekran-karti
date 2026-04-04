@@ -1,0 +1,35 @@
+Cloudflare'in modern bot engelleme sistemlerini (özellikle 2025-2026 standartlarındaki "Super Bot" korumalarını) aşmak, sadece bir aracı kullanmaktan ziyade, internet protokollerinin her katmanında tam bir insan taklidi yapmayı gerektiren karmaşık bir süreçtir. Bu sistemleri bypass edebilmek için gereken temel bileşenler şunlardır:
+
+### 1. Pasif Katman: TLS ve HTTP/2 Parmak İzi (Fingerprinting)
+Cloudflare, daha herhangi bir veri alışverişi başlamadan, bağlantı aşamasındaki **TLS el sıkışmasını (handshake)** analiz ederek istemcinin bir tarayıcı mı yoksa bir script mi olduğunu anlar.
+*   **JA3/JA4 Parmak İzi:** Standart kütüphaneler (Python Requests gibi) belirgin bir TLS imzası bırakır ve anında engellenir.
+*   **Çözüm:** Google Chrome'un kullandığı BoringSSL kütüphanesini simüle eden `curl_cffi` gibi araçlar kullanılmalıdır. Ayrıca, ağ düzeyinde gerçek bir tarayıcı gibi görünmek için **HTTP/2 protokolü** etkinleştirilmeli ve başlık sıralaması (header ordering) tarayıcıyla birebir eşleşmelidir.
+
+### 2. Aktif Katman: JavaScript ve Turnstile Çözümü
+Cloudflare, tarayıcının gerçekliğini test etmek için arka planda görünmez JavaScript meydan okumaları ve **Turnstile CAPTCHA** sunar.
+*   **Nodriver (2026 Standardı):** Geleneksel Selenium'un aksine `navigator.webdriver` gibi otomasyon izleri bırakmaz. Doğrudan Chrome DevTools Protokolü (CDP) üzerinden iletişim kurarak Cloudflare’in aktif testlerini geçebilir.
+*   **SeleniumBase UC Mode:** "Undetected ChromeDriver" modunu kullanarak otomasyon engellerini aşar ve Turnstile kutucuklarını otomatik olarak tıklayabilir.
+*   **Camoufox:** Firefox tabanlı bir anti-detect tarayıcıdır; Cloudflare'in Chrome odaklı parmak izi tespitlerini aşmak için etkili bir alternatiftir.
+
+### 3. Davranışsal Analiz ve İnsan Taklidi
+Sistem, sadece tarayıcı özelliklerini değil, kullanıcı davranışlarını da takip eder.
+*   **Mouse Hareketleri:** Fare imleci düz çizgiler yerine **Bezier eğrileri** kullanarak hareket ettirilmelidir. Hareket süresi, insan el-göz koordinasyonunu simüle eden **Fitts Kanunu**'na uygun olmalıdır.
+*   **Navigasyon Akışı:** Doğrudan hedef URL'ye gitmek (örneğin bir ürün sayfası) şüphelidir. Gerçek bir kullanıcı gibi ana sayfadan başlayıp kategoriler üzerinden ilerleyen "ısınma" (warm-up) aşamaları eklenmelidir.
+*   **Rastgele Gecikmeler:** Tıklamalar arasında 300ms-800ms, yazma işlemlerinde ise 50ms-150ms arası rastgele gecikmeler kullanılmalıdır.
+
+### 4. IP İtibarı ve Proxy Stratejisi
+Veri merkezi (Datacenter) IP'leri düşük güven puanına sahiptir ve hızla engellenir.
+*   **Konut (Residential) veya Mobil Proxy:** Gerçek kullanıcılardan gelen IP adresleri en yüksek güven puanına sahiptir.
+*   **IP Sabitliği (Stickiness):** Cloudflare'in verdiği `cf_clearance` çerezi IP adresine bağlıdır. Bu nedenle, çerez geçerli olduğu sürece (genellikle 30-60 dakika) aynı IP adresinin kullanılması şarttır.
+
+### 5. Oturum Yönetimi (cf_clearance)
+Cloudflare engelini bir kez geçtiğinizde size bir **`cf_clearance` çerezi** verilir.
+*   Bu çerez, o oturum için "temiz" olduğunuzun kanıtıdır.
+*   Başarılı bir bypass için bu çerezi almalı ve onu alan **User-Agent** ile birebir aynı sistem özellikleriyle kullanmaya devam etmelisiniz.
+
+### 6. Gelişmiş Teknik: Remote Debugging Port (9222)
+En zorlu durumlarda, halihazırda açık olan ve bir insan tarafından doğrulanmış gerçek bir tarayıcıya bağlanmak en etkili yöntemdir.
+*   Tarayıcı `--remote-debugging-port=9222` ile başlatılarak script bu porta bağlanır.
+*   **Dikkat:** Chrome 136 ve üzeri sürümlerde, varsayılan profil klasöründe hata ayıklama modu engellenmiştir; bu nedenle `--user-data-dir` parametresiyle özel bir klasör belirtilmesi zorunludur.
+
+Sonuç olarak, başarılı bir bypass için **Nodriver** veya **SeleniumBase UC** gibi güncel bir otomasyon aracı, **konut tipi proxy** ve **gerçekçi bir TLS parmak izi** kombinasyonu hayati önem taşır.

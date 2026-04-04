@@ -1,0 +1,12 @@
+selenium
+webdriver-manager
+seleniumbase
+requests
+beautifulsoup4
+curl_cffi
+python-dotenv
+google-cloud-storage
+
+# Telegram
+python-telegram-bot==21.1.1
+pyvirtualdisplay==3.0

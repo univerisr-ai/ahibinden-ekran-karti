@@ -1,0 +1,15 @@
+[Unit]
+Description=Pull latest cookie payload from GCS
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/ai-gez
+EnvironmentFile=-/opt/ai-gez/.env
+ExecStart=/opt/ai-gez/.venv/bin/python /opt/ai-gez/gcs_cookie_bridge.py pull
+StandardOutput=append:/var/log/ai-gez-gcs-pull.log
+StandardError=append:/var/log/ai-gez-gcs-pull.log
+
+[Install]
+WantedBy=multi-user.target

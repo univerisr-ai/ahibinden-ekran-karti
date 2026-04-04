@@ -1,0 +1,14 @@
+﻿ai-gez-deploy.zip
+install.sh
+telegram_bot.py
+test_bypass.py
+test_bypass2.py
+test_cf.py
+test_drission.py
+test_drission_full.py
+test_drission_full2.py
+test_driver.py
+test_sb.py
+__pycache__/
+.chrome_profile/
+downloaded_files/

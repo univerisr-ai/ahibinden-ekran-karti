@@ -1,0 +1,73 @@
+name: 🎮 GPU Fırsat Avcısı — Sahibinden AI Scraper
+
+on:
+  # ── Zamanlı çalıştırma ────────────────────────────────────
+  schedule:
+    - cron: '0 8 * * *'    # Her gün sabah 08:00 UTC (11:00 TR)
+
+  # ── Manuel çalıştırma (Telefondan parametre girme) ────────
+  workflow_dispatch:
+    inputs:
+      min_fiyat:
+        description: 'Minimum fiyat filtresi (TL, opsiyonel)'
+        required: false
+        default: ''
+      max_fiyat:
+        description: 'Maximum fiyat filtresi (TL, opsiyonel)'
+        required: false
+        default: ''
+      bypass_ai:
+        description: 'AI analizini atla (sadece scrape)?'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  scrape:
+    name: 🔍 Scrape & Analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🟢 Node.js Kurulumu
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 📦 Bağımlılıkları Yükle
+        run: npm install
+
+      - name: 🚀 GPU Fırsat Avcısını Çalıştır
+        env:
+          # ── ScrapeOps ──────────────────────────────────────
+          SCRAPEOPS_API_KEYS: ${{ secrets.SCRAPEOPS_API_KEY }},${{ secrets.SCRAPEOPS_API_KEY2 }},${{ secrets.SCRAPEOPS_API_KEY3 }}
+
+          # ── Telegram ───────────────────────────────────────
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+          # ── AI (Gemini / OpenRouter) ────────────────────────
+          AI_PROVIDER: ${{ secrets.AI_PROVIDER || 'gemini' }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+          # ── Workflow Dispatch parametreleri ──────────────────
+          CUSTOM_MIN_PRICE: ${{ github.event.inputs.min_fiyat }}
+          CUSTOM_MAX_PRICE: ${{ github.event.inputs.max_fiyat }}
+          BYPASS_AI: ${{ github.event.inputs.bypass_ai }}
+
+          # ── Performans ──────────────────────────────────────
+          CONCURRENCY_LIMIT: '5'
+          REQUEST_DELAY_MS: '800'
+        run: node src/main.mjs
+
+      - name: 💾 Sonuçları Kaydet (Artifact)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraper-results-${{ github.run_number }}
+          path: output.json
+          retention-days: 30

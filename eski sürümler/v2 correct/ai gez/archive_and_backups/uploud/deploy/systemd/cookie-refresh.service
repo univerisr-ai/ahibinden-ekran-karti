@@ -1,0 +1,19 @@
+﻿[Unit]
+Description=Sahibinden cookie refresh check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/ai-gez
+EnvironmentFile=-/opt/ai-gez/.env
+Environment=PYTHONUNBUFFERED=1
+UMask=0077
+NoNewPrivileges=true
+ExecStartPre=/opt/ai-gez/.venv/bin/python /opt/ai-gez/server_preflight.py --service cookie-refresh
+ExecStart=/opt/ai-gez/.venv/bin/python /opt/ai-gez/redacted_runner.py -- /opt/ai-gez/.venv/bin/python /opt/ai-gez/cookie_auto_refresh.py --once --headless --force-refresh-after-min 90 --send-gcs-on-refresh
+StandardOutput=append:/var/log/ai-gez-cookie.log
+StandardError=append:/var/log/ai-gez-cookie.log
+
+[Install]
+WantedBy=multi-user.target

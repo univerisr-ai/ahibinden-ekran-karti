@@ -1,0 +1,95 @@
+☁️ GOOGLE CLOUD - SAHİBİNDEN V2 (NODRIVER + WARP + CURL_CFFI) KURULUM REHBERİ ☁️
+
+Cloudflare'in "Super Bot 2025/2026" güvenlik duvarını aşmak üzere tasarlanmıştır.
+WARP ile datacenter IP maskelenir, Nodriver ile insan taklidi yapılır.
+
+## 🛠️ Kurulum Adımları
+
+### 1. Dosyaları Yükle
+Bu `v1_nodriver_cffi` klasörünü sunucunuza yükleyin.
+
+### 2. Sistem Paketlerini Kur
+```bash
+sudo apt-get update
+sudo apt-get install -y xvfb python3-pip python3-venv
+```
+
+### 3. Cloudflare WARP Kur (ÜCRETSİZ IP MASKELEMESİ)
+```bash
+sudo bash warp_setup.sh
+```
+Bu script otomatik olarak:
+- Cloudflare WARP'ı kurar
+- SOCKS5 proxy modunda yapılandırır (port: 40000)
+- Bağlantıyı test eder
+- Otomatik başlatmayı etkinleştirir
+
+Kurulumdan sonra test:
+```bash
+# WARP durumunu kontrol et
+warp-cli status
+
+# WARP IP'sini gör
+curl --socks5 127.0.0.1:40000 https://ifconfig.me
+
+# Normal IP'yi gör (farklı olmalı)
+curl https://ifconfig.me
+```
+
+### 4. Python Bağımlılıklarını Kur
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 5. .env Dosyasını Ayarla
+`.env` dosyasını açıp Telegram Token'ınızı yapıştırın.
+
+### 6. Botu Başlat
+```bash
+python bot_controller.py
+```
+
+### 7. Otomatik Cookie Yenileme (Cron Job)
+Cookie'lerin her 45 dakikada otomatik yenilenmesi için:
+```bash
+crontab -e
+```
+Şu satırı ekleyin:
+```
+*/45 * * * * cd /opt/ai-gez && source .venv/bin/activate && python cookie_generator.py >> /var/log/cookie_gen.log 2>&1
+```
+
+## ⚙️ Nasıl Çalışır?
+
+### Otonom Akış (Elinize Dokunmaya Gerek Yok):
+1️⃣ Cron job her 45 dakikada `cookie_generator.py`'yi tetikler
+2️⃣ WARP SOCKS5 ile IP maskelenir (datacenter → Cloudflare CDN IP)
+3️⃣ Nodriver + Xvfb + İnsan Taklidi ile Cloudflare bypass edilir
+4️⃣ `cf_clearance` cookie'si alınır ve Telegram'a gönderilir
+5️⃣ `bot_controller.py` cookie mesajını algılar ve `fast_scraper.py`'yi tetikler
+6️⃣ `fast_scraper.py` aynı WARP IP üzerinden curl_cffi ile ilanları çeker
+7️⃣ Veriler AI modülüne gönderilir
+
+### Veya manuel olarak:
+Telegram'dan `/basla` yazarak tüm zinciri tetikleyebilirsiniz.
+
+## 🔧 Sorun Giderme
+
+### WARP bağlanmıyorsa:
+```bash
+warp-cli disconnect
+warp-cli registration delete
+warp-cli registration new
+warp-cli mode proxy
+warp-cli proxy port 40000
+warp-cli connect
+```
+
+### Cookie alınamıyorsa:
+- `debug.png` ekran görüntüsünü kontrol edin
+- `warp-cli status` ile WARP durumunu kontrol edin
+- Deneme sayısı: MAX_RETRIES=3 (.env'den ayarlanabilir)
+
+📌 BİLGİ: Sistem 3 deneme yapar (exponential backoff: 15s → 30s → 60s). Başarısız olursa Telegram'a hata bildirimi gönderir.

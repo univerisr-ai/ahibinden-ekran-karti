@@ -1,0 +1,1034 @@
+﻿<!doctype html>
+<html lang="tr">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sahibinden Ekran Kartı İlanları</title>
+  <meta name="description" content="Sahibinden.com ekran kartı ilanlarını anlık takip edin. Fiyat karşılaştırma, arama ve filtreleme.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-deep:      #07090f;
+      --bg-surface:   #0d1117;
+      --bg-card:      rgba(22, 30, 46, 0.7);
+      --bg-card-hover:rgba(34, 46, 66, 0.6);
+      --glass-border: rgba(148, 163, 184, 0.10);
+      --text-primary: #f0f4fc;
+      --text-secondary:#8a99b8;
+      --text-muted:   #4b5a7a;
+      --accent:       #6366f1;
+      --accent-2:     #818cf8;
+      --accent-glow:  rgba(99, 102, 241, 0.30);
+      --green:        #10b981;
+      --green-dim:    rgba(16, 185, 129, 0.12);
+      --amber:        #f59e0b;
+      --amber-dim:    rgba(245, 158, 11, 0.12);
+      --red:          #ef4444;
+      --red-dim:      rgba(239, 68, 68, 0.12);
+      --radius:       18px;
+      --radius-sm:    12px;
+      --radius-xs:    8px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Ambient blobs */
+    body::before, body::after {
+      content: '';
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(130px);
+      z-index: 0;
+      pointer-events: none;
+    }
+    body::before {
+      width: 700px; height: 700px;
+      background: radial-gradient(circle, rgba(99,102,241,0.18), transparent 70%);
+      top: -200px; left: -150px;
+    }
+    body::after {
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(16,185,129,0.12), transparent 70%);
+      bottom: -150px; right: -100px;
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px 20px 80px;
+    }
+
+    /* ─── HEADER ─── */
+    .header {
+      background: var(--bg-card);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .header-left { display: flex; flex-direction: column; gap: 6px; }
+
+    .logo { display: flex; align-items: center; gap: 14px; }
+
+    .logo-icon {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 0 24px var(--accent-glow);
+      flex-shrink: 0;
+    }
+
+    h1 {
+      font-size: 23px; font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #f0f4fc, #b8c5e0);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+
+    .header-sub { color: var(--text-secondary); font-size: 13px; padding-left: 58px; }
+
+    .stats { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .stat-chip {
+      background: rgba(13, 17, 23, 0.6);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
+      padding: 10px 16px;
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px; font-weight: 600;
+    }
+
+    .stat-chip .value { color: var(--accent); font-size: 22px; font-weight: 800; line-height: 1; }
+    .stat-chip .label { color: var(--text-secondary); }
+
+    .stat-chip.live .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse-dot 2s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+      50%       { box-shadow: 0 0 0 8px rgba(16,185,129,0); }
+    }
+
+    /* ─── SCRAPE BANNER ─── */
+    .scrape-banner {
+      background: linear-gradient(135deg, rgba(99,102,241,0.12), rgba(16,185,129,0.08));
+      border: 1px solid rgba(99,102,241,0.2);
+      border-radius: var(--radius);
+      padding: 18px 24px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .scrape-info { display: flex; flex-direction: column; gap: 4px; }
+    .scrape-title { font-weight: 700; font-size: 15px; }
+    .scrape-desc { font-size: 13px; color: var(--text-secondary); }
+
+    .scrape-btn {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border: none;
+      border-radius: var(--radius-xs);
+      padding: 10px 22px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex; align-items: center; gap: 8px;
+      transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s;
+      box-shadow: 0 4px 18px var(--accent-glow);
+      white-space: nowrap;
+    }
+
+    .scrape-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 24px var(--accent-glow); }
+    .scrape-btn:active { transform: translateY(0); }
+    .scrape-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .scrape-btn.running { background: linear-gradient(135deg, var(--green), #34d399); }
+    .scrape-btn.running svg { animation: spin 1s linear infinite; }
+
+    /* ─── PROGRESS BAR ─── */
+    .progress-bar-wrap {
+      height: 3px;
+      background: rgba(99,102,241,0.15);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 10px;
+      display: none;
+    }
+
+    .progress-bar-wrap.visible { display: block; }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--green));
+      border-radius: 2px;
+      animation: progress-anim 2s ease-in-out infinite;
+    }
+
+    @keyframes progress-anim {
+      0%   { width: 5%; margin-left: 0; }
+      50%  { width: 60%; margin-left: 20%; }
+      100% { width: 5%; margin-left: 95%; }
+    }
+
+    /* ─── CONTROLS ─── */
+    .controls {
+      background: var(--bg-card);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      margin-bottom: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .search-box { flex: 1; min-width: 240px; position: relative; }
+
+    .search-box svg {
+      position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+      color: var(--text-muted); width: 15px; height: 15px; pointer-events: none;
+    }
+
+    .search-box input {
+      width: 100%;
+      background: rgba(13,17,23,0.7);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-xs);
+      padding: 9px 13px 9px 38px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .search-box input::placeholder { color: var(--text-muted); }
+    .search-box input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .filter-group { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    select.sort-select, select.price-filter {
+      background: rgba(13,17,23,0.7);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-xs);
+      padding: 8px 12px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    select.sort-select option, select.price-filter option {
+      background: #0d1117;
+    }
+
+    .refresh-btn {
+      background: rgba(99,102,241,0.12);
+      border: 1px solid rgba(99,102,241,0.25);
+      border-radius: var(--radius-xs);
+      padding: 8px 16px;
+      color: var(--accent-2);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .refresh-btn:hover {
+      background: rgba(99,102,241,0.2);
+      color: #fff;
+    }
+
+    .refresh-btn.loading svg { animation: spin 1s linear infinite; }
+
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+
+    /* ─── STATUS BAR ─── */
+    .status-bar {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-xs);
+      padding: 9px 15px;
+      margin-bottom: 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .status-bar.error   { border-color: rgba(239,68,68,0.3); color: var(--red); }
+    .status-bar.success { border-color: rgba(16,185,129,0.2); color: var(--green); }
+    .status-bar.warning { border-color: rgba(245,158,11,0.25); color: var(--amber); }
+
+    /* ─── CARDS GRID ─── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+      display: flex; flex-direction: column;
+      animation: fadeUp 0.35s ease both;
+    }
+
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 14px 44px rgba(0,0,0,0.35), 0 0 0 1px rgba(99,102,241,0.18);
+      border-color: rgba(99,102,241,0.22);
+    }
+
+    .card-image {
+      width: 100%; height: 185px;
+      background: rgba(13,20,36,0.7);
+      position: relative; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      border-bottom: 1px solid var(--glass-border);
+    }
+
+    .card-image img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      transition: transform 0.5s ease;
+    }
+
+    .card:hover .card-image img { transform: scale(1.06); }
+
+    .card-image.empty {
+      background: linear-gradient(135deg, rgba(22,30,46,0.9), rgba(13,20,36,0.9));
+    }
+
+    .card-image.empty .no-img {
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 500;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+
+    .card-body {
+      padding: 16px 18px 14px;
+      display: flex; flex-direction: column;
+      gap: 10px; flex: 1;
+    }
+
+    .card-title {
+      font-size: 14px; font-weight: 700; line-height: 1.45;
+      color: var(--text-primary);
+      display: -webkit-box;
+      -webkit-line-clamp: 2; line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .meta-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+
+    .meta-tag.location { background: rgba(99,102,241,0.1); color: #a5b4fc; }
+    .meta-tag.date     { background: rgba(245,158,11,0.1); color: #fbbf24; }
+    .meta-tag.id-tag   { background: rgba(148,163,184,0.08); color: var(--text-secondary); }
+
+    .card-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 18px;
+      border-top: 1px solid var(--glass-border);
+      background: rgba(7,9,15,0.4);
+    }
+
+    .card-price {
+      font-size: 19px; font-weight: 800;
+      background: linear-gradient(135deg, var(--green), #34d399);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+
+    .card-link {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(99,102,241,0.1);
+      border: 1px solid rgba(99,102,241,0.2);
+      border-radius: var(--radius-xs);
+      padding: 5px 13px;
+      color: #a5b4fc;
+      text-decoration: none;
+      font-size: 12px; font-weight: 700;
+      transition: all 0.18s;
+    }
+
+    .card-link:hover {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      transform: translateX(2px);
+    }
+
+    /* ─── PAGINATION ─── */
+    .pagination {
+      display: flex; align-items: center; justify-content: center;
+      gap: 6px; flex-wrap: wrap;
+    }
+
+    .page-btn {
+      min-width: 38px; height: 38px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg-card);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-xs);
+      color: var(--text-secondary);
+      font-family: inherit; font-size: 13px; font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+
+    .page-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--text-primary); background: rgba(99,102,241,0.08); }
+    .page-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 0 14px var(--accent-glow); }
+    .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* ─── SKELETON ─── */
+    .skeleton-card {
+      background: var(--bg-card);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+
+    .skeleton-pulse {
+      background: rgba(255,255,255,0.05);
+      animation: pulse-bg 1.5s ease-in-out infinite;
+    }
+
+    .skeleton-img { height: 185px; }
+
+    .skeleton-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+
+    .skeleton-line { border-radius: 4px; height: 13px; }
+    .skeleton-line.title  { height: 18px; width: 80%; }
+    .skeleton-line.title2 { height: 18px; width: 50%; }
+    .skeleton-line.meta   { width: 45%; }
+
+    .skeleton-footer {
+      padding: 12px 18px;
+      border-top: 1px solid var(--glass-border);
+      background: rgba(7,9,15,0.4);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+
+    .skeleton-line.price { width: 38%; height: 22px; }
+    .skeleton-line.btn   { width: 28%; height: 30px; border-radius: var(--radius-xs); }
+
+    @keyframes pulse-bg {
+      0%, 100% { opacity: 0.25; }
+      50%       { opacity: 0.55; }
+    }
+
+    /* ─── EMPTY STATE ─── */
+    .empty-state {
+      display: none;
+      flex-direction: column; align-items: center; justify-content: center;
+      padding: 80px 20px; gap: 14px;
+    }
+
+    .empty-state.visible { display: flex; }
+    .empty-icon { font-size: 52px; opacity: 0.45; }
+    .empty-title { font-size: 18px; font-weight: 700; color: var(--text-secondary); }
+    .empty-desc { font-size: 14px; color: var(--text-muted); text-align: center; max-width: 400px; }
+
+    /* ─── ANIMATION ─── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 768px) {
+      .app { padding: 12px 12px 50px; }
+      .header { padding: 18px; }
+      .header-sub { padding-left: 0; }
+      h1 { font-size: 20px; }
+      .cards-grid { grid-template-columns: 1fr; }
+      .stats { width: 100%; }
+      .stat-chip { flex: 1; justify-content: center; }
+      .controls { padding: 12px; }
+      .search-box { min-width: 100%; }
+      .scrape-banner { flex-direction: column; }
+      .scrape-btn { width: 100%; justify-content: center; }
+    }
+
+    /* ─── SCROLLBAR ─── */
+    ::-webkit-scrollbar { width: 7px; }
+    ::-webkit-scrollbar-track { background: var(--bg-deep); }
+    ::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.2); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.35); }
+
+    /* ─── TOAST ─── */
+    .toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: rgba(22,30,46,0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
+      padding: 14px 20px;
+      font-size: 14px; font-weight: 600;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      z-index: 1000;
+      display: none;
+      animation: slideUp 0.3s ease;
+      max-width: 360px;
+    }
+
+    .toast.visible { display: flex; align-items: center; gap: 10px; }
+    .toast.success { border-color: rgba(16,185,129,0.35); color: var(--green); }
+    .toast.error   { border-color: rgba(239,68,68,0.35);  color: var(--red); }
+    .toast.info    { border-color: rgba(99,102,241,0.35); color: var(--accent-2); }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+
+    <!-- HEADER -->
+    <header class="header">
+      <div class="header-left">
+        <div class="logo">
+          <div class="logo-icon">🖥️</div>
+          <h1>Sahibinden Ekran Kartı</h1>
+        </div>
+        <div class="header-sub">Sahibinden.com ekran kartı ilanlarını anlık takip edin</div>
+      </div>
+      <div class="stats">
+        <div class="stat-chip live">
+          <span class="dot"></span>
+          <span class="value" id="total-count">0</span>
+          <span class="label">toplam ilan</span>
+        </div>
+        <div class="stat-chip">
+          <span class="value" id="filtered-count">0</span>
+          <span class="label">gösterilen</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- SCRAPE BANNER -->
+    <div class="scrape-banner">
+      <div class="scrape-info">
+        <div class="scrape-title">⚡ Toplu Veri Çekimi</div>
+        <div class="scrape-desc" id="scrape-desc">Fiyat segmentasyonu ile 10.000+ ilan çekin (bulk_scraper.py)</div>
+        <div class="progress-bar-wrap" id="progress-bar-wrap">
+          <div class="progress-bar-fill"></div>
+        </div>
+      </div>
+      <button class="scrape-btn" id="scrape-btn" onclick="startScrape()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        Scrape Başlat
+      </button>
+    </div>
+
+    <!-- CONTROLS -->
+    <section class="controls">
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" id="search-input" placeholder="İlan ara... (başlık, konum, ID, fiyat)">
+      </div>
+
+      <select class="price-filter" id="price-filter">
+        <option value="">Tüm Fiyatlar</option>
+        <option value="0-3000">₺0 – ₺3.000</option>
+        <option value="3000-6000">₺3.000 – ₺6.000</option>
+        <option value="6000-10000">₺6.000 – ₺10.000</option>
+        <option value="10000-20000">₺10.000 – ₺20.000</option>
+        <option value="20000-50000">₺20.000 – ₺50.000</option>
+        <option value="50000-">₺50.000+</option>
+      </select>
+
+      <select class="sort-select" id="sort-select">
+        <option value="default">Sıralama: Varsayılan</option>
+        <option value="price-asc">Fiyat: Düşük → Yüksek</option>
+        <option value="price-desc">Fiyat: Yüksek → Düşük</option>
+        <option value="date-desc">Tarih: En Yeni</option>
+        <option value="date-asc">Tarih: En Eski</option>
+        <option value="title-asc">Başlık: A-Z</option>
+      </select>
+
+      <button class="refresh-btn" id="refresh-btn" onclick="loadData()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        Yenile
+      </button>
+    </section>
+
+    <!-- STATUS BAR -->
+    <div class="status-bar" id="status-bar"><span>Hazır — veriler yükleniyor...</span></div>
+
+    <!-- EMPTY STATE -->
+    <div class="empty-state" id="empty-state">
+      <div class="empty-icon">📭</div>
+      <div class="empty-title">İlan bulunamadı</div>
+      <div class="empty-desc" id="empty-desc">Arama kriterlerinize uygun ilan yok. Farklı bir arama deneyin veya filtreleri temizleyin.</div>
+    </div>
+
+    <!-- CARDS GRID -->
+    <div class="cards-grid" id="cards-grid"></div>
+
+    <!-- PAGINATION -->
+    <div class="pagination" id="pagination"></div>
+
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ─── STATE ───
+    let allListings    = [];
+    let filteredListings = [];
+    let currentPage    = 1;
+    let scrapePolling  = null;
+    const ITEMS_PER_PAGE = 20;
+
+    // ─── DOM ───
+    const grid          = document.getElementById('cards-grid');
+    const statusBar     = document.getElementById('status-bar');
+    const totalCountEl  = document.getElementById('total-count');
+    const filteredCountEl = document.getElementById('filtered-count');
+    const searchInput   = document.getElementById('search-input');
+    const sortSelect    = document.getElementById('sort-select');
+    const priceFilter   = document.getElementById('price-filter');
+    const refreshBtn    = document.getElementById('refresh-btn');
+    const emptyEl       = document.getElementById('empty-state');
+    const emptyDesc     = document.getElementById('empty-desc');
+    const paginationEl  = document.getElementById('pagination');
+    const scrapeBtn     = document.getElementById('scrape-btn');
+    const scrapeDesc    = document.getElementById('scrape-desc');
+    const progressWrap  = document.getElementById('progress-bar-wrap');
+    const toastEl       = document.getElementById('toast');
+
+    // ─── TOAST ───
+    let toastTimer = null;
+    function showToast(msg, type = 'info', duration = 4000) {
+      clearTimeout(toastTimer);
+      toastEl.className = `toast visible ${type}`;
+      toastEl.innerHTML = `<span>${msg}</span>`;
+      toastTimer = setTimeout(() => toastEl.classList.remove('visible'), duration);
+    }
+
+    // ─── HELPERS ───
+    function parsePriceNum(priceStr) {
+      if (!priceStr) return 0;
+      const cleaned = priceStr.replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.');
+      return parseFloat(cleaned) || 0;
+    }
+
+    function setStatus(text, type = '') {
+      statusBar.className = 'status-bar' + (type ? ' ' + type : '');
+      statusBar.innerHTML = `<span>${text}</span>`;
+    }
+
+    function esc(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    // ─── SKELETON LOADING ───
+    function showLoading(show) {
+      if (show) {
+        grid.innerHTML = '';
+        for (let i = 0; i < 8; i++) {
+          grid.innerHTML += `
+            <div class="skeleton-card" style="animation-delay:${i * 0.05}s">
+              <div class="skeleton-img skeleton-pulse"></div>
+              <div class="skeleton-body">
+                <div class="skeleton-line title skeleton-pulse"></div>
+                <div class="skeleton-line title2 skeleton-pulse"></div>
+                <div class="skeleton-line meta skeleton-pulse" style="margin-top:4px"></div>
+              </div>
+              <div class="skeleton-footer">
+                <div class="skeleton-line price skeleton-pulse"></div>
+                <div class="skeleton-line btn skeleton-pulse"></div>
+              </div>
+            </div>`;
+        }
+        paginationEl.style.display = 'none';
+      } else {
+        paginationEl.style.display = '';
+      }
+    }
+
+    function showEmpty(show, msg = '') {
+      emptyEl.classList.toggle('visible', show);
+      if (msg) emptyDesc.textContent = msg;
+    }
+
+    // ─── FILTERING & SORTING ───
+    function applyFiltersAndSort() {
+      const query = searchInput.value.trim().toLowerCase();
+      const priceVal = priceFilter.value;
+      let [pMin, pMax] = [0, Infinity];
+
+      if (priceVal) {
+        const parts = priceVal.split('-');
+        pMin = parseFloat(parts[0]) || 0;
+        pMax = parts[1] !== undefined && parts[1] !== '' ? parseFloat(parts[1]) : Infinity;
+      }
+
+      filteredListings = allListings.filter(item => {
+        // Metin araması
+        if (query && !(
+          (item.baslik  || '').toLowerCase().includes(query) ||
+          (item.konum   || '').toLowerCase().includes(query) ||
+          (item.ilan_id || '').includes(query)               ||
+          (item.fiyat   || '').toLowerCase().includes(query)
+        )) return false;
+
+        // Fiyat filtresi
+        if (priceVal) {
+          const p = parsePriceNum(item.fiyat);
+          if (p < pMin || p > pMax) return false;
+        }
+
+        return true;
+      });
+
+      // Sıralama
+      const sortVal = sortSelect.value;
+      if (sortVal === 'price-asc')  filteredListings.sort((a, b) => parsePriceNum(a.fiyat) - parsePriceNum(b.fiyat));
+      if (sortVal === 'price-desc') filteredListings.sort((a, b) => parsePriceNum(b.fiyat) - parsePriceNum(a.fiyat));
+      if (sortVal === 'title-asc')  filteredListings.sort((a, b) => (a.baslik || '').localeCompare(b.baslik || '', 'tr'));
+      if (sortVal === 'date-desc')  filteredListings.sort((a, b) => (b.tarih  || '').localeCompare(a.tarih  || ''));
+      if (sortVal === 'date-asc')   filteredListings.sort((a, b) => (a.tarih  || '').localeCompare(b.tarih  || ''));
+
+      filteredCountEl.textContent = filteredListings.length.toLocaleString('tr-TR');
+
+      const totalPg = Math.ceil(filteredListings.length / ITEMS_PER_PAGE);
+      if (currentPage > totalPg) currentPage = 1;
+
+      renderCards();
+      renderPagination();
+      showEmpty(filteredListings.length === 0 && allListings.length > 0);
+    }
+
+    // ─── RENDER CARDS ───
+    function renderCards() {
+      grid.innerHTML = '';
+      if (filteredListings.length === 0) return;
+
+      const start     = (currentPage - 1) * ITEMS_PER_PAGE;
+      const pageItems = filteredListings.slice(start, start + ITEMS_PER_PAGE);
+      const frag      = document.createDocumentFragment();
+
+      pageItems.forEach((item, i) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.animationDelay = `${Math.min(i * 0.025, 0.25)}s`;
+
+        const locTag  = item.konum   ? `<span class="meta-tag location">📍 ${esc(item.konum)}</span>`   : '';
+        const dateTag = item.tarih   ? `<span class="meta-tag date">📅 ${esc(item.tarih)}</span>`       : '';
+        const idTag   = item.ilan_id ? `<span class="meta-tag id-tag">#${esc(item.ilan_id)}</span>`     : '';
+        const linkHtml = item.link
+          ? `<a class="card-link" href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">İlana Git →</a>`
+          : '';
+
+        let imageHtml = `
+          <div class="card-image empty">
+            <span class="no-img">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+              Resim Yok
+            </span>
+          </div>`;
+
+        if (item.resim) {
+          imageHtml = `
+            <div class="card-image">
+              <img src="${esc(item.resim)}" alt="${esc(item.baslik || 'İlan')}" loading="lazy"
+                   onerror="this.parentElement.outerHTML='<div class=\\'card-image empty\\'><span class=\\'no-img\\'>Resim Yüklenemedi</span></div>'">
+            </div>`;
+        }
+
+        card.innerHTML = `
+          ${imageHtml}
+          <div class="card-body">
+            <div class="card-title">${esc(item.baslik || 'Başlıksız İlan')}</div>
+            <div class="card-meta">${locTag}${dateTag}${idTag}</div>
+          </div>
+          <div class="card-footer">
+            <div class="card-price">${esc(item.fiyat || '—')}</div>
+            ${linkHtml}
+          </div>`;
+
+        frag.appendChild(card);
+      });
+
+      grid.appendChild(frag);
+    }
+
+    // ─── PAGINATION ───
+    function renderPagination() {
+      paginationEl.innerHTML = '';
+      const totalPages = Math.ceil(filteredListings.length / ITEMS_PER_PAGE);
+      if (totalPages <= 1) return;
+
+      const frag = document.createDocumentFragment();
+
+      const goToPage = (n) => {
+        currentPage = n;
+        renderCards();
+        renderPagination();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+
+      const mkBtn = (label, page, active = false, disabled = false) => {
+        const btn = document.createElement('button');
+        btn.className = 'page-btn' + (active ? ' active' : '');
+        btn.textContent = label;
+        btn.disabled = disabled;
+        if (!disabled) btn.onclick = () => goToPage(page);
+        return btn;
+      };
+
+      frag.appendChild(mkBtn('←', currentPage - 1, false, currentPage === 1));
+
+      const maxVis = 7;
+      let st = Math.max(1, currentPage - Math.floor(maxVis / 2));
+      let en = Math.min(totalPages, st + maxVis - 1);
+      if (en - st < maxVis - 1) st = Math.max(1, en - maxVis + 1);
+
+      if (st > 1) {
+        frag.appendChild(mkBtn(1, 1));
+        if (st > 2) { const d = document.createElement('span'); d.textContent = '…'; d.style.cssText = 'color:var(--text-muted);padding:0 4px;'; frag.appendChild(d); }
+      }
+      for (let i = st; i <= en; i++) frag.appendChild(mkBtn(i, i, i === currentPage));
+      if (en < totalPages) {
+        if (en < totalPages - 1) { const d = document.createElement('span'); d.textContent = '…'; d.style.cssText = 'color:var(--text-muted);padding:0 4px;'; frag.appendChild(d); }
+        frag.appendChild(mkBtn(totalPages, totalPages));
+      }
+
+      frag.appendChild(mkBtn('→', currentPage + 1, false, currentPage === totalPages));
+      paginationEl.appendChild(frag);
+    }
+
+    // ─── FETCH DATA ───
+    async function loadData(silent = false) {
+      if (!silent) {
+        showLoading(true);
+        showEmpty(false);
+        setStatus('İlanlar yükleniyor...');
+        refreshBtn.classList.add('loading');
+      }
+
+      try {
+        const res = await fetch('/api/listings');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        allListings = data.listings || [];
+        const total = data.count || allListings.length;
+        totalCountEl.textContent = total.toLocaleString('tr-TR');
+
+        if (!silent) currentPage = 1;
+
+        const msgs = (data.messages || []).join(' | ');
+
+        if (allListings.length > 0) {
+          setStatus(`✅ ${total.toLocaleString('tr-TR')} ilan yüklendi${msgs ? ' — ' + msgs : ''}`, 'success');
+        } else {
+          setStatus(`ℹ️ İlan bulunamadı — önce Scrape Başlat butonuna basın${msgs ? ' | ' + msgs : ''}`, 'warning');
+          showEmpty(true, 'Henüz ilan verisi yok. Lütfen "Scrape Başlat" butonuna basarak veri çekin.');
+        }
+
+        // Scrape durumunu güncelle
+        if (data.scrape_active !== undefined) {
+          updateScrapeUi(data.scrape_active);
+        }
+
+        applyFiltersAndSort();
+
+        if (allListings.length === 0) showEmpty(true);
+
+      } catch (err) {
+        allListings = []; filteredListings = [];
+        totalCountEl.textContent = '0';
+        filteredCountEl.textContent = '0';
+        grid.innerHTML = '';
+        paginationEl.innerHTML = '';
+        showEmpty(true, 'Sunucuya bağlanılamadı. api_server.py çalışıyor mu?');
+        setStatus(`❌ Hata: ${err.message} — Sunucu çalışıyor mu?`, 'error');
+      } finally {
+        if (!silent) {
+          showLoading(false);
+          refreshBtn.classList.remove('loading');
+        }
+      }
+    }
+
+    // ─── SCRAPE ───
+    function updateScrapeUi(active) {
+      if (active) {
+        scrapeBtn.disabled = true;
+        scrapeBtn.classList.add('running');
+        scrapeBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+            <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/>
+            <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+            <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
+          </svg>
+          Çekiliyor...`;
+        scrapeDesc.textContent = 'Fiyat segmentleri paralel olarak çekiliyor — bitmesini bekleyin...';
+        progressWrap.classList.add('visible');
+      } else {
+        scrapeBtn.disabled = false;
+        scrapeBtn.classList.remove('running');
+        scrapeBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Scrape Başlat`;
+        scrapeDesc.textContent = 'Fiyat segmentasyonu ile 10.000+ ilan çekin (bulk_scraper.py)';
+        progressWrap.classList.remove('visible');
+      }
+    }
+
+    async function startScrape() {
+      try {
+        const res = await fetch('/api/scrape');
+        const data = await res.json();
+
+        if (data.ok) {
+          updateScrapeUi(true);
+          showToast('⚡ Scrape başlatıldı! Tamamlanınca otomatik yenilenir.', 'info', 5000);
+          startScrapePolling();
+        } else {
+          showToast(`❌ ${data.error || 'Scrape başlatılamadı'}`, 'error');
+        }
+      } catch (err) {
+        showToast(`❌ Sunucu hatası: ${err.message}`, 'error');
+      }
+    }
+
+    function startScrapePolling() {
+      if (scrapePolling) return;
+      scrapePolling = setInterval(async () => {
+        try {
+          const res  = await fetch('/api/scrape/status');
+          const data = await res.json();
+
+          if (!data.active) {
+            // Scrape bitti
+            clearInterval(scrapePolling);
+            scrapePolling = null;
+            updateScrapeUi(false);
+            showToast('✅ Scrape tamamlandı! İlanlar yükleniyor...', 'success', 6000);
+            await loadData();
+          }
+        } catch {
+          // Sunucu hatası — polling devam
+        }
+      }, 5000);  // Her 5 saniyede kontrol
+    }
+
+    // ─── OTOMATIK YENİLE ───
+    setInterval(() => {
+      if (!scrapePolling) {
+        loadData(true);  // sessiz yenile
+      }
+    }, 60000);  // Her 60 saniyede güncelle
+
+    // ─── EVENT LISTENERS ───
+    let searchTimeout;
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => { currentPage = 1; applyFiltersAndSort(); }, 280);
+    });
+
+    sortSelect.addEventListener('change', () => { currentPage = 1; applyFiltersAndSort(); });
+    priceFilter.addEventListener('change', () => { currentPage = 1; applyFiltersAndSort(); });
+
+    // ─── INIT ───
+    (async () => {
+      await loadData();
+      // Scrape zaten çalışıyorsa polling başlat
+      try {
+        const res  = await fetch('/api/scrape/status');
+        const data = await res.json();
+        if (data.active) {
+          updateScrapeUi(true);
+          startScrapePolling();
+        }
+      } catch {}
+    })();
+  </script>
+</body>
+</html>

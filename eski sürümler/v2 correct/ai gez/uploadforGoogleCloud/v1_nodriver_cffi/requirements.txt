@@ -1,0 +1,8 @@
+# Cloudflare 2025/2026 Bypass V2 (Nodriver + WARP + curl_cffi)
+nodriver
+pyvirtualdisplay
+curl_cffi
+python-telegram-bot==21.1.1
+python-dotenv
+requests
+pysocks

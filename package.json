@@ -1,5 +1,16 @@
 {
+  "name": "sahibinden-gpu-hunter",
+  "version": "3.0.0",
+  "type": "module",
+  "description": "Sahibinden GPU Fırsat Avcısı — Otonom AI Scraping Sistemi",
+  "scripts": {
+    "start": "node src/main.mjs",
+    "test": "node src/main.mjs --test"
+  },
   "dependencies": {
+    "cheerio": "^1.0.0",
+    "dotenv": "^16.4.7",
+    "p-limit": "^6.2.0",
     "playwright": "^1.54.2"
   }
 }

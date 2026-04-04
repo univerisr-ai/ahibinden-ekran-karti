@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Sahibinden cookie refresh check every 10 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+Persistent=true
+Unit=cookie-refresh.service
+
+[Install]
+WantedBy=timers.target

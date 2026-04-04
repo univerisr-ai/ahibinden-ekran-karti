@@ -1,0 +1,16 @@
+[Unit]
+Description=Sahibinden local API server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ai-gez
+ExecStart=/opt/ai-gez/.venv/bin/python /opt/ai-gez/backend/api_server.py --host 0.0.0.0 --port 8000 --skip-cookie-check
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/ai-gez-api.log
+StandardError=append:/var/log/ai-gez-api.log
+
+[Install]
+WantedBy=multi-user.target

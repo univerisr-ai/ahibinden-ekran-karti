@@ -1,0 +1,127 @@
+☁️ SAHİBİNDEN V3 — GCP TAM OTONOM KURULUM REHBERİ ☁️
+
+Sunucu: Ubuntu 24.04 LTS | europe-west4
+Ev bilgisayarıyla bağlantı YOK — tamamen otonom çalışır.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  FALLBACK ZİNCİRİ (OTOMATİK SIRALAMA)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. 🦊 Camoufox (Firefox anti-detect)
+   Chrome'dan tamamen farklı tarayıcı parmak izi
+
+2. 🌐 SeleniumBase UC Mode
+   Turnstile CAPTCHA otomatik tıklama
+
+3. 🔄 Nodriver + WARP
+   Cloudflare CDN IP maskeleme (son çare)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  HIZLI KURULUM (5 dakika)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Dosyaları sunucuya yükleyin:
+   scp -r v3_home_tunnel/ kullanici@GCP_IP:/opt/ai-gez/
+
+2. SSH ile bağlanın:
+   ssh kullanici@GCP_IP
+
+3. Kurulum script'ini çalıştırın:
+   cd /opt/ai-gez
+   sudo bash gcp_setup.sh
+
+   Bu script otomatik olarak:
+   ✓ Chrome + Firefox + Xvfb kurar
+   ✓ Python venv + tüm kütüphaneleri kurar
+   ✓ Camoufox browser dosyalarını indirir
+   ✓ Cloudflare WARP SOCKS5 kurar
+   ✓ Dosyaları /opt/ai-gez/ altına kopyalar
+
+4. .env dosyasını düzenleyin:
+   nano /opt/ai-gez/.env
+   → TELEGRAM_BOT_TOKEN_1, TELEGRAM_BOT_TOKEN_2, TELEGRAM_CHAT_ID
+
+5. Test edin:
+   source .venv/bin/activate
+   python cookie_generator_v3.py
+
+6. Bot controller'ı başlatın:
+   python bot_controller.py
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  OTOMATİK COOKIE YENİLEME (CRON JOB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Her 45 dakikada otomatik cookie yenileme:
+   crontab -e
+
+Ekleyin:
+   */45 * * * * cd /opt/ai-gez && source .venv/bin/activate && python cookie_generator_v3.py >> /var/log/cookie_v3.log 2>&1
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NASIL ÇALIŞIR? (TAM OTONOM AKIŞ)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1→ Cron her 45dk'da cookie_generator_v3.py çalıştırır
+2→ Sırayla Camoufox → SeleniumBase → Nodriver+WARP dener
+3→ İlk başarılı yöntemden cf_clearance cookie alır
+4→ Cookie'yi Telegram'a gönderir
+5→ bot_controller.py cookie mesajını algılar
+6→ Cookie parse edilip cookies.json'a yazılır
+7→ fast_scraper.py ilan çeker (curl_cffi TLS impersonation)
+8→ Veriler AI modülüne aktarılır
+
+Hiçbir adım manuel müdahale gerektirmez.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  TELEGRAM KOMUTLARI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/start    → Hoş geldin mesajı
+/basla    → Tam fallback zinciri çalıştır
+/camoufox → Sadece Camoufox ile cookie al
+/sb       → Sadece SeleniumBase UC ile cookie al
+/durum    → Cookie yaşı, yöntem, cf_clearance durumu
+/warp     → WARP bağlantı durumu
+/ip       → Mevcut IP bilgisi
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SORUN GİDERME
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Camoufox hata veriyorsa:
+   python -m camoufox fetch    # Browser yeniden indir
+   pip install -U camoufox     # Güncelle
+
+SeleniumBase başarısız oluyorsa:
+   seleniumbase get chromedriver
+   # xvfb-run ile test:
+   xvfb-run python cookie_generator_sb.py
+
+WARP bağlanmıyorsa:
+   warp-cli disconnect
+   warp-cli registration delete
+   warp-cli registration new
+   warp-cli mode proxy
+   warp-cli proxy port 40000
+   warp-cli connect
+
+Hepsi başarısız oluyorsa:
+   • debug_camoufox.png ve debug_sb.png kontrol edin
+   • /ip komutu ile IP tipini kontrol edin
+   • /var/log/cookie_v3.log dosyasını inceleyin
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  DOSYA YAPISI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/opt/ai-gez/
+├── .env                         # Token'lar ve ayarlar
+├── bot_controller.py            # Telegram bot (ana süreç)
+├── cookie_generator_v3.py       # Ana fallback zinciri
+├── cookie_generator_camoufox.py # Firefox anti-detect
+├── cookie_generator_sb.py       # SeleniumBase UC Mode
+├── fast_scraper.py              # curl_cffi ilan çekici
+├── cookies.json                 # Üretilen cookie'ler (otomatik)
+├── gcp_setup.sh                 # Kurulum scripti
+└── requirements.txt             # Python bağımlılıkları

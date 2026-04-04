@@ -1,0 +1,112 @@
+☁️ GOOGLE CLOUD — SAHİBİNDEN V2 (WARP + NODRIVER + CURL_CFFI) KURULUM REHBERİ ☁️
+
+Cloudflare Super Bot 2025/2026 korumasını aşmak üzere tasarlanmıştır.
+WARP ile datacenter IP maskelenir, Nodriver ile insan taklidi yapılır.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  HIZLI KURULUM (5 dakika)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Bu v2_warp_bypass klasörünü sunucuya yükleyin:
+   scp -r v2_warp_bypass/ kullanici@SUNUCU_IP:/opt/ai-gez/
+
+2. SSH ile sunucuya bağlanın:
+   ssh kullanici@SUNUCU_IP
+
+3. Sistem paketlerini kurun:
+   sudo apt-get update
+   sudo apt-get install -y xvfb python3-pip python3-venv google-chrome-stable
+
+   Chrome yoksa:
+   wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+   sudo dpkg -i google-chrome-stable_current_amd64.deb
+   sudo apt-get install -f -y
+
+4. Cloudflare WARP kurun (ÜCRETSİZ):
+   cd /opt/ai-gez
+   sudo bash warp_setup.sh
+
+5. Python ortamını kurun:
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+
+6. .env dosyasını kontrol edin (token'lar doğru mu?)
+
+7. Botu başlatın:
+   python bot_controller.py
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  OTOMATİK COOKIE YENİLEME (CRON JOB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Cookie her 45 dakikada otomatik yenilensin:
+   crontab -e
+
+Şu satırı ekleyin:
+   */45 * * * * cd /opt/ai-gez && source .venv/bin/activate && python cookie_generator.py >> /var/log/cookie_gen.log 2>&1
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NASIL ÇALIŞIR?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Tam Otonom Akış (elinize dokunmaya gerek yok):
+
+1→ Cron her 45 dk'da cookie_generator.py'yi çalıştırır
+2→ WARP ile IP maskelenir (datacenter → Cloudflare CDN IP)
+3→ Nodriver + Xvfb + İnsan Taklidi ile Cloudflare bypass
+4→ cf_clearance cookie alınır ve Telegram'a gönderilir
+5→ bot_controller.py cookie mesajını algılar
+6→ Mesajdan cookie'yi parse edip cookies.json'a yazar
+7→ fast_scraper.py aynı WARP IP'den curl_cffi ile ilanları çeker
+8→ Veriler AI modülüne aktarılır
+
+Veya Manuel:
+   Telegram → /basla komutu → tüm zincir tetiklenir
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  TELEGRAM KOMUTLARI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/start  → Hoş geldin mesajı
+/basla  → Cookie üretip ilan çekme zincirini başlatır
+/durum  → Cookie yaşı, cf_clearance durumu, WARP durumu
+/warp   → WARP bağlantı durumunu gösterir
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SORUN GİDERME
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+WARP bağlanmıyorsa:
+   warp-cli disconnect
+   warp-cli registration delete
+   warp-cli registration new
+   warp-cli mode proxy
+   warp-cli proxy port 40000
+   warp-cli connect
+
+Cookie alınamıyorsa:
+   • debug.png ekran görüntüsünü kontrol edin
+   • warp-cli status ile WARP durumunu kontrol edin
+   • Telegram /durum komutu ile cookie yaşını kontrol edin
+   • Sistem 3 deneme yapar (15s → 30s → 60s arası bekleyerek)
+
+Bot controller yanıt vermiyorsa:
+   • .env'deki TELEGRAM_BOT_TOKEN_2 doğru mu kontrol edin
+   • Bot sadece TELEGRAM_CHAT_ID'deki kullanıcıya hizmet eder
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  V1 → V2 DEĞİŞİKLİK NOTU
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Yenilikler:
+✅ Cloudflare WARP (ücretsiz SOCKS5 IP maskeleme)
+✅ Bezier eğrili mouse hareketi + Fitts Kanunu gecikmeleri
+✅ Warm-up navigasyonu (ana sayfa → kategori)
+✅ Otomatik 3x retry (exponential backoff)
+✅ Turnstile checkbox otomatik tıklama denemesi
+✅ Bot'a /durum ve /warp komutları eklendi
+✅ Cookie mesajından otomatik parse + cookies.json güncelleme
+✅ subprocess timeout (cookie_generator sonsuz asamaz)
+✅ 429 Rate limit handling
+✅ Chrome 131 TLS impersonation (131 güncellendi)

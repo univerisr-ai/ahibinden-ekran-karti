@@ -1,0 +1,19 @@
+﻿[Unit]
+Description=Pull latest cookie payload from Telegram
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/ai-gez
+EnvironmentFile=-/opt/ai-gez/.env
+Environment=PYTHONUNBUFFERED=1
+UMask=0077
+NoNewPrivileges=true
+ExecStartPre=/opt/ai-gez/.venv/bin/python /opt/ai-gez/server_preflight.py --service telegram-cookie-pull
+ExecStart=/opt/ai-gez/.venv/bin/python /opt/ai-gez/redacted_runner.py -- /opt/ai-gez/.venv/bin/python /opt/ai-gez/telegram_cookie_bridge.py pull
+StandardOutput=append:/var/log/ai-gez-telegram-pull.log
+StandardError=append:/var/log/ai-gez-telegram-pull.log
+
+[Install]
+WantedBy=multi-user.target

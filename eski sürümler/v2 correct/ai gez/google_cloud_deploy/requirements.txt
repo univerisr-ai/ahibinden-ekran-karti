@@ -1,0 +1,19 @@
+# Sahibinden Bulk Scraper Deployment
+# Telegram'dan tetiklenerek DrissionPage ile cookie elde eder
+# curl_cffi ile Cloudflare bypass yaparak ilanları hızla çeker
+
+selenium
+webdriver-manager
+seleniumbase
+requests
+beautifulsoup4
+curl_cffi
+python-dotenv
+google-cloud-storage
+
+# Telegram Bot
+python-telegram-bot==21.1.1
+pyvirtualdisplay==3.0
+
+# Chrome tabanlı botları Cloudflare'e yakalatmamak için
+DrissionPage
