@@ -208,6 +208,11 @@ function isScrapeOpsKeyFailure(status, bodyText = '') {
     return true;
   }
 
+  const normalizedText = (bodyText || '').toLowerCase();
+  if (normalizedText.includes('this account has been banned') || normalizedText.includes('upgrade to a paid plan')) {
+    return true;
+  }
+
   if (![402, 403, 429].includes(status)) {
     return false;
   }
@@ -324,23 +329,24 @@ async function fetchViaProxy(targetUrl, label = '') {
     });
 
     const bodyText = await response.text();
+    const isBanFail = isScrapeOpsKeyFailure(response.status, bodyText);
 
-    if (response.ok && !isChallengeHtml(bodyText)) {
+    if (response.ok && !isChallengeHtml(bodyText) && !isBanFail) {
       stats.successfulRequests += 1;
       return bodyText;
     }
 
     stats.failedRequests += 1;
 
-    if (response.ok && isChallengeHtml(bodyText)) {
-      stats.blockedResponses += 1;
-      haltRun(`${label} challenge (200) dondu`);
+    if (isBanFail) {
+      markKeyExhausted(activeKey);
+      haltRun(`${label} proxy key BANLANDI veya reddedildi (HTTP ${response.status})`);
       return null;
     }
 
-    if (isScrapeOpsKeyFailure(response.status, bodyText)) {
-      markKeyExhausted(activeKey);
-      haltRun(`${label} proxy key reddedildi (HTTP ${response.status})`);
+    if (response.ok && isChallengeHtml(bodyText)) {
+      stats.blockedResponses += 1;
+      haltRun(`${label} challenge (200) dondu`);
       return null;
     }
 
@@ -389,8 +395,9 @@ async function fetchViaApi(targetUrl, label, activeKey, { unlock = false, haltOn
     });
 
     const bodyText = await response.text();
+    const isBanFail = isScrapeOpsKeyFailure(response.status, bodyText);
 
-    if (response.ok && !isChallengeHtml(bodyText)) {
+    if (response.ok && !isChallengeHtml(bodyText) && !isBanFail) {
       stats.successfulRequests += 1;
       if (unlock) {
         apiSessionPrimed = true;
@@ -400,17 +407,17 @@ async function fetchViaApi(targetUrl, label, activeKey, { unlock = false, haltOn
 
     stats.failedRequests += 1;
 
-    if (response.ok && isChallengeHtml(bodyText)) {
-      stats.blockedResponses += 1;
-      const reason = `${label} API challenge (200) dondu`;
+    if (isBanFail) {
+      markKeyExhausted(activeKey);
+      const reason = `${label} API key BANLANDI veya reddedildi (HTTP ${response.status})`;
       if (haltOnFailure) haltRun(reason);
       else console.log(`  ⚠️ ${reason}`);
       return null;
     }
 
-    if (isScrapeOpsKeyFailure(response.status, bodyText)) {
-      markKeyExhausted(activeKey);
-      const reason = `${label} API key reddedildi (HTTP ${response.status})`;
+    if (response.ok && isChallengeHtml(bodyText)) {
+      stats.blockedResponses += 1;
+      const reason = `${label} API challenge (200) dondu`;
       if (haltOnFailure) haltRun(reason);
       else console.log(`  ⚠️ ${reason}`);
       return null;
