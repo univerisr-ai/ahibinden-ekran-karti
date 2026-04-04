@@ -18,7 +18,11 @@ if (SCRAPEOPS_KEYS.length === 0) {
 export const SESSION_NUMBER = Math.floor(10000 + Math.random() * 90000);
 
 // ─── Telegram ────────────────────────────────────────────────
-export const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+export const TELEGRAM_TOKEN =
+  process.env.TELEGRAM_BOT_TOKEN ||
+  process.env.TELEGRAM_BOT_TOKEN_1 ||
+  process.env.TELEGRAM_BOT_TOKEN_2 ||
+  '';
 export const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
 
 // ─── AI Provider ─────────────────────────────────────────────

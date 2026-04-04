@@ -46,7 +46,7 @@ jobs:
           SCRAPEOPS_API_KEYS: ${{ secrets.SCRAPEOPS_API_KEY }},${{ secrets.SCRAPEOPS_API_KEY2 }},${{ secrets.SCRAPEOPS_API_KEY3 }}
 
           # ── Telegram ───────────────────────────────────────
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN_1 || secrets.TELEGRAM_BOT_TOKEN_2 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
           # ── AI (Gemini / OpenRouter) ────────────────────────
