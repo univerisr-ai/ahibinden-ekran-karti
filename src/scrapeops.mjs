@@ -566,6 +566,10 @@ export async function initSession() {
 
   console.log('  ⚠️ API unlock/probe başarısız. Aynı key ile proxy fallback deneniyor.');
   setTransportMode('proxy');
+  exhaustedKeys.delete(key);
+  stats.allKeysExhausted = false;
+  stats.runHalted = false;
+  stats.haltReason = '';
 
   const proxyProbeHtml = await fetchViaProxy(BASE_URL, 'Proxy fallback probe');
   if (proxyProbeHtml) {
