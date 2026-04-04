@@ -26,7 +26,7 @@ jobs:
   scrape:
     name: 🔍 Scrape & Analyze
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 120
 
     steps:
       - name: 📥 Checkout
@@ -60,8 +60,8 @@ jobs:
           BYPASS_AI: ${{ github.event.inputs.bypass_ai }}
 
           # ── Performans ──────────────────────────────────────
-          CONCURRENCY_LIMIT: '5'
-          REQUEST_DELAY_MS: '800'
+          CONCURRENCY_LIMIT: '1'
+          REQUEST_DELAY_MS: '1000'
         run: node src/main.mjs
 
       - name: 💾 Sonuçları Kaydet (Artifact)
