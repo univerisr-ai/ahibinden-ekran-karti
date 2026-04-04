@@ -4,6 +4,8 @@
  *  Tüm modülleri sırayla çağırır, zamanı ölçer, Telegram raporu atar
  * ═══════════════════════════════════════════════════════════════
  */
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // Proxy sertifika hatalarını yok say
+
 import {
   SESSION_NUMBER,
   TELEGRAM_TOKEN,
