@@ -84,7 +84,9 @@ export function getActiveSegments() {
   if (CUSTOM_MIN_PRICE !== null || CUSTOM_MAX_PRICE !== null) {
     const min = CUSTOM_MIN_PRICE ?? 0;
     const max = CUSTOM_MAX_PRICE ?? 1000000;
-    return PRICE_SEGMENTS.filter(([lo, hi]) => hi > min && lo < max);
+    return PRICE_SEGMENTS
+      .filter(([lo, hi]) => hi > min && lo < max)
+      .map(([lo, hi]) => [Math.max(lo, min), Math.min(hi, max)]);
   }
   return PRICE_SEGMENTS;
 }
