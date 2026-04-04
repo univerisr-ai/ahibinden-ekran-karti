@@ -36,6 +36,8 @@ export function buildSahibindenUrl(offset, priceMin, priceMax) {
   return url.toString();
 }
 
+let consecutive403s = 0;
+
 // ─── Kesin Tutan Fetch ve Key Rotasyonu ───────────────────────
 async function fetchWithFullBypass(targetUrl, label = '') {
   let currentKey = getNextKey();
@@ -43,6 +45,11 @@ async function fetchWithFullBypass(targetUrl, label = '') {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     stats.totalRequests++;
     
+    if (consecutive403s > 5) {
+      console.log(`  💀 KRİTİK: Havuzdaki tüm API KEY'lerin kredisi tükendi! Sistem durduruluyor...`);
+      return null;
+    }
+
     const proxyUrl = new URL(SCRAPEOPS_ENDPOINT);
     proxyUrl.searchParams.set('api_key', currentKey);
     proxyUrl.searchParams.set('url', targetUrl);
@@ -63,6 +70,7 @@ async function fetchWithFullBypass(targetUrl, label = '') {
       clearTimeout(timeout);
       
       if (resp.ok) {
+        consecutive403s = 0; // Başarılı olunca sayacı sıfırla
         stats.successfulRequests++;
         stats.estimatedCredits += 25; // RenderJs + CF Level 3 = ~25 Kredi
         const html = await resp.text();
@@ -77,6 +85,7 @@ async function fetchWithFullBypass(targetUrl, label = '') {
       }
       
       if (resp.status === 403) {
+        consecutive403s++;
         console.log(`  🚫 403 Forbidden [${label}] — Mevcut API KEY'in kredisi bitti! (${currentKey.substring(0, 5)}...)`);
         currentKey = getNextKey(); // Havuzdaki SIRADAKİ KEY'i AL
         console.log(`  🔄 Yeni Key'e geçildi: ${currentKey.substring(0, 5)}...`);
