@@ -5,3 +5,5 @@ test_*.html
 output.json
 .env
 state.json
+.chrome_profile/
+eski sürümler/
