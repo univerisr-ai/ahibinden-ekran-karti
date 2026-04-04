@@ -51,6 +51,7 @@ export const SCRAPEOPS_PROXY_USER = process.env.SCRAPEOPS_PROXY_USER || 'scrapeo
 // proxy: proxy tunnel (ProxyAgent)
 // auto: önce proxy, network hatasında api fallback
 export const SCRAPEOPS_TRANSPORT_MODE = (process.env.SCRAPEOPS_TRANSPORT_MODE || 'api').toLowerCase();
+export const ALLOW_API_TO_PROXY_FALLBACK = (process.env.ALLOW_API_TO_PROXY_FALLBACK || 'true').toLowerCase() === 'true';
 export const SCRAPEOPS_API_ENDPOINT = process.env.SCRAPEOPS_API_ENDPOINT || 'https://proxy.scrapeops.io/v1/';
 
 // API istek profili (ucuz profil)
@@ -144,6 +145,7 @@ export default {
   SCRAPEOPS_PROXY_PORT,
   SCRAPEOPS_PROXY_USER,
   SCRAPEOPS_TRANSPORT_MODE,
+  ALLOW_API_TO_PROXY_FALLBACK,
   SCRAPEOPS_API_ENDPOINT,
   SCRAPEOPS_API_BYPASS,
   SCRAPEOPS_API_RENDER_JS,

@@ -88,6 +88,9 @@ async function sendTelegram(text) {
     console.log('  ✅ Telegram raporu gönderildi!');
   } catch (err) {
     console.log(`  ❌ Telegram hata: ${err.message}`);
+    if (/chat not found/i.test(err.message || '')) {
+      console.log('  ℹ️ TELEGRAM_CHAT_ID/TELEGRAM_USER_ID yanlış veya bot bu chat ile hiç konuşmamış olabilir.');
+    }
   }
 }
 

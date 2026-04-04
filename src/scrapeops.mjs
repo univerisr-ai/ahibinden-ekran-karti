@@ -12,6 +12,7 @@ import {
   SCRAPEOPS_PROXY_PORT,
   SCRAPEOPS_PROXY_USER,
   SCRAPEOPS_TRANSPORT_MODE,
+  ALLOW_API_TO_PROXY_FALLBACK,
   SCRAPEOPS_API_ENDPOINT,
   SCRAPEOPS_API_BYPASS,
   SCRAPEOPS_API_RENDER_JS,
@@ -39,6 +40,7 @@ const exhaustedKeys = new Set();
 let keyCursor = 0;
 let currentKey = null;
 let apiSessionPrimed = false;
+let runtimeTransportMode = resolveConfiguredTransportMode();
 
 let stats = {
   totalRequests: 0,
@@ -70,12 +72,20 @@ export function isRunHalted() {
   return !!stats.runHalted;
 }
 
-function getTransportMode() {
+function resolveConfiguredTransportMode() {
   const mode = (SCRAPEOPS_TRANSPORT_MODE || 'api').toLowerCase();
   if (mode === 'proxy' || mode === 'api' || mode === 'auto') {
     return mode;
   }
   return 'api';
+}
+
+function getTransportMode() {
+  return runtimeTransportMode;
+}
+
+function setTransportMode(mode) {
+  runtimeTransportMode = mode;
 }
 
 function buildProxyUrlForKey(key) {
@@ -514,7 +524,7 @@ export async function initSession() {
   const primeLabel = 'API unlock';
   const unlockHtml = await fetchViaApi(BASE_URL, primeLabel, key, {
     unlock: true,
-    haltOnFailure: mode === 'api',
+    haltOnFailure: false,
   });
 
   if (unlockHtml) {
@@ -523,12 +533,32 @@ export async function initSession() {
     return 'API_SESSION_PRIMED';
   }
 
-  if (mode === 'api') {
+  const apiProbeHtml = await fetchViaApi(BASE_URL, 'API probe', key, {
+    unlock: false,
+    haltOnFailure: false,
+  });
+
+  if (apiProbeHtml) {
+    console.log('  ⚠️ Unlock başarısız ama API probe başarılı. Unlock atlanarak API ile devam ediliyor.');
+    return 'API_MODE_NO_UNLOCK';
+  }
+
+  if (!ALLOW_API_TO_PROXY_FALLBACK) {
+    haltRun('API unlock/probe basarisiz, proxy fallback kapali');
     return null;
   }
 
-  console.log('  ⚠️ API unlock basarisiz, auto mod proxy ile devam edecek.');
-  return 'AUTO_MODE_FALLBACK';
+  console.log('  ⚠️ API unlock/probe başarısız. Aynı key ile proxy fallback deneniyor.');
+  setTransportMode('proxy');
+
+  const proxyProbeHtml = await fetchViaProxy(BASE_URL, 'Proxy fallback probe');
+  if (proxyProbeHtml) {
+    console.log('  🔁 Proxy fallback aktif. Koşu proxy taşıması ile sürdürülecek.');
+    return 'API_TO_PROXY_FALLBACK';
+  }
+
+  haltRun('API unlock/probe ve proxy fallback basarisiz');
+  return null;
 }
 
 export default {

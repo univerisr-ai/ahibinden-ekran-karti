@@ -66,6 +66,7 @@ jobs:
           REQUEST_TIMEOUT_MS: '45000'
           MAX_RETRIES: '1'
           SCRAPEOPS_TRANSPORT_MODE: 'api'
+          ALLOW_API_TO_PROXY_FALLBACK: 'true'
           SCRAPEOPS_PROXY_PORT: '5353'
 
           # ── API unlock (tek sefer) + ucuz devam ───────────
