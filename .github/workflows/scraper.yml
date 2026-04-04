@@ -64,6 +64,7 @@ jobs:
           REQUEST_DELAY_MS: '1200'
           REQUEST_TIMEOUT_MS: '45000'
           MAX_RETRIES: '1'
+          SCRAPEOPS_PROXY_PORT: '5353'
 
           # ── Kredi / Hedef Kontrolü ─────────────────────────
           TARGET_LISTINGS_PER_RUN: '2500'

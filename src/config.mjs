@@ -38,7 +38,7 @@ export const MAX_PAGES_PER_SEGMENT = parseInt(process.env.MAX_PAGES_PER_SEGMENT 
 // ─── ScrapeOps Proxy (Proxy-Only Mod) ───────────────────────
 export const SCRAPEOPS_PROXY_SCHEME = process.env.SCRAPEOPS_PROXY_SCHEME || 'http';
 export const SCRAPEOPS_PROXY_HOST = process.env.SCRAPEOPS_PROXY_HOST || 'proxy.scrapeops.io';
-export const SCRAPEOPS_PROXY_PORT = parseInt(process.env.SCRAPEOPS_PROXY_PORT || '8339', 10);
+export const SCRAPEOPS_PROXY_PORT = parseInt(process.env.SCRAPEOPS_PROXY_PORT || '5353', 10);
 export const SCRAPEOPS_PROXY_USER = process.env.SCRAPEOPS_PROXY_USER || 'scrapeops';
 
 // ─── Performans Ayarları ─────────────────────────────────────

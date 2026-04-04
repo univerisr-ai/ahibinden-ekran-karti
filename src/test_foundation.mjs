@@ -6,7 +6,7 @@ const keys = rawKeys.split(',').map((k) => k.trim()).filter(Boolean);
 
 const proxyScheme = process.env.SCRAPEOPS_PROXY_SCHEME || 'http';
 const proxyHost = process.env.SCRAPEOPS_PROXY_HOST || 'proxy.scrapeops.io';
-const proxyPort = Number(process.env.SCRAPEOPS_PROXY_PORT || 8339);
+const proxyPort = Number(process.env.SCRAPEOPS_PROXY_PORT || 5353);
 const proxyUser = process.env.SCRAPEOPS_PROXY_USER || 'scrapeops';
 
 const target = process.env.TEST_TARGET_URL || 'https://www.sahibinden.com/ekran-karti-masaustu?pagingOffset=0&pagingSize=50&sorting=date_desc';
