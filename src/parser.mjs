@@ -68,7 +68,7 @@ export function parseListingPage(html, segmentLabel = '') {
     const baslik = titleEl.text().trim();
 
     // İlan ID — URL'den çıkar
-    const idMatch = href.match(/\/(\d{7,})(?:\/|$)/);
+    const idMatch = href.match(/(?:-|\/)(\d{7,})(?:\/|$)/);
     const ilan_id = idMatch ? idMatch[1] : '';
 
     // Fiyat
