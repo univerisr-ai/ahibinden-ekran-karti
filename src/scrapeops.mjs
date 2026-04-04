@@ -84,15 +84,33 @@ async function fetchWithFullBypass(targetUrl, label = '') {
         return html;
       }
       
-      if (resp.status === 403) {
-        consecutive403s++;
-        console.log(`  🚫 403 Forbidden [${label}] — Mevcut API KEY'in kredisi bitti! (${currentKey.substring(0, 5)}...)`);
-        currentKey = getNextKey(); // Havuzdaki SIRADAKİ KEY'i AL
-        console.log(`  🔄 Yeni Key'e geçildi: ${currentKey.substring(0, 5)}...`);
-        // Kredi bittiği için attempt sayısını arttırmadan direkt yeni key ile dene
-        attempt--; 
-        await sleep(1000);
-        continue;
+      if (resp.status === 403 || resp.status === 401) {
+        const errText = await resp.text();
+        
+        let isScrapeOpsError = false;
+        if (resp.status === 401) isScrapeOpsError = true;
+        try {
+          const json = JSON.parse(errText);
+          if (json.Error || json.error) isScrapeOpsError = true;
+        } catch (e) {
+          // Eğer JSON parse edilemiyorsa, bu Sahibinden/Cloudflare'nin HTML 403 block sayfasıdır.
+        }
+        
+        // Eğer hata Scrapeops API'den geliyorsa (Kredi/Yetki hatası)
+        if (isScrapeOpsError) {
+          consecutive403s++;
+          console.log(`  🚫 [${label}] Mevcut API KEY başarısız veya limitsiz!`);
+          currentKey = getNextKey();
+          console.log(`  🔄 Yeni Key'e geçildi: ${currentKey.substring(0, 5)}...`);
+          attempt--; 
+          await sleep(1000);
+          continue;
+        } else {
+          // Sahibinden/Cloudflare proxy IP'yi banladı, key sağlam ama IP kötü!
+          console.log(`  ⚠️ Sahibinden/CF IP'mizi engelledi (403) [${label}]. Aynı key ile farklı IP deneniyor... (deneme ${attempt})`);
+          await sleep(RETRY_BASE_DELAY_MS * attempt);
+          continue;
+        }
       }
       
       if (resp.status === 429) {
