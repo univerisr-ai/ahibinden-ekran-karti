@@ -223,6 +223,10 @@ async function main() {
       parsedCount = listings.length;
       allListings.push(...listings);
       console.log(`  ✅ ${segLabel}: ${parsedCount} ilan parse edildi`);
+      
+      if (parsedCount === 0 && htmlPages[0]) {
+        console.log(`  ⚠️ 0 İlan Hatası! Gelen HTML (ilk 800 karakter):\n${htmlPages[0].substring(0, 800).replace(/\n/g, ' ')}`);
+      }
     } else {
       console.log(`  ⚠️ ${segLabel}: HTML alınamadı veya boş döndü`);
     }
