@@ -28,7 +28,7 @@ export const TELEGRAM_TOKEN =
   process.env.TELEGRAM_BOT_TOKEN_1 ||
   process.env.TELEGRAM_BOT_TOKEN_2 ||
   '';
-export const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_USER_ID || '';
+export const TELEGRAM_CHAT_ID = process.env.TELEGRAM_USER_ID || process.env.TELEGRAM_CHAT_ID || '';
 
 // ─── AI Provider ─────────────────────────────────────────────
 export const AI_PROVIDER = (process.env.AI_PROVIDER || 'gemini').toLowerCase();

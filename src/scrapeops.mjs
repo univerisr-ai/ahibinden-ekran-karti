@@ -353,7 +353,10 @@ async function fetchViaProxy(targetUrl, label = '') {
     haltRun(`${label} HTTP ${response.status}`);
     return null;
   } catch (err) {
-    const reason = err?.name === 'AbortError' ? 'zaman asimi' : (err?.message || 'bilinmeyen hata');
+    let reason = err?.name === 'AbortError' ? 'zaman asimi' : (err?.message || 'bilinmeyen hata');
+    if (err?.cause) {
+      reason += ` (Neden: ${err.cause.message || err.cause.code || 'bilinmeyen neden'})`;
+    }
     if (transportMode === 'auto') {
       console.log(`  ↪️ Proxy baglanti hatasi [${label}] (${reason}) -> API fallback deneniyor.`);
       return fetchViaApi(targetUrl, label, activeKey, { unlock: false, haltOnFailure: true });
@@ -426,7 +429,10 @@ async function fetchViaApi(targetUrl, label, activeKey, { unlock = false, haltOn
     else console.log(`  ⚠️ ${reason}`);
     return null;
   } catch (err) {
-    const reason = err?.name === 'AbortError' ? 'zaman asimi' : (err?.message || 'bilinmeyen hata');
+    let reason = err?.name === 'AbortError' ? 'zaman asimi' : (err?.message || 'bilinmeyen hata');
+    if (err?.cause) {
+      reason += ` (Neden: ${err.cause.message || err.cause.code || 'bilinmeyen neden'})`;
+    }
     stats.failedRequests += 1;
     const full = `${label} API hata: ${reason}`;
     if (haltOnFailure) haltRun(full);
@@ -522,15 +528,25 @@ export async function initSession() {
   }
 
   const primeLabel = 'API unlock';
-  const unlockHtml = await fetchViaApi(BASE_URL, primeLabel, key, {
-    unlock: true,
-    haltOnFailure: false,
-  });
+  let unlockHtml = null;
+  const maxRetries = 3;
 
-  if (unlockHtml) {
-    console.log('  🔓 API session primed (tek sefer pahali unlock tamamlandi).');
-    apiSessionPrimed = true;
-    return 'API_SESSION_PRIMED';
+  for (let i = 0; i < maxRetries; i++) {
+    unlockHtml = await fetchViaApi(BASE_URL, `${primeLabel} (Deneme ${i + 1}/${maxRetries})`, key, {
+      unlock: true,
+      haltOnFailure: false,
+    });
+
+    if (unlockHtml) {
+      console.log(`  🔓 API session primed (tek sefer pahali unlock tamamlandi - deneme ${i + 1}).`);
+      apiSessionPrimed = true;
+      return 'API_SESSION_PRIMED';
+    }
+
+    if (i < maxRetries - 1) {
+      console.log(`  ⏳ Unlock başarısız oldu, ${REQUEST_DELAY_MS}ms bekleniyor ve tekrar deneniyor...`);
+      await sleep(REQUEST_DELAY_MS);
+    }
   }
 
   const apiProbeHtml = await fetchViaApi(BASE_URL, 'API probe', key, {

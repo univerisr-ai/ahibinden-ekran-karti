@@ -355,8 +355,18 @@ async function main() {
 }
 
 // ── Çalıştır ─────────────────────────────────────────────────
-main().catch(err => {
-  console.error(`\n  💀 KRİTİK HATA: ${err.message}`);
+main().catch(async err => {
+  const causeMsg = err.cause ? ` (Neden: ${err.cause.message || err.cause.code || 'bilinmeyen'})` : '';
+  console.error(`\n  💀 KRİTİK HATA: ${err.message}${causeMsg}`);
   console.error(err.stack);
+  
+  if (err.message) {
+    try {
+      await sendTelegram(`💀 *KRİTİK HATA*\n\n\`\`\`\n${err.message}${causeMsg}\n${err.stack}\n\`\`\``);
+    } catch(e) {
+      console.error('Kritik hatayı Telegram ile gönderirken sorun oluştu: ', e.message);
+    }
+  }
+  
   process.exit(1);
 });
