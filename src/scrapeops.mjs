@@ -31,8 +31,9 @@ export function buildSahibindenUrl(offset, priceMin, priceMax) {
   url.searchParams.set('pagingSize', String(ITEMS_PER_PAGE));
   if (priceMin !== undefined && priceMin !== null) url.searchParams.set('price_min', String(priceMin));
   if (priceMax !== undefined && priceMax !== null) url.searchParams.set('price_max', String(priceMax));
-  // Not: En yeni ilanlardan taramaya başlamak 2000'den fazlasında faydalıdır.
-  // url.searchParams.set('sorting', 'date_desc'); 
+  
+  // STRATEJİK HAMLE: GPU Fırsatları en yeni eklenen ilanlardadır! Bu yüzden en baştan itibaren sıralıyoruz.
+  url.searchParams.set('sorting', 'date_desc'); 
   return url.toString();
 }
 
@@ -157,8 +158,10 @@ export async function scrapeSegment(priceMin, priceMax, dynamicSplit = true) {
     totalCount = parseInt(totalMatch[1].replace(/\./g, ''), 10);
   }
 
-  const totalPages = Math.min(Math.ceil(totalCount / ITEMS_PER_PAGE), 20);
-  console.log(`  📊 ${label}: ${totalCount.toLocaleString('tr')} ilan, ${totalPages} sayfa`);
+  // Ekran Kartı avcısı eski şişkin ilanlar yerine En Yeni ve Muhtemel Fırsatlara odaklansın diye limiti 5 sayfa yaptık.
+  // Bu, kredi harcamasını aylık maksimum 3000 krediye (ayda 8 çalışmalar için) tam sabitliyor!
+  const totalPages = Math.min(Math.ceil(totalCount / ITEMS_PER_PAGE), 5);
+  console.log(`  📊 ${label}: ${totalCount.toLocaleString('tr')} ilan var, biz en güncel ${totalPages} sayfayı çekiyoruz`);
 
   if (dynamicSplit && totalCount >= 950) {
     const mid = Math.floor((priceMin + priceMax) / 2);
