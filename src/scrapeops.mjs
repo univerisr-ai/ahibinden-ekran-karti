@@ -1,14 +1,27 @@
 /**
- * Proxy-only scraping layer.
- * ScrapeOps API endpoint is NOT used; only proxy tunnel is used.
+ * Hybrid scraping layer.
+ * Supports ScrapeOps proxy tunnel, API endpoint, or auto fallback mode.
  */
 import { ProxyAgent } from 'undici';
 import {
   SCRAPEOPS_KEYS,
+  SESSION_NUMBER,
   SCRAPEOPS_PROXY_SCHEME,
   SCRAPEOPS_PROXY_HOST,
   SCRAPEOPS_PROXY_PORT,
   SCRAPEOPS_PROXY_USER,
+  SCRAPEOPS_TRANSPORT_MODE,
+  SCRAPEOPS_API_ENDPOINT,
+  SCRAPEOPS_API_BYPASS,
+  SCRAPEOPS_API_RENDER_JS,
+  SCRAPEOPS_API_RESIDENTIAL,
+  SCRAPEOPS_API_WAIT_MS,
+  SCRAPEOPS_API_CREDIT_PER_REQUEST,
+  SCRAPEOPS_UNLOCK_BYPASS,
+  SCRAPEOPS_UNLOCK_RENDER_JS,
+  SCRAPEOPS_UNLOCK_RESIDENTIAL,
+  SCRAPEOPS_UNLOCK_WAIT_MS,
+  SCRAPEOPS_UNLOCK_CREDIT_COST,
   REQUEST_DELAY_MS,
   REQUEST_TIMEOUT_MS,
   ITEMS_PER_PAGE,
@@ -24,6 +37,7 @@ const proxyAgentCache = new Map();
 const exhaustedKeys = new Set();
 let keyCursor = 0;
 let currentKey = null;
+let apiSessionPrimed = false;
 
 let stats = {
   totalRequests: 0,
@@ -55,6 +69,14 @@ export function isRunHalted() {
   return !!stats.runHalted;
 }
 
+function getTransportMode() {
+  const mode = (SCRAPEOPS_TRANSPORT_MODE || 'api').toLowerCase();
+  if (mode === 'proxy' || mode === 'api' || mode === 'auto') {
+    return mode;
+  }
+  return 'api';
+}
+
 function buildProxyUrlForKey(key) {
   return `${SCRAPEOPS_PROXY_SCHEME}://${SCRAPEOPS_PROXY_USER}:${encodeURIComponent(key)}@${SCRAPEOPS_PROXY_HOST}:${SCRAPEOPS_PROXY_PORT}`;
 }
@@ -64,6 +86,33 @@ function getProxyAgent(key) {
     proxyAgentCache.set(key, new ProxyAgent(buildProxyUrlForKey(key)));
   }
   return proxyAgentCache.get(key);
+}
+
+function buildApiUrlForKey(key, targetUrl, unlock = false) {
+  const url = new URL(SCRAPEOPS_API_ENDPOINT);
+  url.searchParams.set('api_key', key);
+  url.searchParams.set('url', targetUrl);
+  url.searchParams.set('session_number', String(SESSION_NUMBER));
+
+  const bypass = unlock ? SCRAPEOPS_UNLOCK_BYPASS : SCRAPEOPS_API_BYPASS;
+  const renderJs = unlock ? SCRAPEOPS_UNLOCK_RENDER_JS : SCRAPEOPS_API_RENDER_JS;
+  const residential = unlock ? SCRAPEOPS_UNLOCK_RESIDENTIAL : SCRAPEOPS_API_RESIDENTIAL;
+  const waitMs = unlock ? SCRAPEOPS_UNLOCK_WAIT_MS : SCRAPEOPS_API_WAIT_MS;
+
+  if (bypass) {
+    url.searchParams.set('bypass', bypass);
+  }
+  if (renderJs) {
+    url.searchParams.set('render_js', 'true');
+  }
+  if (residential) {
+    url.searchParams.set('residential', 'true');
+  }
+  if (waitMs > 0) {
+    url.searchParams.set('wait', String(waitMs));
+  }
+
+  return url.toString();
 }
 
 function findNextAvailableKey(excludeKey = null) {
@@ -193,6 +242,12 @@ function haltRun(reason = '') {
   stats.haltReason = reason;
 }
 
+function markKeyExhausted(key) {
+  exhaustedKeys.add(key);
+  stats.exhaustedKeyCount = exhaustedKeys.size;
+  stats.allKeysExhausted = exhaustedKeys.size >= SCRAPEOPS_KEYS.length;
+}
+
 export function buildSahibindenUrl(offset, priceMin, priceMax) {
   const url = new URL(BASE_URL);
   url.searchParams.set('pagingOffset', String(offset));
@@ -224,6 +279,11 @@ async function fetchViaProxy(targetUrl, label = '') {
     stats.allKeysExhausted = true;
     haltRun(`${label} icin aktif key bulunamadi`);
     return null;
+  }
+
+  const transportMode = getTransportMode();
+  if (transportMode === 'api') {
+    return fetchViaApi(targetUrl, label, activeKey, { unlock: false, haltOnFailure: true });
   }
 
   stats.totalRequests += 1;
@@ -259,9 +319,7 @@ async function fetchViaProxy(targetUrl, label = '') {
     }
 
     if (isScrapeOpsKeyFailure(response.status, bodyText)) {
-      exhaustedKeys.add(activeKey);
-      stats.exhaustedKeyCount = exhaustedKeys.size;
-      stats.allKeysExhausted = exhaustedKeys.size >= SCRAPEOPS_KEYS.length;
+      markKeyExhausted(activeKey);
       haltRun(`${label} proxy key reddedildi (HTTP ${response.status})`);
       return null;
     }
@@ -276,8 +334,83 @@ async function fetchViaProxy(targetUrl, label = '') {
     return null;
   } catch (err) {
     const reason = err?.name === 'AbortError' ? 'zaman asimi' : (err?.message || 'bilinmeyen hata');
+    if (transportMode === 'auto') {
+      console.log(`  ↪️ Proxy baglanti hatasi [${label}] (${reason}) -> API fallback deneniyor.`);
+      return fetchViaApi(targetUrl, label, activeKey, { unlock: false, haltOnFailure: true });
+    }
+
     stats.failedRequests += 1;
     haltRun(`${label} hata: ${reason}`);
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchViaApi(targetUrl, label, activeKey, { unlock = false, haltOnFailure = true } = {}) {
+  const cost = unlock ? SCRAPEOPS_UNLOCK_CREDIT_COST : SCRAPEOPS_API_CREDIT_PER_REQUEST;
+  stats.totalRequests += 1;
+  stats.estimatedCredits += cost;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(buildApiUrlForKey(activeKey, targetUrl, unlock), {
+      signal: controller.signal,
+      headers: {
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Cache-Control': 'no-cache',
+      },
+    });
+
+    const bodyText = await response.text();
+
+    if (response.ok && !isChallengeHtml(bodyText)) {
+      stats.successfulRequests += 1;
+      if (unlock) {
+        apiSessionPrimed = true;
+      }
+      return bodyText;
+    }
+
+    stats.failedRequests += 1;
+
+    if (response.ok && isChallengeHtml(bodyText)) {
+      stats.blockedResponses += 1;
+      const reason = `${label} API challenge (200) dondu`;
+      if (haltOnFailure) haltRun(reason);
+      else console.log(`  ⚠️ ${reason}`);
+      return null;
+    }
+
+    if (isScrapeOpsKeyFailure(response.status, bodyText)) {
+      markKeyExhausted(activeKey);
+      const reason = `${label} API key reddedildi (HTTP ${response.status})`;
+      if (haltOnFailure) haltRun(reason);
+      else console.log(`  ⚠️ ${reason}`);
+      return null;
+    }
+
+    if (isRecoverableBlock(response.status, bodyText)) {
+      stats.blockedResponses += 1;
+      const reason = `${label} API HTTP ${response.status} blok`;
+      if (haltOnFailure) haltRun(reason);
+      else console.log(`  ⚠️ ${reason}`);
+      return null;
+    }
+
+    const reason = `${label} API HTTP ${response.status}`;
+    if (haltOnFailure) haltRun(reason);
+    else console.log(`  ⚠️ ${reason}`);
+    return null;
+  } catch (err) {
+    const reason = err?.name === 'AbortError' ? 'zaman asimi' : (err?.message || 'bilinmeyen hata');
+    stats.failedRequests += 1;
+    const full = `${label} API hata: ${reason}`;
+    if (haltOnFailure) haltRun(full);
+    else console.log(`  ⚠️ ${full}`);
     return null;
   } finally {
     clearTimeout(timeout);
@@ -354,7 +487,38 @@ export async function scrapeSegment(priceMin, priceMax, dynamicSplit = true) {
 }
 
 export async function initSession() {
-  return 'PROXY_ONLY_MODE';
+  const mode = getTransportMode();
+  if (mode === 'proxy') {
+    return 'PROXY_ONLY_MODE';
+  }
+
+  const key = getActiveKey();
+  if (!key) {
+    stats.allKeysExhausted = true;
+    if (mode === 'api') {
+      return null;
+    }
+    return 'AUTO_MODE_NO_KEY';
+  }
+
+  const primeLabel = 'API unlock';
+  const unlockHtml = await fetchViaApi(BASE_URL, primeLabel, key, {
+    unlock: true,
+    haltOnFailure: mode === 'api',
+  });
+
+  if (unlockHtml) {
+    console.log('  🔓 API session primed (tek sefer pahali unlock tamamlandi).');
+    apiSessionPrimed = true;
+    return 'API_SESSION_PRIMED';
+  }
+
+  if (mode === 'api') {
+    return null;
+  }
+
+  console.log('  ⚠️ API unlock basarisiz, auto mod proxy ile devam edecek.');
+  return 'AUTO_MODE_FALLBACK';
 }
 
 export default {

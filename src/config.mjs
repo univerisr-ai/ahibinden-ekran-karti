@@ -41,6 +41,27 @@ export const SCRAPEOPS_PROXY_HOST = process.env.SCRAPEOPS_PROXY_HOST || 'proxy.s
 export const SCRAPEOPS_PROXY_PORT = parseInt(process.env.SCRAPEOPS_PROXY_PORT || '5353', 10);
 export const SCRAPEOPS_PROXY_USER = process.env.SCRAPEOPS_PROXY_USER || 'scrapeops';
 
+// ─── ScrapeOps Transport Modu ───────────────────────────────
+// api: ScrapeOps API endpoint
+// proxy: proxy tunnel (ProxyAgent)
+// auto: önce proxy, network hatasında api fallback
+export const SCRAPEOPS_TRANSPORT_MODE = (process.env.SCRAPEOPS_TRANSPORT_MODE || 'api').toLowerCase();
+export const SCRAPEOPS_API_ENDPOINT = process.env.SCRAPEOPS_API_ENDPOINT || 'https://proxy.scrapeops.io/v1/';
+
+// API istek profili (ucuz profil)
+export const SCRAPEOPS_API_BYPASS = process.env.SCRAPEOPS_API_BYPASS || '';
+export const SCRAPEOPS_API_RENDER_JS = (process.env.SCRAPEOPS_API_RENDER_JS || 'false').toLowerCase() === 'true';
+export const SCRAPEOPS_API_RESIDENTIAL = (process.env.SCRAPEOPS_API_RESIDENTIAL || 'false').toLowerCase() === 'true';
+export const SCRAPEOPS_API_WAIT_MS = parseInt(process.env.SCRAPEOPS_API_WAIT_MS || '0', 10);
+export const SCRAPEOPS_API_CREDIT_PER_REQUEST = parseFloat(process.env.SCRAPEOPS_API_CREDIT_PER_REQUEST || '1');
+
+// Tek seferlik pahalı unlock (session priming)
+export const SCRAPEOPS_UNLOCK_BYPASS = process.env.SCRAPEOPS_UNLOCK_BYPASS || 'cloudflare_level_3';
+export const SCRAPEOPS_UNLOCK_RENDER_JS = (process.env.SCRAPEOPS_UNLOCK_RENDER_JS || 'true').toLowerCase() === 'true';
+export const SCRAPEOPS_UNLOCK_RESIDENTIAL = (process.env.SCRAPEOPS_UNLOCK_RESIDENTIAL || 'true').toLowerCase() === 'true';
+export const SCRAPEOPS_UNLOCK_WAIT_MS = parseInt(process.env.SCRAPEOPS_UNLOCK_WAIT_MS || '5000', 10);
+export const SCRAPEOPS_UNLOCK_CREDIT_COST = parseFloat(process.env.SCRAPEOPS_UNLOCK_CREDIT_COST || '25');
+
 // ─── Performans Ayarları ─────────────────────────────────────
 export const CONCURRENCY_LIMIT = parseInt(process.env.CONCURRENCY_LIMIT || '1', 10);
 export const REQUEST_DELAY_MS = parseInt(process.env.REQUEST_DELAY_MS || '800', 10);
@@ -116,6 +137,18 @@ export default {
   SCRAPEOPS_PROXY_HOST,
   SCRAPEOPS_PROXY_PORT,
   SCRAPEOPS_PROXY_USER,
+  SCRAPEOPS_TRANSPORT_MODE,
+  SCRAPEOPS_API_ENDPOINT,
+  SCRAPEOPS_API_BYPASS,
+  SCRAPEOPS_API_RENDER_JS,
+  SCRAPEOPS_API_RESIDENTIAL,
+  SCRAPEOPS_API_WAIT_MS,
+  SCRAPEOPS_API_CREDIT_PER_REQUEST,
+  SCRAPEOPS_UNLOCK_BYPASS,
+  SCRAPEOPS_UNLOCK_RENDER_JS,
+  SCRAPEOPS_UNLOCK_RESIDENTIAL,
+  SCRAPEOPS_UNLOCK_WAIT_MS,
+  SCRAPEOPS_UNLOCK_CREDIT_COST,
   CONCURRENCY_LIMIT,
   REQUEST_DELAY_MS,
   MAX_RETRIES,

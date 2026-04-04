@@ -64,7 +64,19 @@ jobs:
           REQUEST_DELAY_MS: '1200'
           REQUEST_TIMEOUT_MS: '45000'
           MAX_RETRIES: '1'
+          SCRAPEOPS_TRANSPORT_MODE: 'api'
           SCRAPEOPS_PROXY_PORT: '5353'
+
+          # ── API unlock (tek sefer) + ucuz devam ───────────
+          SCRAPEOPS_API_RENDER_JS: 'false'
+          SCRAPEOPS_API_RESIDENTIAL: 'false'
+          SCRAPEOPS_API_WAIT_MS: '0'
+          SCRAPEOPS_API_CREDIT_PER_REQUEST: '1'
+          SCRAPEOPS_UNLOCK_BYPASS: 'cloudflare_level_3'
+          SCRAPEOPS_UNLOCK_RENDER_JS: 'true'
+          SCRAPEOPS_UNLOCK_RESIDENTIAL: 'true'
+          SCRAPEOPS_UNLOCK_WAIT_MS: '5000'
+          SCRAPEOPS_UNLOCK_CREDIT_COST: '25'
 
           # ── Kredi / Hedef Kontrolü ─────────────────────────
           TARGET_LISTINGS_PER_RUN: '2500'
