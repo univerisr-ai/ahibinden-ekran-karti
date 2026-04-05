@@ -41,6 +41,7 @@ export const ITEMS_PER_PAGE = 50;
 export const MAX_PAGES_PER_SEGMENT = parseInt(process.env.MAX_PAGES_PER_SEGMENT || '3', 10);
 
 // ─── Performans ──────────────────────────────────────────────
+export const CONCURRENCY_LIMIT = 1;
 export const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '2', 10);
 export const REQUEST_DELAY_MS = 2000;
 
