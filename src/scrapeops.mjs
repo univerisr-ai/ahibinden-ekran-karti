@@ -96,14 +96,15 @@ async function fetchPage(targetUrl, label = '') {
          continue;
       }
 
-      stats.creditsUsed += cost;
-      
       const status = checkScrapeOpsErrors(html);
       
       if (status === 'BANNED') {
          console.log(`  💀 ScrapeOps Anahtarı YASAKLI veya Kredisi Bitti!`);
+         console.log("HATA HTML:", html.substring(0, 800)); // Log the exact error from ScrapeOps
          return { html: null, status: 'BANNED' };
       }
+      
+      stats.creditsUsed += cost;
       
       if (status === 'CLOUDFLARE' || status === 'INVALID') {
          console.log(`  ⚠️ Tarayıcı engeli geçilemedi (Kademe ${currentTier})`);
