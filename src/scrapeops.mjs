@@ -88,10 +88,10 @@ async function fetchPage(targetUrl, label = '') {
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     // Basic scrapeops residential proxy endpoint mapping
-    const proxyUrl = \`http://scrapeops:\${SCRAPEOPS_API_KEY}@proxy.scrapeops.io:5353\`;
+    const proxyUrl = `http://scrapeops:${SCRAPEOPS_API_KEY}@proxy.scrapeops.io:5353`;
     const cost = 10; // We define cost as 10 conceptually for budget tracking
     
-    console.log(\`  🌐 -> Python curl_cffi Bot (Proxy Tüneli) [\${cost}cr] (\${label})\`);
+    console.log(`  🌐 -> Python curl_cffi Bot (Proxy Tüneli) [${cost}cr] (${label})`);
     stats.totalRequests++;
 
     try {
@@ -103,7 +103,7 @@ async function fetchPage(targetUrl, label = '') {
       let respStatus = 0;
       
       if (result.error) {
-        console.log(\`  ❌ Python Çalıştırma Hatası: \${result.error.message}\`);
+        console.log(`  ❌ Python Çalıştırma Hatası: ${result.error.message}`);
         await sleep(2000);
         continue;
       }
@@ -112,15 +112,15 @@ async function fetchPage(targetUrl, label = '') {
         const parsed = JSON.parse(result.stdout);
         respStatus = parsed.status;
         html = parsed.html || "";
-        if (parsed.error) console.log(\`  ⚠️ Python İç Hatası: \${parsed.error}\`);
+        if (parsed.error) console.log(`  ⚠️ Python İç Hatası: ${parsed.error}`);
       } catch(e) {
-         console.log(\`  ⚠️ Çıktı JSON Parse Edilemedi: \${result.stdout ? result.stdout.substring(0, 100) : 'Boş çıktı'}...\`);
+         console.log(`  ⚠️ Çıktı JSON Parse Edilemedi: ${result.stdout ? result.stdout.substring(0, 100) : 'Boş çıktı'}...`);
          await sleep(2000);
          continue;
       }
 
       if (respStatus !== 200 && respStatus !== 404 && respStatus !== 403) {
-         console.log(\`  ⚠️ HTTP \${respStatus} (deneme \${attempt}) - DETAY: \${html.substring(0, 300)}\`);
+         console.log(`  ⚠️ HTTP ${respStatus} (deneme ${attempt}) - DETAY: ${html.substring(0, 300)}`);
          await sleep(2000);
          continue;
       }
@@ -129,14 +129,14 @@ async function fetchPage(targetUrl, label = '') {
       
       // If ScrapeOps Proxy strictly blocks
       if (status === 'BANNED') {
-         console.log(\`  💀 ScrapeOps Proxy YASAKLANMIŞ veya Kredisi Bitti!\`);
+         console.log(`  💀 ScrapeOps Proxy YASAKLANMIŞ veya Kredisi Bitti!`);
          return { html: null, status: 'BANNED' };
       }
       
       stats.creditsUsed += cost;
       
       if (status === 'CLOUDFLARE' || status === 'INVALID') {
-         console.log(\`  ⚠️ Tarayıcı engeli geçilemedi (curl_cffi impersonate deneme \${attempt})\`);
+         console.log(`  ⚠️ Tarayıcı engeli geçilemedi (curl_cffi impersonate deneme ${attempt})`);
          // We can fallback to retry
          await sleep(2000);
          continue;
@@ -148,7 +148,7 @@ async function fetchPage(targetUrl, label = '') {
       return { html, status: 'OK' };
 
     } catch (err) {
-      console.log(\`  ❌ Hata: \${err.message} (deneme \${attempt})\`);
+      console.log(`  ❌ Hata: ${err.message} (deneme ${attempt})`);
       await sleep(2000);
     }
   }
