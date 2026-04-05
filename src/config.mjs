@@ -31,6 +31,9 @@ export const TELEGRAM_CHAT_ID =
 export const AI_PROVIDER = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+export const AI_CHUNK_SIZE = 100;
+export const AI_DELAY_BETWEEN_CHUNKS_MS = 2000;
+export const AI_TOP_RESULTS = 5;
 
 // ─── Sahibinden ──────────────────────────────────────────────
 export const BASE_URL = 'https://www.sahibinden.com/ekran-karti-masaustu';
