@@ -5,9 +5,9 @@
 import 'dotenv/config';
 
 // ─── ScrapeOps Ayarları ──────────────────────────────────────
-const key1 = '6265abc5-efc3-4c72-84a8-3ad43890958f';
-const key2 = 'e887aa8c-f620-47db-a6f0-2513b1c5099a';
-export const SCRAPEOPS_API_KEY = process.env.SCRAPEOPS_API_KEY2 || process.env.SCRAPEOPS_API_KEY3 || process.env.SCRAPEOPS_API_KEY || key1 || key2;
+const key1 = 'e887aa8c-f620-47db-a6f0-2513b1c5099a'; // Yeni keyi öne aldık
+const key2 = '6265abc5-efc3-4c72-84a8-3ad43890958f';
+export const SCRAPEOPS_API_KEY = key1; 
 export const MAX_CREDITS_PER_RUN = 300; // Güvenlik limiti
 
 if (!SCRAPEOPS_API_KEY) {
