@@ -91,7 +91,7 @@ async function fetchPage(targetUrl, label = '') {
       let html = await resp.text();
 
       if (resp.status !== 200 && resp.status !== 404 && resp.status !== 403) {
-         console.log(`  ⚠️ HTTP ${resp.status} (deneme ${attempt})`);
+         console.log(`  ⚠️ HTTP ${resp.status} (deneme ${attempt}) - DETAY: ${html.substring(0, 300)}`);
          await sleep(2000);
          continue;
       }
