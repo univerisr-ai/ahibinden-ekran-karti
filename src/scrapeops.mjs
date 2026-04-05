@@ -25,7 +25,8 @@ let stats = {
 export function getStats() { return { ...stats }; }
 
 // ─── Otomatik Kademe Sistemi (Auto-Tier) ────────────────────
-let currentTier = 1; // 1: optimize (1cr), 2: render_js_cheap (5cr), 3: render_js (10cr)
+let currentTier = 3; // 1: optimize (1cr), 2: render_js_cheap (5cr), 3: render_js (10cr)
+// Kullanıcının isteği üzerine kademe yükseltmeyi beklemek "yerine" doğrudan EN GÜÇLÜ (Kademe 3) teknikle başlıyoruz.
 
 function getScrapeOpsUrl(targetUrl) {
   const urlParams = new URLSearchParams({
@@ -92,16 +93,6 @@ async function fetchPage(targetUrl, label = '') {
 
       if (resp.status !== 200 && resp.status !== 404 && resp.status !== 403) {
          console.log(`  ⚠️ HTTP ${resp.status} (deneme ${attempt}) - DETAY: ${html.substring(0, 300)}`);
-         
-         // ScrapeOps proxy siteye (Sahibinden) erişemezse kademe yükselt
-         if (resp.status === 500 && html.includes('Failed to get successful response')) {
-            if (currentTier < 3) {
-               currentTier++;
-               console.log(`  🚀 TIER UPGRADE: ScrapeOps basit isteği site tarafından engellendi. Kademe ${currentTier}'e çıkılıyor...`);
-               await sleep(2000);
-               return fetchPage(targetUrl, label); // Üst kademeden test et
-            }
-         }
 
          await sleep(2000);
          continue;
@@ -119,13 +110,6 @@ async function fetchPage(targetUrl, label = '') {
       
       if (status === 'CLOUDFLARE' || status === 'INVALID') {
          console.log(`  ⚠️ Tarayıcı engeli geçilemedi (Kademe ${currentTier})`);
-         // Eğer Kademe 3'te de geçemiyorsa demek ki site hard-blocklamış.
-         if (currentTier < 3) {
-            currentTier++;
-            console.log(`  🚀 TIER UPGRADE: Kademe ${currentTier}'e çıkılıyor...`);
-            await sleep(2000);
-            return fetchPage(targetUrl, label); // Yeniden dene (rekürsif ama güvenli)
-         }
          await sleep(2000);
          continue;
       }
