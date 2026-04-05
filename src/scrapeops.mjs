@@ -13,6 +13,12 @@ import {
   MAX_PAGES_PER_SEGMENT,
 } from './config.mjs';
 
+import { spawnSync } from 'child_process';
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 let stats = {
@@ -81,35 +87,57 @@ async function fetchPage(targetUrl, label = '') {
   }
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    const fetchUrl = getScrapeOpsUrl(targetUrl);
-    const cost = getCreditCostForTier(currentTier);
+    // Basic scrapeops residential proxy endpoint mapping
+    const proxyUrl = \`http://scrapeops:\${SCRAPEOPS_API_KEY}@proxy.scrapeops.io:5353\`;
+    const cost = 10; // We define cost as 10 conceptually for budget tracking
     
-    console.log(`  🌐 -> ScrapeOps [Kademe ${currentTier} - ${cost}cr] (${label})`);
+    console.log(\`  🌐 -> Python curl_cffi Bot (Proxy Tüneli) [\${cost}cr] (\${label})\`);
     stats.totalRequests++;
 
     try {
-      const resp = await fetch(fetchUrl, { timeout: 45000 });
-      let html = await resp.text();
+      const pythonScript = path.join(currentDir, 'python_scraper.py');
+      const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+      const result = spawnSync(pythonCmd, [pythonScript, targetUrl, proxyUrl], { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 10 });
+      
+      let html = "";
+      let respStatus = 0;
+      
+      if (result.error) {
+        console.log(\`  ❌ Python Çalıştırma Hatası: \${result.error.message}\`);
+        await sleep(2000);
+        continue;
+      }
+      
+      try {
+        const parsed = JSON.parse(result.stdout);
+        respStatus = parsed.status;
+        html = parsed.html || "";
+        if (parsed.error) console.log(\`  ⚠️ Python İç Hatası: \${parsed.error}\`);
+      } catch(e) {
+         console.log(\`  ⚠️ Çıktı JSON Parse Edilemedi: \${result.stdout ? result.stdout.substring(0, 100) : 'Boş çıktı'}...\`);
+         await sleep(2000);
+         continue;
+      }
 
-      if (resp.status !== 200 && resp.status !== 404 && resp.status !== 403) {
-         console.log(`  ⚠️ HTTP ${resp.status} (deneme ${attempt}) - DETAY: ${html.substring(0, 300)}`);
-
+      if (respStatus !== 200 && respStatus !== 404 && respStatus !== 403) {
+         console.log(\`  ⚠️ HTTP \${respStatus} (deneme \${attempt}) - DETAY: \${html.substring(0, 300)}\`);
          await sleep(2000);
          continue;
       }
 
       const status = checkScrapeOpsErrors(html);
       
+      // If ScrapeOps Proxy strictly blocks
       if (status === 'BANNED') {
-         console.log(`  💀 ScrapeOps Anahtarı YASAKLI veya Kredisi Bitti!`);
-         console.log("HATA HTML:", html.substring(0, 800)); // Log the exact error from ScrapeOps
+         console.log(\`  💀 ScrapeOps Proxy YASAKLANMIŞ veya Kredisi Bitti!\`);
          return { html: null, status: 'BANNED' };
       }
       
       stats.creditsUsed += cost;
       
       if (status === 'CLOUDFLARE' || status === 'INVALID') {
-         console.log(`  ⚠️ Tarayıcı engeli geçilemedi (Kademe ${currentTier})`);
+         console.log(\`  ⚠️ Tarayıcı engeli geçilemedi (curl_cffi impersonate deneme \${attempt})\`);
+         // We can fallback to retry
          await sleep(2000);
          continue;
       }
@@ -120,7 +148,7 @@ async function fetchPage(targetUrl, label = '') {
       return { html, status: 'OK' };
 
     } catch (err) {
-      console.log(`  ❌ Hata: ${err.message} (deneme ${attempt})`);
+      console.log(\`  ❌ Hata: \${err.message} (deneme \${attempt})\`);
       await sleep(2000);
     }
   }

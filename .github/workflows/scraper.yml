@@ -38,6 +38,14 @@ jobs:
         with:
           node-version: '20'
 
+      - name: 🐍 Python Kurulumu
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Python Bağımlılıklarını Kur (curl_cffi)
+        run: pip install curl_cffi requests
+
       - name: 🚀 Browser Kurulumu (Playwright için)
         run: npx playwright install chromium --with-deps
 
