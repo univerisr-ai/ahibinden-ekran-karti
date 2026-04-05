@@ -57,8 +57,11 @@ jobs:
 
       - name: 🚀 GPU Fırsat Avcısını Çalıştır
         env:
+          # ── Proxy (ScrapeOps) ──────────────────────────────────
+          SCRAPEOPS_API_KEY: '8fa66633-b47e-4c61-a9cb-38b1463aff58'
+
           # ── Telegram ───────────────────────────────────────
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN_1 || secrets.TELEGRAM_BOT_TOKEN_2 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN_1 || secrets.TELEGRAM_BOT_TOKEN_2 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_USER_ID || secrets.TELEGRAM_CHAT_ID }}
 
           # ── AI (Gemini / OpenRouter) ────────────────────────
