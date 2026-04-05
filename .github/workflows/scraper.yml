@@ -3,9 +3,10 @@ name: 🎮 GPU Fırsat Avcısı — Sahibinden AI Scraper
 on:
   # ── Zamanlı çalıştırma ────────────────────────────────────
   schedule:
-    - cron: '0 8 * * 2,5'    # Haftada 2: Salı + Cuma, 08:00 UTC
+    # Pazartesi ve Perşembe günleri 11:00 TR saati (08:00 UTC)
+    - cron: '0 8 * * 1,4'
 
-  # ── Manuel çalıştırma (Telefondan parametre girme) ────────
+  # ── Manuel çalıştırma ────────
   workflow_dispatch:
     inputs:
       min_fiyat:
@@ -37,15 +38,14 @@ jobs:
         with:
           node-version: '20'
 
+      - name: 🚀 Browser Kurulumu (Playwright için)
+        run: npx playwright install chromium --with-deps
+
       - name: 📦 Bağımlılıkları Yükle
         run: npm install
 
       - name: 🚀 GPU Fırsat Avcısını Çalıştır
         env:
-          # ── ScrapeOps ──────────────────────────────────────
-          SCRAPEOPS_API_KEYS: ${{ secrets.SCRAPEOPS_API_KEY || secrets.SCRAPEOPS_API_KEY2 || secrets.SCRAPEOPS_API_KEY3 }}
-          STRICT_SINGLE_KEY_MODE: 'true'
-
           # ── Telegram ───────────────────────────────────────
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN_1 || secrets.TELEGRAM_BOT_TOKEN_2 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_USER_ID || secrets.TELEGRAM_CHAT_ID }}
@@ -59,32 +59,6 @@ jobs:
           CUSTOM_MIN_PRICE: ${{ github.event.inputs.min_fiyat }}
           CUSTOM_MAX_PRICE: ${{ github.event.inputs.max_fiyat }}
           BYPASS_AI: ${{ github.event.inputs.bypass_ai }}
-
-          # ── Performans ──────────────────────────────────────
-          CONCURRENCY_LIMIT: '1'
-          REQUEST_DELAY_MS: '1200'
-          REQUEST_TIMEOUT_MS: '45000'
-          MAX_RETRIES: '1'
-          SCRAPEOPS_TRANSPORT_MODE: 'api'
-          ALLOW_API_TO_PROXY_FALLBACK: 'true'
-          SCRAPEOPS_PROXY_PORT: '5353'
-
-          # ── API unlock (tek sefer) + ucuz devam ───────────
-          SCRAPEOPS_API_RENDER_JS: 'false'
-          SCRAPEOPS_API_RESIDENTIAL: 'false'
-          SCRAPEOPS_API_WAIT_MS: '0'
-          SCRAPEOPS_API_CREDIT_PER_REQUEST: '1'
-          SCRAPEOPS_UNLOCK_BYPASS: 'cloudflare_level_3'
-          SCRAPEOPS_UNLOCK_RENDER_JS: 'true'
-          SCRAPEOPS_UNLOCK_RESIDENTIAL: 'true'
-          SCRAPEOPS_UNLOCK_WAIT_MS: '5000'
-          SCRAPEOPS_UNLOCK_CREDIT_COST: '25'
-
-          # ── Kredi / Hedef Kontrolü ─────────────────────────
-          TARGET_LISTINGS_PER_RUN: '2500'
-          MAX_REQUESTS_PER_RUN: '55'
-          MAX_PAGES_PER_SEGMENT: '8'
-          PROXY_CREDIT_PER_REQUEST: '1'
         run: node src/main.mjs
 
       - name: 💾 Sonuçları Kaydet (Artifact)

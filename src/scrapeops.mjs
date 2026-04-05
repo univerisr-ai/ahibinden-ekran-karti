@@ -1,591 +1,214 @@
 /**
- * Hybrid scraping layer.
- * Supports ScrapeOps proxy tunnel, API endpoint, or auto fallback mode.
+ * SCRAPER.MJS — Playwright Tabanlı Sahibinden Scraper
+ * ScrapeOps'a bağımlılık YOK. Gerçek tarayıcı ile Cloudflare bypass.
+ * Maliyet: 0 TL, sınırsız ilan.
  */
-import { ProxyAgent } from 'undici';
+import { chromium } from 'playwright';
 import {
-  SCRAPEOPS_KEYS,
-  STRICT_SINGLE_KEY_MODE,
-  SESSION_NUMBER,
-  SCRAPEOPS_PROXY_SCHEME,
-  SCRAPEOPS_PROXY_HOST,
-  SCRAPEOPS_PROXY_PORT,
-  SCRAPEOPS_PROXY_USER,
-  SCRAPEOPS_TRANSPORT_MODE,
-  ALLOW_API_TO_PROXY_FALLBACK,
-  SCRAPEOPS_API_ENDPOINT,
-  SCRAPEOPS_API_BYPASS,
-  SCRAPEOPS_API_RENDER_JS,
-  SCRAPEOPS_API_RESIDENTIAL,
-  SCRAPEOPS_API_WAIT_MS,
-  SCRAPEOPS_API_CREDIT_PER_REQUEST,
-  SCRAPEOPS_UNLOCK_BYPASS,
-  SCRAPEOPS_UNLOCK_RENDER_JS,
-  SCRAPEOPS_UNLOCK_RESIDENTIAL,
-  SCRAPEOPS_UNLOCK_WAIT_MS,
-  SCRAPEOPS_UNLOCK_CREDIT_COST,
+  MAX_RETRIES,
   REQUEST_DELAY_MS,
-  REQUEST_TIMEOUT_MS,
   ITEMS_PER_PAGE,
   BASE_URL,
   MAX_PAGES_PER_SEGMENT,
-  MAX_REQUESTS_PER_RUN,
-  PROXY_CREDIT_PER_REQUEST,
 } from './config.mjs';
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const proxyAgentCache = new Map();
-const exhaustedKeys = new Set();
-let keyCursor = 0;
-let currentKey = null;
-let apiSessionPrimed = false;
-let runtimeTransportMode = resolveConfiguredTransportMode();
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 let stats = {
   totalRequests: 0,
   successfulRequests: 0,
   failedRequests: 0,
-  estimatedCredits: 0,
-  keyRotations: 0,
-  exhaustedKeyCount: 0,
-  blockedResponses: 0,
-  budgetStopped: false,
-  allKeysExhausted: false,
-  runHalted: false,
-  haltReason: '',
+  pagesLoaded: 0,
 };
+export function getStats() { return { ...stats }; }
 
-export function getStats() {
-  return { ...stats };
+// ─── Tarayıcı bağlamı (tek sefer açılır, herkes paylaşır) ───
+let _browser = null;
+let _context = null;
+
+async function getBrowserContext() {
+  if (_context) return _context;
+
+  console.log('  🌐 Playwright tarayıcı başlatılıyor...');
+  _browser = await chromium.launch({
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-blink-features=AutomationControlled',
+    ],
+  });
+
+  _context = await _browser.newContext({
+    locale: 'tr-TR',
+    timezoneId: 'Europe/Istanbul',
+    viewport: { width: 1440, height: 900 },
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    extraHTTPHeaders: {
+      'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+    },
+  });
+
+  return _context;
 }
 
-export function getRemainingRequestBudget() {
-  return Math.max(0, MAX_REQUESTS_PER_RUN - stats.totalRequests);
-}
-
-export function isRequestBudgetExhausted() {
-  return stats.budgetStopped || stats.totalRequests >= MAX_REQUESTS_PER_RUN;
-}
-
-export function isRunHalted() {
-  return !!stats.runHalted;
-}
-
-function resolveConfiguredTransportMode() {
-  const mode = (SCRAPEOPS_TRANSPORT_MODE || 'api').toLowerCase();
-  if (mode === 'proxy' || mode === 'api' || mode === 'auto') {
-    return mode;
-  }
-  return 'api';
-}
-
-function getTransportMode() {
-  return runtimeTransportMode;
-}
-
-function setTransportMode(mode) {
-  runtimeTransportMode = mode;
-}
-
-function buildProxyUrlForKey(key) {
-  return `${SCRAPEOPS_PROXY_SCHEME}://${SCRAPEOPS_PROXY_USER}:${encodeURIComponent(key)}@${SCRAPEOPS_PROXY_HOST}:${SCRAPEOPS_PROXY_PORT}`;
-}
-
-function getProxyAgent(key) {
-  if (!proxyAgentCache.has(key)) {
-    proxyAgentCache.set(key, new ProxyAgent(buildProxyUrlForKey(key)));
-  }
-  return proxyAgentCache.get(key);
-}
-
-function buildApiUrlForKey(key, targetUrl, unlock = false) {
-  const url = new URL(SCRAPEOPS_API_ENDPOINT);
-  url.searchParams.set('api_key', key);
-  url.searchParams.set('url', targetUrl);
-  url.searchParams.set('session_number', String(SESSION_NUMBER));
-
-  const bypass = unlock ? SCRAPEOPS_UNLOCK_BYPASS : SCRAPEOPS_API_BYPASS;
-  const renderJs = unlock ? SCRAPEOPS_UNLOCK_RENDER_JS : SCRAPEOPS_API_RENDER_JS;
-  const residential = unlock ? SCRAPEOPS_UNLOCK_RESIDENTIAL : SCRAPEOPS_API_RESIDENTIAL;
-  const waitMs = unlock ? SCRAPEOPS_UNLOCK_WAIT_MS : SCRAPEOPS_API_WAIT_MS;
-
-  if (bypass) {
-    url.searchParams.set('bypass', bypass);
-  }
-  if (renderJs) {
-    url.searchParams.set('render_js', 'true');
-  }
-  if (residential) {
-    url.searchParams.set('residential', 'true');
-  }
-  if (waitMs > 0) {
-    url.searchParams.set('wait', String(waitMs));
-  }
-
-  return url.toString();
-}
-
-function findNextAvailableKey(excludeKey = null) {
-  if (STRICT_SINGLE_KEY_MODE) {
-    const onlyKey = SCRAPEOPS_KEYS[0] || null;
-    if (!onlyKey || exhaustedKeys.has(onlyKey)) {
-      return null;
-    }
-    keyCursor = 0;
-    return onlyKey;
-  }
-
-  if (exhaustedKeys.size >= SCRAPEOPS_KEYS.length) {
-    return null;
-  }
-
-  for (let i = 0; i < SCRAPEOPS_KEYS.length; i++) {
-    const idx = (keyCursor + i) % SCRAPEOPS_KEYS.length;
-    const key = SCRAPEOPS_KEYS[idx];
-    if (exhaustedKeys.has(key)) {
-      continue;
-    }
-    if (
-      excludeKey &&
-      key === excludeKey &&
-      exhaustedKeys.size < SCRAPEOPS_KEYS.length - 1
-    ) {
-      continue;
-    }
-
-    keyCursor = (idx + 1) % SCRAPEOPS_KEYS.length;
-    return key;
-  }
-
-  // If only one active key remains, allow returning the excluded one as fallback.
-  for (let i = 0; i < SCRAPEOPS_KEYS.length; i++) {
-    const idx = (keyCursor + i) % SCRAPEOPS_KEYS.length;
-    const key = SCRAPEOPS_KEYS[idx];
-    if (!exhaustedKeys.has(key)) {
-      keyCursor = (idx + 1) % SCRAPEOPS_KEYS.length;
-      return key;
-    }
-  }
-
-  return null;
-}
-
-function getActiveKey() {
-  if (currentKey && !exhaustedKeys.has(currentKey)) {
-    return currentKey;
-  }
-
-  currentKey = findNextAvailableKey();
-  return currentKey;
-}
-
-function isChallengeHtml(html = '') {
-  const body = html.toLowerCase();
-  return (
-    body.includes('just a moment') ||
-    body.includes('challenge-platform') ||
-    body.includes('cf-chl') ||
-    body.includes('error 1020') ||
-    body.includes('attention required')
-  );
-}
-
-function tryParseJson(text = '') {
-  const trimmed = text.trim();
-  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
-    return null;
-  }
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return null;
+export async function closeBrowser() {
+  if (_browser) {
+    await _browser.close().catch(() => {});
+    _browser = null;
+    _context = null;
   }
 }
 
-function isScrapeOpsKeyFailure(status, bodyText = '') {
-  if (status === 401 || status === 407) {
-    return true;
+// ─── Cloudflare challenge'ı geçene kadar bekle ──────────────
+async function waitForCloudflare(page, maxWaitSec = 30) {
+  for (let i = 0; i < maxWaitSec; i++) {
+    const content = await page.content();
+    const isChallenge =
+      content.includes('Just a moment') ||
+      content.includes('challenge-platform') ||
+      content.includes('cf-spinner');
+
+    if (!isChallenge) return true;
+    await sleep(1000);
   }
-
-  const normalizedText = (bodyText || '').toLowerCase();
-  if (normalizedText.includes('this account has been banned') || normalizedText.includes('upgrade to a paid plan')) {
-    return true;
-  }
-
-  if (![402, 403, 429].includes(status)) {
-    return false;
-  }
-
-  const asJson = tryParseJson(bodyText);
-  const normalizedJson = asJson ? JSON.stringify(asJson).toLowerCase() : '';
-  const normalizedText = (bodyText || '').toLowerCase();
-  const text = `${normalizedJson} ${normalizedText}`;
-
-  const keyHints = ['api key', 'quota', 'credit', 'invalid key', 'subscription', 'confirm your email'];
-  const sourceHints = ['scrapeops', 'proxy authentication', 'proxy api'];
-
-  const hasKeyHint = keyHints.some((hint) => text.includes(hint));
-  const hasSourceHint = sourceHints.some((hint) => text.includes(hint)) || text.includes('api key');
-
-  return hasKeyHint && hasSourceHint;
+  return false;
 }
 
-function isRecoverableBlock(status, bodyText = '') {
-  if ([403, 429].includes(status)) {
-    return true;
-  }
-
-  if (status >= 500) {
-    return true;
-  }
-
-  return isChallengeHtml(bodyText);
-}
-
-function parseTotalCount(html = '') {
-  const match = html.match(/([\d.]{1,9})\s*ilan/i);
-  if (!match) {
-    return 0;
-  }
-  return parseInt(match[1].replace(/\./g, ''), 10) || 0;
-}
-
-function markBudgetStop(label = '') {
-  if (!stats.budgetStopped) {
-    const suffix = label ? ` [${label}]` : '';
-    console.log(`  ⛔ İstek limiti doldu${suffix}. Koşu kontrollü şekilde sonlandırılıyor.`);
-  }
-  stats.budgetStopped = true;
-}
-
-function haltRun(reason = '') {
-  if (!stats.runHalted) {
-    console.log(`  ⛔ Tek deneme modu: ${reason}. Koşu durduruluyor.`);
-  }
-  stats.runHalted = true;
-  stats.haltReason = reason;
-}
-
-function markKeyExhausted(key) {
-  exhaustedKeys.add(key);
-  stats.exhaustedKeyCount = exhaustedKeys.size;
-  stats.allKeysExhausted = exhaustedKeys.size >= SCRAPEOPS_KEYS.length;
-}
-
+// ─── URL oluştur ────────────────────────────────────────────
 export function buildSahibindenUrl(offset, priceMin, priceMax) {
   const url = new URL(BASE_URL);
   url.searchParams.set('pagingOffset', String(offset));
   url.searchParams.set('pagingSize', String(ITEMS_PER_PAGE));
-  url.searchParams.set('sorting', 'date_desc');
-
-  if (priceMin !== undefined && priceMin !== null) {
-    url.searchParams.set('price_min', String(priceMin));
-  }
-  if (priceMax !== undefined && priceMax !== null) {
-    url.searchParams.set('price_max', String(priceMax));
-  }
-
+  if (priceMin != null) url.searchParams.set('price_min', String(priceMin));
+  if (priceMax != null) url.searchParams.set('price_max', String(priceMax));
   return url.toString();
 }
 
-async function fetchViaProxy(targetUrl, label = '') {
-  if (isRequestBudgetExhausted()) {
-    markBudgetStop(label);
-    return null;
-  }
+// ─── Tek sayfa çek ──────────────────────────────────────────
+async function fetchPage(targetUrl, label = '') {
+  const ctx = await getBrowserContext();
 
-  if (isRunHalted()) {
-    return null;
-  }
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    stats.totalRequests++;
+    const page = await ctx.newPage();
 
-  const activeKey = getActiveKey();
-  if (!activeKey) {
-    stats.allKeysExhausted = true;
-    haltRun(`${label} icin aktif key bulunamadi`);
-    return null;
-  }
+    try {
+      await page.goto(targetUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000,
+      });
 
-  const transportMode = getTransportMode();
-  if (transportMode === 'api') {
-    return fetchViaApi(targetUrl, label, activeKey, { unlock: false, haltOnFailure: true });
-  }
-
-  stats.totalRequests += 1;
-  stats.estimatedCredits += PROXY_CREDIT_PER_REQUEST;
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(targetUrl, {
-      dispatcher: getProxyAgent(activeKey),
-      signal: controller.signal,
-      headers: {
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Cache-Control': 'no-cache',
-      },
-    });
-
-    const bodyText = await response.text();
-    const isBanFail = isScrapeOpsKeyFailure(response.status, bodyText);
-
-    if (response.ok && !isChallengeHtml(bodyText) && !isBanFail) {
-      stats.successfulRequests += 1;
-      return bodyText;
-    }
-
-    stats.failedRequests += 1;
-
-    if (isBanFail) {
-      markKeyExhausted(activeKey);
-      haltRun(`${label} proxy key BANLANDI veya reddedildi (HTTP ${response.status})`);
-      return null;
-    }
-
-    if (response.ok && isChallengeHtml(bodyText)) {
-      stats.blockedResponses += 1;
-      haltRun(`${label} challenge (200) dondu`);
-      return null;
-    }
-
-    if (isRecoverableBlock(response.status, bodyText)) {
-      stats.blockedResponses += 1;
-      haltRun(`${label} HTTP ${response.status} blok`);
-      return null;
-    }
-
-    haltRun(`${label} HTTP ${response.status}`);
-    return null;
-  } catch (err) {
-    let reason = err?.name === 'AbortError' ? 'zaman asimi' : (err?.message || 'bilinmeyen hata');
-    if (err?.cause) {
-      reason += ` (Neden: ${err.cause.message || err.cause.code || 'bilinmeyen neden'})`;
-    }
-    if (transportMode === 'auto') {
-      console.log(`  ↪️ Proxy baglanti hatasi [${label}] (${reason}) -> API fallback deneniyor.`);
-      return fetchViaApi(targetUrl, label, activeKey, { unlock: false, haltOnFailure: true });
-    }
-
-    stats.failedRequests += 1;
-    haltRun(`${label} hata: ${reason}`);
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function fetchViaApi(targetUrl, label, activeKey, { unlock = false, haltOnFailure = true } = {}) {
-  const cost = unlock ? SCRAPEOPS_UNLOCK_CREDIT_COST : SCRAPEOPS_API_CREDIT_PER_REQUEST;
-  stats.totalRequests += 1;
-  stats.estimatedCredits += cost;
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(buildApiUrlForKey(activeKey, targetUrl, unlock), {
-      signal: controller.signal,
-      headers: {
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Cache-Control': 'no-cache',
-      },
-    });
-
-    const bodyText = await response.text();
-    const isBanFail = isScrapeOpsKeyFailure(response.status, bodyText);
-
-    if (response.ok && !isChallengeHtml(bodyText) && !isBanFail) {
-      stats.successfulRequests += 1;
-      if (unlock) {
-        apiSessionPrimed = true;
+      // Cloudflare varsa bekle
+      const passed = await waitForCloudflare(page, 20);
+      if (!passed) {
+        console.log(`  ⚠️ CF Challenge geçilemedi [${label}] (deneme ${attempt})`);
+        await page.close();
+        await sleep(3000);
+        continue;
       }
-      return bodyText;
-    }
 
-    stats.failedRequests += 1;
+      // İlan tablosu yüklenene kadar bekle
+      await page.waitForSelector('tr.searchResultsItem', { timeout: 15000 }).catch(() => {});
+      await sleep(1000); // Ekstra stabilite
 
-    if (isBanFail) {
-      markKeyExhausted(activeKey);
-      const reason = `${label} API key BANLANDI veya reddedildi (HTTP ${response.status})`;
-      if (haltOnFailure) haltRun(reason);
-      else console.log(`  ⚠️ ${reason}`);
-      return null;
-    }
+      const html = await page.content();
+      await page.close();
 
-    if (response.ok && isChallengeHtml(bodyText)) {
-      stats.blockedResponses += 1;
-      const reason = `${label} API challenge (200) dondu`;
-      if (haltOnFailure) haltRun(reason);
-      else console.log(`  ⚠️ ${reason}`);
-      return null;
-    }
+      // Boş veya hata sayfası kontrolü
+      if (html.includes('error-page-container')) {
+        console.log(`  ⚠️ Sahibinden hata sayfası [${label}] (deneme ${attempt})`);
+        await sleep(3000);
+        continue;
+      }
 
-    if (isRecoverableBlock(response.status, bodyText)) {
-      stats.blockedResponses += 1;
-      const reason = `${label} API HTTP ${response.status} blok`;
-      if (haltOnFailure) haltRun(reason);
-      else console.log(`  ⚠️ ${reason}`);
-      return null;
-    }
+      stats.successfulRequests++;
+      stats.pagesLoaded++;
+      return html;
 
-    const reason = `${label} API HTTP ${response.status}`;
-    if (haltOnFailure) haltRun(reason);
-    else console.log(`  ⚠️ ${reason}`);
-    return null;
-  } catch (err) {
-    let reason = err?.name === 'AbortError' ? 'zaman asimi' : (err?.message || 'bilinmeyen hata');
-    if (err?.cause) {
-      reason += ` (Neden: ${err.cause.message || err.cause.code || 'bilinmeyen neden'})`;
+    } catch (err) {
+      console.log(`  ❌ ${err.message} [${label}] (deneme ${attempt})`);
+      await page.close().catch(() => {});
+      await sleep(2000 * attempt);
     }
-    stats.failedRequests += 1;
-    const full = `${label} API hata: ${reason}`;
-    if (haltOnFailure) haltRun(full);
-    else console.log(`  ⚠️ ${full}`);
-    return null;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  stats.failedRequests++;
+  console.log(`  💀 BAŞARISIZ [${label}] — Atlanıyor.`);
+  return null;
 }
 
-export async function scrapeSegment(priceMin, priceMax, dynamicSplit = true) {
+// ─── Segment scraper ────────────────────────────────────────
+export async function scrapeSegment(priceMin, priceMax) {
   const label = `${priceMin.toLocaleString('tr')}-${priceMax.toLocaleString('tr')} TL`;
   console.log(`\n  📦 Segment: ${label}`);
 
   const firstUrl = buildSahibindenUrl(0, priceMin, priceMax);
-  const firstHtml = await fetchViaProxy(firstUrl, `${label} (Sayfa 1)`);
+  const firstHtml = await fetchPage(firstUrl, `${label} (Sayfa 1)`);
 
   if (!firstHtml) {
-    console.log(`  ❌ ${label}: İlk sayfa alınamadı, segment atlanıyor.`);
+    console.log(`  ❌ ${label}: İlk sayfa alınamadı.`);
     return { htmlPages: [], totalFound: 0, pages: 0 };
   }
 
   const htmlPages = [firstHtml];
-  const totalCount = parseTotalCount(firstHtml);
 
-  const canSplit =
-    dynamicSplit &&
-    totalCount >= 950 &&
-    (priceMax - priceMin) >= 800 &&
-    getRemainingRequestBudget() > 4;
-
-  if (canSplit) {
-    const mid = Math.floor((priceMin + priceMax) / 2);
-    if (mid > priceMin && mid < priceMax) {
-      console.log(`  🔀 LIMIT YAKLAŞTI: ${label} iki alt segmente bölünüyor.`);
-      const left = await scrapeSegment(priceMin, mid, true);
-      const right = await scrapeSegment(mid, priceMax, true);
-      return {
-        htmlPages: [...left.htmlPages, ...right.htmlPages],
-        totalFound: left.totalFound + right.totalFound,
-        pages: left.pages + right.pages,
-      };
-    }
+  // Toplam ilan sayısını bul
+  let totalCount = 0;
+  const totalMatch = firstHtml.match(/([\d.]+)\s*ilan/i);
+  if (totalMatch) {
+    totalCount = parseInt(totalMatch[1].replace(/\./g, ''), 10);
   }
 
-  const discoveredPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
-  const maxByBudget = 1 + getRemainingRequestBudget();
-  const totalPages = Math.max(1, Math.min(discoveredPages, MAX_PAGES_PER_SEGMENT, maxByBudget));
-
-  console.log(
-    `  📊 ${label}: ${totalCount.toLocaleString('tr')} ilan, planlanan ${totalPages} sayfa (kalan istek bütçesi: ${getRemainingRequestBudget()})`
+  const totalPages = Math.min(
+    Math.ceil(totalCount / ITEMS_PER_PAGE),
+    MAX_PAGES_PER_SEGMENT
   );
+  console.log(`  📊 ${label}: ${totalCount.toLocaleString('tr')} ilan, ${totalPages} sayfa çekilecek`);
 
+  // Kalan sayfaları sırayla çek (paralel değil — ban riski)
   for (let page = 1; page < totalPages; page++) {
-    if (isRequestBudgetExhausted()) {
-      markBudgetStop(`${label} (Sayfa ${page + 1})`);
-      break;
-    }
-
     await sleep(REQUEST_DELAY_MS);
     const offset = page * ITEMS_PER_PAGE;
-    const pageUrl = buildSahibindenUrl(offset, priceMin, priceMax);
-    const html = await fetchViaProxy(pageUrl, `${label} (Sayfa ${page + 1})`);
-
-    if (!html) {
-      break;
+    const url = buildSahibindenUrl(offset, priceMin, priceMax);
+    const html = await fetchPage(url, `${label} (Sayfa ${page + 1})`);
+    if (html) {
+      htmlPages.push(html);
     }
-
-    htmlPages.push(html);
   }
 
-  console.log(`  ✅ ${label}: Toplam ${htmlPages.length} sayfa çekildi`);
-  return {
-    htmlPages,
-    totalFound: totalCount,
-    pages: htmlPages.length,
-  };
+  console.log(`  ✅ ${label}: ${htmlPages.length} sayfa çekildi`);
+  return { htmlPages, totalFound: totalCount, pages: htmlPages.length };
 }
 
+// ─── Uyumluluk: eski main.mjs initSession çağrısı için ──────
 export async function initSession() {
-  const mode = getTransportMode();
-  if (mode === 'proxy') {
-    return 'PROXY_ONLY_MODE';
-  }
+  // İlk sayfayı ziyaret ederek tarayıcıyı ısıt ve CF cookie'leri al
+  const ctx = await getBrowserContext();
+  const page = await ctx.newPage();
 
-  const key = getActiveKey();
-  if (!key) {
-    stats.allKeysExhausted = true;
-    if (mode === 'api') {
+  try {
+    console.log('  🔐 Cloudflare bypass deneniyor...');
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    const passed = await waitForCloudflare(page, 30);
+
+    if (!passed) {
+      console.log('  ❌ Cloudflare geçilemedi!');
+      await page.close();
       return null;
     }
-    return 'AUTO_MODE_NO_KEY';
-  }
 
-  const primeLabel = 'API unlock';
-  let unlockHtml = null;
-  const maxRetries = 3;
-
-  for (let i = 0; i < maxRetries; i++) {
-    unlockHtml = await fetchViaApi(BASE_URL, `${primeLabel} (Deneme ${i + 1}/${maxRetries})`, key, {
-      unlock: true,
-      haltOnFailure: false,
-    });
-
-    if (unlockHtml) {
-      console.log(`  🔓 API session primed (tek sefer pahali unlock tamamlandi - deneme ${i + 1}).`);
-      apiSessionPrimed = true;
-      return 'API_SESSION_PRIMED';
-    }
-
-    if (i < maxRetries - 1) {
-      console.log(`  ⏳ Unlock başarısız oldu, ${REQUEST_DELAY_MS}ms bekleniyor ve tekrar deneniyor...`);
-      await sleep(REQUEST_DELAY_MS);
-    }
-  }
-
-  const apiProbeHtml = await fetchViaApi(BASE_URL, 'API probe', key, {
-    unlock: false,
-    haltOnFailure: false,
-  });
-
-  if (apiProbeHtml) {
-    console.log('  ⚠️ Unlock başarısız ama API probe başarılı. Unlock atlanarak API ile devam ediliyor.');
-    return 'API_MODE_NO_UNLOCK';
-  }
-
-  if (!ALLOW_API_TO_PROXY_FALLBACK) {
-    haltRun('API unlock/probe basarisiz, proxy fallback kapali');
+    // İlan tablosu yüklenmesini bekle
+    await page.waitForSelector('tr.searchResultsItem', { timeout: 20000 }).catch(() => {});
+    console.log('  ✅ Cloudflare bypass başarılı! Cookie\'ler kaydedildi.');
+    await page.close();
+    return 'OK';
+  } catch (err) {
+    console.log(`  ❌ initSession hatası: ${err.message}`);
+    await page.close().catch(() => {});
     return null;
   }
-
-  console.log('  ⚠️ API unlock/probe başarısız. Aynı key ile proxy fallback deneniyor.');
-  setTransportMode('proxy');
-  exhaustedKeys.delete(key);
-  stats.allKeysExhausted = false;
-  stats.runHalted = false;
-  stats.haltReason = '';
-
-  const proxyProbeHtml = await fetchViaProxy(BASE_URL, 'Proxy fallback probe');
-  if (proxyProbeHtml) {
-    console.log('  🔁 Proxy fallback aktif. Koşu proxy taşıması ile sürdürülecek.');
-    return 'API_TO_PROXY_FALLBACK';
-  }
-
-  haltRun('API unlock/probe ve proxy fallback basarisiz');
-  return null;
 }
 
 export default {
@@ -593,6 +216,5 @@ export default {
   scrapeSegment,
   buildSahibindenUrl,
   getStats,
-  getRemainingRequestBudget,
-  isRequestBudgetExhausted,
+  closeBrowser,
 };
