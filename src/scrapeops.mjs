@@ -92,6 +92,17 @@ async function fetchPage(targetUrl, label = '') {
 
       if (resp.status !== 200 && resp.status !== 404 && resp.status !== 403) {
          console.log(`  ⚠️ HTTP ${resp.status} (deneme ${attempt}) - DETAY: ${html.substring(0, 300)}`);
+         
+         // ScrapeOps proxy siteye (Sahibinden) erişemezse kademe yükselt
+         if (resp.status === 500 && html.includes('Failed to get successful response')) {
+            if (currentTier < 3) {
+               currentTier++;
+               console.log(`  🚀 TIER UPGRADE: ScrapeOps basit isteği site tarafından engellendi. Kademe ${currentTier}'e çıkılıyor...`);
+               await sleep(2000);
+               return fetchPage(targetUrl, label); // Üst kademeden test et
+            }
+         }
+
          await sleep(2000);
          continue;
       }
