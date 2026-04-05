@@ -43,8 +43,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 📦 Python Bağımlılıklarını Kur (curl_cffi)
-        run: pip install curl_cffi requests
+      - name: 📦 Python Bağımlılıklarını Kur (Xvfb & DrissionPage)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2
+          pip install DrissionPage pyvirtualdisplay xvfbwrapper requests
 
       - name: 🚀 Browser Kurulumu (Playwright için)
         run: npx playwright install chromium --with-deps
@@ -74,5 +77,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: scraper-results-${{ github.run_number }}
-          path: output.json
+          path: |
+            output.json
+            cf_proof.png
           retention-days: 30
