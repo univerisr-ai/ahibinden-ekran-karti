@@ -5,8 +5,8 @@
 import 'dotenv/config';
 
 // ─── ScrapeOps Ayarları ──────────────────────────────────────
-const key1 = 'e887aa8c-f620-47db-a6f0-2513b1c5099a'; // Yeni keyi öne aldık
-const key2 = '6265abc5-efc3-4c72-84a8-3ad43890958f';
+const key1 = '8fa66633-b47e-4c61-a9cb-38b1463aff58'; // VPN ile açılan yepyeni key
+const key2 = 'e887aa8c-f620-47db-a6f0-2513b1c5099a';
 export const SCRAPEOPS_API_KEY = key1; 
 export const MAX_CREDITS_PER_RUN = 300; // Güvenlik limiti
 
