@@ -93,7 +93,7 @@ async function main() {
   console.log('');
   console.log('  ═══════════════════════════════════════════════════════');
   console.log('  🎮  SAHİBİNDEN GPU FIRSAT AVCISI v4.0');
-  console.log('  🌐  Playwright Tabanlı — Ücretsiz Motor');
+  console.log('  🌐  ScrapeOps Otomatik Kademe Motoru');
   console.log('  ═══════════════════════════════════════════════════════');
   console.log(`  🔐 Session: #${SESSION_NUMBER}`);
   console.log(`  🤖 AI: ${BYPASS_AI ? 'DEVRE DIŞI' : AI_PROVIDER.toUpperCase()}`);

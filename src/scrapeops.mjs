@@ -1,10 +1,11 @@
 /**
- * SCRAPER.MJS — Playwright Tabanlı Sahibinden Scraper
- * ScrapeOps'a bağımlılık YOK. Gerçek tarayıcı ile Cloudflare bypass.
- * Maliyet: 0 TL, sınırsız ilan.
+ * SCRAPEOPTS.MJS — Akıllı ScrapeOps Motoru
+ * - Üç Kademe Bütçe Stratejisi
+ * - Maksimum 300 kredi üst sınır
  */
-import { chromium } from 'playwright';
 import {
+  SCRAPEOPS_API_KEY,
+  MAX_CREDITS_PER_RUN,
   MAX_RETRIES,
   REQUEST_DELAY_MS,
   ITEMS_PER_PAGE,
@@ -19,61 +20,117 @@ let stats = {
   successfulRequests: 0,
   failedRequests: 0,
   pagesLoaded: 0,
+  creditsUsed: 0,
 };
 export function getStats() { return { ...stats }; }
 
-// ─── Tarayıcı bağlamı (tek sefer açılır, herkes paylaşır) ───
-let _browser = null;
-let _context = null;
+// ─── Otomatik Kademe Sistemi (Auto-Tier) ────────────────────
+let currentTier = 1; // 1: optimize (1cr), 2: render_js_cheap (5cr), 3: render_js (10cr)
 
-async function getBrowserContext() {
-  if (_context) return _context;
-
-  console.log('  🌐 Playwright tarayıcı başlatılıyor...');
-  _browser = await chromium.launch({
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-blink-features=AutomationControlled',
-    ],
+function getScrapeOpsUrl(targetUrl) {
+  const urlParams = new URLSearchParams({
+    api_key: SCRAPEOPS_API_KEY,
+    url: targetUrl,
+    country: 'tr', // TÜRKİYE IP ZORUNLU
   });
 
-  _context = await _browser.newContext({
-    locale: 'tr-TR',
-    timezoneId: 'Europe/Istanbul',
-    viewport: { width: 1440, height: 900 },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    extraHTTPHeaders: {
-      'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-    },
-  });
+  if (currentTier === 1) {
+    urlParams.append('optimize_request', 'true');
+  } else if (currentTier === 2) {
+    urlParams.append('render_js_cheap', 'true');
+  } else if (currentTier === 3) {
+    urlParams.append('render_js', 'true');
+  }
 
-  return _context;
+  return `https://proxy.scrapeops.io/v1/?${urlParams.toString()}`;
 }
 
-export async function closeBrowser() {
-  if (_browser) {
-    await _browser.close().catch(() => {});
-    _browser = null;
-    _context = null;
-  }
+function getCreditCostForTier(tier) {
+  if (tier === 1) return 1;
+  if (tier === 2) return 5;
+  if (tier === 3) return 10;
+  return 10;
 }
 
-// ─── Cloudflare challenge'ı geçene kadar bekle ──────────────
-async function waitForCloudflare(page, maxWaitSec = 30) {
-  for (let i = 0; i < maxWaitSec; i++) {
-    const content = await page.content();
-    const isChallenge =
-      content.includes('Just a moment') ||
-      content.includes('challenge-platform') ||
-      content.includes('cf-spinner');
-
-    if (!isChallenge) return true;
-    await sleep(1000);
+// ─── Hata kontrolü (Hesap patlamış mı?) ─────────────────────
+function checkScrapeOpsErrors(html) {
+  if (html.includes('This account has been banned') || 
+      html.includes('You have used 100% of your ScrapeOps proxy credits')) {
+    return 'BANNED';
   }
-  return false;
+  if (html.includes('Just a moment') || html.includes('challenge-platform')) {
+    return 'CLOUDFLARE';
+  }
+  // Sahibinden 403 veya bos veri atayabilir
+  if (html.includes('error-page-container')) {
+    return 'BLOCK_SAHIBINDEN';
+  }
+  // Eğer ilan tablosu yoksa parse edemeyiz
+  if (!html.includes('searchResultsItem') && html.length < 5000) {
+     return 'INVALID';
+  }
+  return 'OK';
+}
+
+// ─── Tek sayfa çekme ──────────────────────────────────────────
+async function fetchPage(targetUrl, label = '') {
+  if (stats.creditsUsed >= MAX_CREDITS_PER_RUN) {
+    console.log(`  💀 BÜTÇE LİMİTİ AŞILDI (${stats.creditsUsed}/${MAX_CREDITS_PER_RUN} kredi) — Koşu durduruluyor.`);
+    return { html: null, status: 'BUDGET_EXHAUSTED' };
+  }
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const fetchUrl = getScrapeOpsUrl(targetUrl);
+    const cost = getCreditCostForTier(currentTier);
+    
+    console.log(`  🌐 -> ScrapeOps [Kademe ${currentTier} - ${cost}cr] (${label})`);
+    stats.totalRequests++;
+
+    try {
+      const resp = await fetch(fetchUrl, { timeout: 45000 });
+      let html = await resp.text();
+
+      if (resp.status !== 200 && resp.status !== 404 && resp.status !== 403) {
+         console.log(`  ⚠️ HTTP ${resp.status} (deneme ${attempt})`);
+         await sleep(2000);
+         continue;
+      }
+
+      stats.creditsUsed += cost;
+      
+      const status = checkScrapeOpsErrors(html);
+      
+      if (status === 'BANNED') {
+         console.log(`  💀 ScrapeOps Anahtarı YASAKLI veya Kredisi Bitti!`);
+         return { html: null, status: 'BANNED' };
+      }
+      
+      if (status === 'CLOUDFLARE' || status === 'INVALID') {
+         console.log(`  ⚠️ Tarayıcı engeli geçilemedi (Kademe ${currentTier})`);
+         // Eğer Kademe 3'te de geçemiyorsa demek ki site hard-blocklamış.
+         if (currentTier < 3) {
+            currentTier++;
+            console.log(`  🚀 TIER UPGRADE: Kademe ${currentTier}'e çıkılıyor...`);
+            await sleep(2000);
+            return fetchPage(targetUrl, label); // Yeniden dene (rekürsif ama güvenli)
+         }
+         await sleep(2000);
+         continue;
+      }
+
+      // BAŞARILI
+      stats.successfulRequests++;
+      stats.pagesLoaded++;
+      return { html, status: 'OK' };
+
+    } catch (err) {
+      console.log(`  ❌ Hata: ${err.message} (deneme ${attempt})`);
+      await sleep(2000);
+    }
+  }
+
+  stats.failedRequests++;
+  return { html: null, status: 'FAILED' };
 }
 
 // ─── URL oluştur ────────────────────────────────────────────
@@ -81,75 +138,22 @@ export function buildSahibindenUrl(offset, priceMin, priceMax) {
   const url = new URL(BASE_URL);
   url.searchParams.set('pagingOffset', String(offset));
   url.searchParams.set('pagingSize', String(ITEMS_PER_PAGE));
+  url.searchParams.set('sorting', 'date_desc'); // FIRSAT ICIN YENILER ONEMLI
   if (priceMin != null) url.searchParams.set('price_min', String(priceMin));
   if (priceMax != null) url.searchParams.set('price_max', String(priceMax));
   return url.toString();
 }
 
-// ─── Tek sayfa çek ──────────────────────────────────────────
-async function fetchPage(targetUrl, label = '') {
-  const ctx = await getBrowserContext();
-
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    stats.totalRequests++;
-    const page = await ctx.newPage();
-
-    try {
-      await page.goto(targetUrl, {
-        waitUntil: 'domcontentloaded',
-        timeout: 60000,
-      });
-
-      // Cloudflare varsa bekle
-      const passed = await waitForCloudflare(page, 20);
-      if (!passed) {
-        console.log(`  ⚠️ CF Challenge geçilemedi [${label}] (deneme ${attempt})`);
-        await page.close();
-        await sleep(3000);
-        continue;
-      }
-
-      // İlan tablosu yüklenene kadar bekle
-      await page.waitForSelector('tr.searchResultsItem', { timeout: 15000 }).catch(() => {});
-      await sleep(1000); // Ekstra stabilite
-
-      const html = await page.content();
-      await page.close();
-
-      // Boş veya hata sayfası kontrolü
-      if (html.includes('error-page-container')) {
-        console.log(`  ⚠️ Sahibinden hata sayfası [${label}] (deneme ${attempt})`);
-        await sleep(3000);
-        continue;
-      }
-
-      stats.successfulRequests++;
-      stats.pagesLoaded++;
-      return html;
-
-    } catch (err) {
-      console.log(`  ❌ ${err.message} [${label}] (deneme ${attempt})`);
-      await page.close().catch(() => {});
-      await sleep(2000 * attempt);
-    }
-  }
-
-  stats.failedRequests++;
-  console.log(`  💀 BAŞARISIZ [${label}] — Atlanıyor.`);
-  return null;
-}
-
 // ─── Segment scraper ────────────────────────────────────────
 export async function scrapeSegment(priceMin, priceMax) {
   const label = `${priceMin.toLocaleString('tr')}-${priceMax.toLocaleString('tr')} TL`;
-  console.log(`\n  📦 Segment: ${label}`);
+  console.log(`\n  📦 Segment: ${label} (Mevcut Kredi: ${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
 
   const firstUrl = buildSahibindenUrl(0, priceMin, priceMax);
-  const firstHtml = await fetchPage(firstUrl, `${label} (Sayfa 1)`);
+  const { html: firstHtml, status } = await fetchPage(firstUrl, `${label} (s:1)`);
 
-  if (!firstHtml) {
-    console.log(`  ❌ ${label}: İlk sayfa alınamadı.`);
-    return { htmlPages: [], totalFound: 0, pages: 0 };
+  if (!firstHtml || status === 'BANNED' || status === 'BUDGET_EXHAUSTED') {
+    return { htmlPages: [], totalFound: 0, pages: 0, status };
   }
 
   const htmlPages = [firstHtml];
@@ -165,56 +169,37 @@ export async function scrapeSegment(priceMin, priceMax) {
     Math.ceil(totalCount / ITEMS_PER_PAGE),
     MAX_PAGES_PER_SEGMENT
   );
-  console.log(`  📊 ${label}: ${totalCount.toLocaleString('tr')} ilan, ${totalPages} sayfa çekilecek`);
+  console.log(`  📊 ${label}: Toplam ${totalCount.toLocaleString('tr')} ilan, ${totalPages} sayfa.`);
 
-  // Kalan sayfaları sırayla çek (paralel değil — ban riski)
   for (let page = 1; page < totalPages; page++) {
     await sleep(REQUEST_DELAY_MS);
     const offset = page * ITEMS_PER_PAGE;
     const url = buildSahibindenUrl(offset, priceMin, priceMax);
-    const html = await fetchPage(url, `${label} (Sayfa ${page + 1})`);
-    if (html) {
-      htmlPages.push(html);
+    const { html, status: pageStatus } = await fetchPage(url, `${label} (s:${page + 1})`);
+    
+    if (pageStatus === 'BANNED' || pageStatus === 'BUDGET_EXHAUSTED') {
+       return { htmlPages, totalFound: totalCount, pages: htmlPages.length, status: pageStatus };
     }
+    
+    if (html) htmlPages.push(html);
   }
 
-  console.log(`  ✅ ${label}: ${htmlPages.length} sayfa çekildi`);
-  return { htmlPages, totalFound: totalCount, pages: htmlPages.length };
+  console.log(`  ✅ Segment bitti. Toplam çekilen sayfa: ${htmlPages.length}`);
+  return { htmlPages, totalFound: totalCount, pages: htmlPages.length, status: 'OK' };
 }
 
-// ─── Uyumluluk: eski main.mjs initSession çağrısı için ──────
+// ─── Uyumluluk
 export async function initSession() {
-  // İlk sayfayı ziyaret ederek tarayıcıyı ısıt ve CF cookie'leri al
-  const ctx = await getBrowserContext();
-  const page = await ctx.newPage();
+  return 'OK'; // ScrapeOps API kullandığımız için session init gerekmiyor
+}
 
-  try {
-    console.log('  🔐 Cloudflare bypass deneniyor...');
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    const passed = await waitForCloudflare(page, 30);
-
-    if (!passed) {
-      console.log('  ❌ Cloudflare geçilemedi!');
-      await page.close();
-      return null;
-    }
-
-    // İlan tablosu yüklenmesini bekle
-    await page.waitForSelector('tr.searchResultsItem', { timeout: 20000 }).catch(() => {});
-    console.log('  ✅ Cloudflare bypass başarılı! Cookie\'ler kaydedildi.');
-    await page.close();
-    return 'OK';
-  } catch (err) {
-    console.log(`  ❌ initSession hatası: ${err.message}`);
-    await page.close().catch(() => {});
-    return null;
-  }
+export async function closeBrowser() {
+  // Uyumluluk
 }
 
 export default {
   initSession,
   scrapeSegment,
-  buildSahibindenUrl,
   getStats,
   closeBrowser,
 };
