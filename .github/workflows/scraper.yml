@@ -3,8 +3,8 @@ name: 🎮 GPU Fırsat Avcısı — Sahibinden AI Scraper
 on:
   # ── Zamanlı çalıştırma ────────────────────────────────────
   schedule:
-    # Pazartesi ve Perşembe günleri 11:00 TR saati (08:00 UTC)
-    - cron: '0 8 * * 1,4'
+    # Her gun 08:00 UTC tetiklenir; workflow icinde "haftada 2 rastgele gun" politikasi uygulanir.
+    - cron: '0 8 * * *'
 
   # ── Manuel çalıştırma ────────
   workflow_dispatch:
@@ -30,32 +30,89 @@ jobs:
     timeout-minutes: 120
 
     steps:
+      - name: 🧭 Haftalik run politikasi (2 rastgele gun)
+        id: run_policy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual tetikleme: policy bypass, kosu basliyor."
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "jitter_seconds=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          week="$(date -u +%G-%V)"
+          dow="$(date -u +%u)" # 1=Mon ... 7=Sun
+          seed_input="${GITHUB_REPOSITORY}|${week}|sahibinden-weekly-two-days"
+          seed_hex="$(printf "%s" "$seed_input" | sha256sum | cut -c1-16)"
+          seed_dec=$((16#$seed_hex))
+
+          day1=$(( (seed_dec % 7) + 1 ))
+          day2=$(( ((seed_dec / 7) % 7) + 1 ))
+
+          if [ "$day2" -eq "$day1" ]; then
+            day2=$(( (day1 % 7) + 1 ))
+          fi
+
+          if [ "$day1" -gt "$day2" ]; then
+            tmp="$day1"
+            day1="$day2"
+            day2="$tmp"
+          fi
+
+          jitter_seconds=$(( (seed_dec / 97) % 5400 ))
+
+          echo "Week: $week | UTC day: $dow | Picked days: $day1,$day2 | Jitter: ${jitter_seconds}s"
+
+          if [ "$dow" -eq "$day1" ] || [ "$dow" -eq "$day2" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            jitter_seconds=0
+          fi
+
+          echo "jitter_seconds=${jitter_seconds}" >> "$GITHUB_OUTPUT"
+
+      - name: ⏭️ Bugun planli gun degil, kosu atlandi
+        if: steps.run_policy.outputs.should_run != 'true'
+        run: |
+          echo "Bu hafta icin secilen 2 gun disinda. Workflow skip edildi."
+
       - name: 📥 Checkout
+        if: steps.run_policy.outputs.should_run == 'true'
         uses: actions/checkout@v4
 
       - name: 🟢 Node.js Kurulumu
+        if: steps.run_policy.outputs.should_run == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: 🐍 Python Kurulumu
+        if: steps.run_policy.outputs.should_run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: 📦 Python Bağımlılıklarını Kur (Xvfb & DrissionPage)
+        if: steps.run_policy.outputs.should_run == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64
           pip install DrissionPage pyvirtualdisplay xvfbwrapper requests
 
       - name: 🚀 Browser Kurulumu (Playwright için)
+        if: steps.run_policy.outputs.should_run == 'true'
         run: npx playwright install chromium --with-deps
 
       - name: 📦 Bağımlılıkları Yükle
+        if: steps.run_policy.outputs.should_run == 'true'
         run: npm install
 
       - name: 🌀 Cloudflare WARP Proxy Kurulumu
+        if: steps.run_policy.outputs.should_run == 'true'
         run: |
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
           echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
@@ -68,10 +125,25 @@ jobs:
           warp-cli --accept-tos status
           curl -x socks5h://127.0.0.1:40000 -I https://www.cloudflare.com/cdn-cgi/trace || echo "WARP Proxy test atlandı"
 
+      - name: ⏱️ Schedule jitter beklemesi
+        if: steps.run_policy.outputs.should_run == 'true' && github.event_name == 'schedule'
+        shell: bash
+        run: |
+          set -euo pipefail
+          JITTER="${{ steps.run_policy.outputs.jitter_seconds }}"
+          echo "Jitter uygulaniyor: ${JITTER}s"
+          sleep "$JITTER"
+
       - name: 🚀 GPU Fırsat Avcısını Çalıştır
+        if: steps.run_policy.outputs.should_run == 'true'
         env:
           USE_WARP_PROXY: 'true'
           HEADLESS: 'false'
+          REQUIRE_SAHIBINDEN_COOKIES: 'true'
+
+          # ── Cookie bootstrap (GitHub Secret) ────────────────
+          SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
+
           # ── Proxy (ScrapeOps) ──────────────────────────────────
           SCRAPEOPS_API_KEY: '8fa66633-b47e-4c61-a9cb-38b1463aff58'
 
@@ -91,7 +163,7 @@ jobs:
         run: xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs
 
       - name: 💾 Sonuçları Kaydet (Artifact)
-        if: always()
+        if: always() && steps.run_policy.outputs.should_run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: scraper-results-${{ github.run_number }}

@@ -101,13 +101,40 @@ async function main() {
 
   // ADIM 1: Cloudflare bypass
   const session = await initSession();
-  if (!session) {
+  if (!session || !session.ok) {
     await saveChallengeProofScreenshot('init-session-failed');
-    const msg = '❌ Cloudflare geçilemedi! Challenge tamamlanmadı veya erişim engellendi.';
-    console.error(`  ${msg}`);
-    await sendTelegram(msg);
+    const initCode = session?.code || 'UNKNOWN_INIT_ERROR';
+
+    let msg = '❌ Cloudflare gecilemedi! Challenge tamamlanmadi veya erisim engellendi.';
+    if (initCode === 'COOKIE_REQUIRED_MISSING') {
+      msg = '❌ SAHIBINDEN_COOKIES zorunlu ama bulunamadi.';
+    } else if (initCode === 'COOKIE_PARSE_INVALID') {
+      msg = '❌ SAHIBINDEN_COOKIES/cookies.json JSON formati gecersiz.';
+    } else if (initCode === 'COOKIE_SCHEMA_INVALID') {
+      msg = '❌ Cookie payload semasi gecersiz (name/value/domain-url).';
+    } else if (initCode === 'COOKIE_EMPTY_AFTER_FILTER') {
+      msg = '❌ Kullanilabilir cookie kalmadi (expires gecmis olabilir).';
+    } else if (initCode === 'COOKIE_ADD_FAILED') {
+      msg = '❌ Cookie tarayiciya eklenemedi.';
+    } else if (initCode === 'AUTH_REQUIRED') {
+      msg = '❌ Login gerekli sayfaya dusuldu. Cookie gecersiz veya eksik olabilir.';
+    } else if (initCode === 'CHALLENGE_TIMEOUT') {
+      msg = '❌ Challenge zaman asimina ugradi. Manuel dogrulama tamamlanmadi.';
+    } else if (initCode === 'PROXY_INIT_FAILED') {
+      msg = '❌ Baslangic asamasinda proxy/hedef erisim hatasi alindi.';
+    } else if (initCode === 'FINGERPRINT_POLICY_FAILED') {
+      msg = '❌ Runtime profil policy kontrolu strict modda basarisiz oldu.';
+    }
+
+    const safeCode = String(initCode).replace(/_/g, '-');
+    console.error(`  ${msg} [${initCode}]`);
+    await sendTelegram(`${msg}\nKod: ${safeCode}`);
     await closeBrowser();
     process.exit(1);
+  }
+
+  if (session.cookieSource && session.cookieSource !== 'none') {
+    console.log(`  🍪 Session cookie source: ${session.cookieSource} (${session.cookieCount})`);
   }
 
   // ADIM 2: Segmentleri çek

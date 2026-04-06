@@ -13,8 +13,23 @@ import {
   MAX_PAGES_PER_SEGMENT,
 } from './config.mjs';
 import { chromium } from 'playwright';
+import fs from 'fs';
+import crypto from 'crypto';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const COOKIE_ENV_VAR = 'SAHIBINDEN_COOKIES';
+const SAHIBINDEN_COOKIE_FILE = process.env.SAHIBINDEN_COOKIE_FILE || 'cookies.json';
+const REQUIRE_SAHIBINDEN_COOKIES =
+  (process.env.REQUIRE_SAHIBINDEN_COOKIES || 'false').toLowerCase() === 'true';
+
+const FINGERPRINT_DIAGNOSTIC =
+  (process.env.FINGERPRINT_DIAGNOSTIC || 'true').toLowerCase() === 'true';
+const FINGERPRINT_STRICT_MODE =
+  (process.env.FINGERPRINT_STRICT_MODE || 'false').toLowerCase() === 'true';
+const EXPECTED_TIMEZONE = String(process.env.EXPECTED_TIMEZONE || '').trim();
+const EXPECTED_LOCALE = String(process.env.EXPECTED_LOCALE || '').trim();
+const EXPECTED_PLATFORM = String(process.env.EXPECTED_PLATFORM || '').trim().toLowerCase();
 
 const USE_WARP_PROXY = (process.env.USE_WARP_PROXY || 'false').toLowerCase() === 'true';
 
@@ -54,6 +69,9 @@ let browser = null;
 let context = null;
 let page = null;
 let hardStopStatus = null;
+let sessionInitFailureCode = null;
+let sessionCookieSource = 'none';
+let sessionCookieCount = 0;
 const CF_PROOF_PATH = process.env.CF_PROOF_PATH || 'cf_proof.png';
 
 let stats = {
@@ -66,6 +84,264 @@ let stats = {
 
 export function getStats() {
   return { ...stats };
+}
+
+function makeCookieBootstrapError(code, message) {
+  const err = new Error(message);
+  err.code = code;
+  return err;
+}
+
+function makeFingerprintPolicyError(message) {
+  const err = new Error(message);
+  err.code = 'FINGERPRINT_POLICY_FAILED';
+  return err;
+}
+
+function normalizeComparable(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function profileSignature(runtimeProfile) {
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(runtimeProfile))
+    .digest('hex')
+    .slice(0, 12);
+}
+
+async function collectRuntimeProfile(targetPage) {
+  if (!targetPage || targetPage.isClosed()) {
+    return null;
+  }
+
+  return targetPage.evaluate(() => {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    return {
+      userAgent: navigator.userAgent || '',
+      platform: navigator.platform || '',
+      language: navigator.language || '',
+      languages: Array.isArray(navigator.languages) ? navigator.languages : [],
+      timezone: tz,
+      webdriver: navigator.webdriver === true,
+      hardwareConcurrency: navigator.hardwareConcurrency || null,
+      viewport: {
+        w: window.innerWidth || 0,
+        h: window.innerHeight || 0,
+      },
+    };
+  });
+}
+
+function validateRuntimeProfile(runtimeProfile) {
+  const issues = [];
+
+  if (!runtimeProfile) {
+    issues.push('runtime-profile-unavailable');
+    return issues;
+  }
+
+  if (runtimeProfile.webdriver === true) {
+    issues.push('navigator.webdriver=true');
+  }
+
+  if (EXPECTED_TIMEZONE && runtimeProfile.timezone !== EXPECTED_TIMEZONE) {
+    issues.push(`timezone-mismatch(${runtimeProfile.timezone}!=${EXPECTED_TIMEZONE})`);
+  }
+
+  if (EXPECTED_LOCALE && normalizeComparable(runtimeProfile.language) !== normalizeComparable(EXPECTED_LOCALE)) {
+    issues.push(`locale-mismatch(${runtimeProfile.language}!=${EXPECTED_LOCALE})`);
+  }
+
+  if (
+    EXPECTED_PLATFORM &&
+    !normalizeComparable(runtimeProfile.platform).includes(EXPECTED_PLATFORM)
+  ) {
+    issues.push(`platform-mismatch(${runtimeProfile.platform})`);
+  }
+
+  return issues;
+}
+
+function normalizeCookieBoolean(value) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const lowered = value.trim().toLowerCase();
+    if (lowered === 'true') {
+      return true;
+    }
+    if (lowered === 'false') {
+      return false;
+    }
+  }
+  return undefined;
+}
+
+function normalizeCookieSameSite(value) {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const lowered = value.trim().toLowerCase();
+  if (lowered === 'no_restriction') {
+    return 'None';
+  }
+  if (lowered === 'lax') {
+    return 'Lax';
+  }
+  if (lowered === 'strict') {
+    return 'Strict';
+  }
+  if (lowered === 'none') {
+    return 'None';
+  }
+  return undefined;
+}
+
+function normalizeCookieRecord(rawCookie, index) {
+  if (!rawCookie || typeof rawCookie !== 'object' || Array.isArray(rawCookie)) {
+    throw makeCookieBootstrapError('COOKIE_SCHEMA_INVALID', `Cookie #${index} object formatinda degil.`);
+  }
+
+  const name = typeof rawCookie.name === 'string' ? rawCookie.name.trim() : '';
+  const hasStringValue = typeof rawCookie.value === 'string';
+  const domain = typeof rawCookie.domain === 'string' ? rawCookie.domain.trim() : '';
+  const url = typeof rawCookie.url === 'string' ? rawCookie.url.trim() : '';
+
+  if (!name || !hasStringValue) {
+    throw makeCookieBootstrapError(
+      'COOKIE_SCHEMA_INVALID',
+      `Cookie #${index} icin name/value alanlari gecersiz.`,
+    );
+  }
+
+  if (!domain && !url) {
+    throw makeCookieBootstrapError(
+      'COOKIE_SCHEMA_INVALID',
+      `Cookie #${index} icin domain veya url zorunlu.`,
+    );
+  }
+
+  const normalized = {
+    name,
+    value: rawCookie.value,
+    path: typeof rawCookie.path === 'string' && rawCookie.path.trim() ? rawCookie.path.trim() : '/',
+  };
+
+  if (url) {
+    normalized.url = url;
+  } else {
+    normalized.domain = domain;
+  }
+
+  const httpOnly = normalizeCookieBoolean(rawCookie.httpOnly);
+  if (httpOnly !== undefined) {
+    normalized.httpOnly = httpOnly;
+  }
+
+  const secure = normalizeCookieBoolean(rawCookie.secure);
+  if (secure !== undefined) {
+    normalized.secure = secure;
+  }
+
+  const sameSite = normalizeCookieSameSite(rawCookie.sameSite);
+  if (sameSite) {
+    normalized.sameSite = sameSite;
+  }
+
+  const expiresSource =
+    rawCookie.expires !== undefined && rawCookie.expires !== null && rawCookie.expires !== ''
+      ? rawCookie.expires
+      : rawCookie.expirationDate;
+
+  if (expiresSource !== undefined && expiresSource !== null && expiresSource !== '') {
+    const expiresNum = Number(expiresSource);
+    if (!Number.isFinite(expiresNum)) {
+      throw makeCookieBootstrapError(
+        'COOKIE_SCHEMA_INVALID',
+        `Cookie #${index} icin expires/expirationDate sayisal olmali.`,
+      );
+    }
+    normalized.expires = Math.floor(expiresNum);
+  }
+
+  return normalized;
+}
+
+function loadSahibindenCookies() {
+  const envPayload = String(process.env[COOKIE_ENV_VAR] || '').trim();
+  let source = 'none';
+  let payload = '';
+
+  if (envPayload) {
+    source = 'env';
+    payload = envPayload;
+  } else if (fs.existsSync(SAHIBINDEN_COOKIE_FILE)) {
+    source = 'file';
+    payload = fs.readFileSync(SAHIBINDEN_COOKIE_FILE, 'utf8');
+  }
+
+  if (source === 'none') {
+    if (REQUIRE_SAHIBINDEN_COOKIES) {
+      throw makeCookieBootstrapError(
+        'COOKIE_REQUIRED_MISSING',
+        `${COOKIE_ENV_VAR} zorunlu ama bulunamadi.`,
+      );
+    }
+    return {
+      source,
+      cookies: [],
+      inputCount: 0,
+      droppedExpired: 0,
+    };
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(payload);
+  } catch (err) {
+    const sourceLabel = source === 'env' ? COOKIE_ENV_VAR : SAHIBINDEN_COOKIE_FILE;
+    throw makeCookieBootstrapError(
+      'COOKIE_PARSE_INVALID',
+      `${sourceLabel} JSON parse hatasi: ${err.message}`,
+    );
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw makeCookieBootstrapError('COOKIE_SCHEMA_INVALID', 'Cookie payload JSON array olmali.');
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const cookies = [];
+  let droppedExpired = 0;
+
+  parsed.forEach((rawCookie, idx) => {
+    const cookie = normalizeCookieRecord(rawCookie, idx + 1);
+    const isExpired =
+      typeof cookie.expires === 'number' && Number.isFinite(cookie.expires) && cookie.expires > 0 && cookie.expires <= nowSec;
+
+    if (isExpired) {
+      droppedExpired += 1;
+      return;
+    }
+
+    cookies.push(cookie);
+  });
+
+  if (cookies.length === 0 && REQUIRE_SAHIBINDEN_COOKIES) {
+    throw makeCookieBootstrapError(
+      'COOKIE_EMPTY_AFTER_FILTER',
+      'Kullanilabilir cookie kalmadi (expires/format kontrolu).',
+    );
+  }
+
+  return {
+    source,
+    cookies,
+    inputCount: parsed.length,
+    droppedExpired,
+  };
 }
 
 export async function saveChallengeProofScreenshot(reason = '') {
@@ -111,6 +387,23 @@ function isChallengePage(html = '', currentUrl = '') {
     h.includes('challenge-platform') ||
     h.includes('cf-chl')
   );
+}
+
+function isAuthRequiredPage(html = '', currentUrl = '') {
+  const h = String(html || '').toLowerCase();
+  const u = String(currentUrl || '').toLowerCase();
+
+  const hasOutsideTurkeyLock =
+    h.includes('you need to log in to access sahibinden.com from outside turkey') ||
+    h.includes('access sahibinden.com from outside turkey');
+
+  const hasLoginUrl = u.includes('/giris') || u.includes('/login') || u.includes('/uyelik/giris');
+
+  const hasLoginFormHint =
+    (h.includes('uye girisi') || h.includes('üye girişi') || h.includes('oturum ac') || h.includes('oturum aç')) &&
+    (h.includes('sifre') || h.includes('şifre'));
+
+  return hasOutsideTurkeyLock || hasLoginUrl || hasLoginFormHint;
 }
 
 function isTLoadingPage(html = '', currentUrl = '') {
@@ -1047,6 +1340,10 @@ async function ensureBrowser() {
     return true;
   }
 
+  sessionInitFailureCode = null;
+  sessionCookieSource = 'none';
+  sessionCookieCount = 0;
+
   try {
     const isHeadless = (process.env.HEADLESS || 'false').toLowerCase() === 'true';
 
@@ -1096,12 +1393,57 @@ async function ensureBrowser() {
       viewport: { width: 1366, height: 900 },
     });
 
+    const cookieBundle = loadSahibindenCookies();
+    sessionCookieSource = cookieBundle.source;
+    sessionCookieCount = cookieBundle.cookies.length;
+
+    if (cookieBundle.source === 'env') {
+      console.log(`  🍪 Cookie kaynagi: ENV/Secret (${COOKIE_ENV_VAR}).`);
+    } else if (cookieBundle.source === 'file') {
+      console.log(`  🍪 Cookie kaynagi: ${SAHIBINDEN_COOKIE_FILE}.`);
+    } else {
+      console.log('  ℹ️ Cookie kaynagi bulunamadi, cerezsiz oturum denenecek.');
+    }
+
+    if (cookieBundle.droppedExpired > 0) {
+      console.log(`  ⚠️ ${cookieBundle.droppedExpired} adet suresi gecmis cookie elendi.`);
+    }
+
+    if (cookieBundle.cookies.length > 0) {
+      try {
+        await context.addCookies(cookieBundle.cookies);
+      } catch (err) {
+        throw makeCookieBootstrapError('COOKIE_ADD_FAILED', `Cookie tarayiciya eklenemedi: ${err.message}`);
+      }
+      console.log(`  ✅ ${cookieBundle.cookies.length}/${cookieBundle.inputCount} cookie yuklendi.`);
+    } else if (cookieBundle.source !== 'none') {
+      console.log('  ⚠️ Cookie payload bulundu ama kullanilabilir cookie yok.');
+    }
+
     await context.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
       window.chrome = { runtime: {} };
     });
 
     page = await context.newPage();
+
+    if (FINGERPRINT_DIAGNOSTIC) {
+      const runtimeProfile = await collectRuntimeProfile(page);
+      const signature = profileSignature(runtimeProfile);
+      const issues = validateRuntimeProfile(runtimeProfile);
+
+      console.log(
+        `  🧪 Runtime profil: sig=${signature}, tz=${runtimeProfile?.timezone || '-'}, lang=${runtimeProfile?.language || '-'}, platform=${runtimeProfile?.platform || '-'}, webdriver=${runtimeProfile?.webdriver ? 1 : 0}`,
+      );
+
+      if (issues.length > 0) {
+        const issueText = issues.join('; ');
+        if (FINGERPRINT_STRICT_MODE) {
+          throw makeFingerprintPolicyError(`Runtime profil policy hatasi: ${issueText}`);
+        }
+        console.log(`  ⚠️ Runtime profil uyari: ${issueText}`);
+      }
+    }
 
     if (USE_WARP_PROXY) {
       console.log('  🌐 Playwright tarayıcı başlatıldı (WARP Proxy Mode - 127.0.0.1:40000).');
@@ -1113,7 +1455,17 @@ async function ensureBrowser() {
     console.log('  🧭 Canlı pencere açık olacak. Gerekirse challenge ekranında manuel doğrulayın.');
     return true;
   } catch (err) {
-    console.log(`  ❌ Tarayıcı başlatılamadı: ${err.message}`);
+    if (
+      err &&
+      typeof err.code === 'string' &&
+      (err.code.startsWith('COOKIE_') || err.code.startsWith('FINGERPRINT_'))
+    ) {
+      sessionInitFailureCode = err.code;
+      console.log(`  ❌ Oturum policy hatasi: ${err.message}`);
+    } else {
+      sessionInitFailureCode = 'BROWSER_INIT_FAILED';
+      console.log(`  ❌ Tarayıcı başlatılamadı: ${err.message}`);
+    }
     return false;
   }
 }
@@ -1304,7 +1656,10 @@ export async function scrapeSegment(priceMin, priceMax) {
 export async function initSession() {
   const ok = await ensureBrowser();
   if (!ok) {
-    return null;
+    return {
+      ok: false,
+      code: sessionInitFailureCode || 'BROWSER_INIT_FAILED',
+    };
   }
 
   try {
@@ -1317,19 +1672,43 @@ export async function initSession() {
     const initHtml = await page.content();
     if (initHtml.toLowerCase().includes('failed to get successful response from website')) {
       console.log('  ❌ Start aşamasında ScrapeOps Proxy Hatası! Sunucu engellendi.');
-      return null;
+      return {
+        ok: false,
+        code: 'PROXY_INIT_FAILED',
+      };
     }
 
     const challengeOk = await maybeHandleChallenge();
     if (!challengeOk) {
-      return null;
+      return {
+        ok: false,
+        code: 'CHALLENGE_TIMEOUT',
+      };
     }
 
-    return 'OK';
+    const postChallengeHtml = await page.content();
+    if (isAuthRequiredPage(postChallengeHtml, page.url())) {
+      await saveChallengeProofScreenshot('auth-required');
+      console.log('  ❌ Login gerekli sayfa tespit edildi. Cookie gecersiz veya eksik olabilir.');
+      return {
+        ok: false,
+        code: 'AUTH_REQUIRED',
+      };
+    }
+
+    return {
+      ok: true,
+      code: 'OK',
+      cookieSource: sessionCookieSource,
+      cookieCount: sessionCookieCount,
+    };
   } catch (err) {
     console.log(`  ❌ Session init hatası: ${err.message}`);
     await saveChallengeProofScreenshot('init-session-error');
-    return null;
+    return {
+      ok: false,
+      code: 'INIT_SESSION_ERROR',
+    };
   }
 }
 

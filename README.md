@@ -105,6 +105,99 @@ Grup icinde kullaniyorsan slash komutu kullanmak daha guvenlidir. Ornek:
 
 Bu yapi gercek zamanli degildir. GitHub Actions zamanlanmis workflow'lari en sik 5 dakikada bir calisir. Yani Telegram'dan mesaj attiktan sonra cevap genelde birkaç dakika icinde gelir.
 
+## Scraper cookie kurulumu (GitHub Actions oncelikli)
+
+`scraper.yml` icin cookie bootstrap altyapisi eklendi. Sistem su sirada cookie kaynaklarini su oncelikle dener:
+
+1. `SAHIBINDEN_COOKIES` (GitHub Secret / ENV)
+2. Lokal `cookies.json` dosyasi (yalnizca local calisma)
+
+`REQUIRE_SAHIBINDEN_COOKIES=true` aktifken cookie yoksa veya gecersizse kosu fail-fast olarak daha baslamadan durdurulur.
+
+### Gerekli GitHub Secrets
+
+GitHub'da `Settings > Secrets and variables > Actions` altina sunlari ekleyin:
+
+- `SAHIBINDEN_COOKIES`
+- `TELEGRAM_BOT_TOKEN_1` veya `TELEGRAM_BOT_TOKEN_2`
+- `TELEGRAM_USER_ID` (alternatif: `TELEGRAM_CHAT_ID`)
+- (opsiyonel) `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `AI_PROVIDER`
+
+### SAHIBINDEN_COOKIES formati
+
+Secret degeri bir JSON array olmali. Her kayit icin `name`, `value` ve `domain` veya `url` zorunludur.
+
+```json
+[
+   {
+      "name": "sid",
+      "value": "ornek-deger",
+      "domain": ".sahibinden.com",
+      "path": "/",
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+   }
+]
+```
+
+Notlar:
+
+- `expires` gecmisse cookie otomatik elenir.
+- `sameSite` degeri `Lax`, `Strict` veya `None` olmali.
+- Secret icerigini loglara yazdirmayin.
+
+### Lokal gelistirme (cookies.json fallback)
+
+Repo kokune `cookies.json` koyarsaniz, `SAHIBINDEN_COOKIES` yokken lokalde otomatik okunur.
+
+### Siklikla gorulen fail-fast kodlari
+
+- `COOKIE_REQUIRED_MISSING`: Cookie zorunlu ama hic kaynak bulunamadi.
+- `COOKIE_PARSE_INVALID`: JSON parse hatasi.
+- `COOKIE_SCHEMA_INVALID`: Cookie semasi gecersiz.
+- `COOKIE_EMPTY_AFTER_FILTER`: Expires/format sonrasi kullanilabilir cookie kalmadi.
+- `COOKIE_ADD_FAILED`: Playwright context icine cookie eklenemedi.
+- `AUTH_REQUIRED`: Login gerekli sayfa tespit edildi.
+
+### Cevresel degisken referansi (scraper)
+
+| Degisken | Aciklama |
+|---|---|
+| `SAHIBINDEN_COOKIES` | Sahibinden cookie JSON payload (Secret/ENV) |
+| `REQUIRE_SAHIBINDEN_COOKIES` | `true` ise cookie bootstrap zorunlu ve fail-fast |
+| `USE_WARP_PROXY` | WARP SOCKS proxy modunu ac/kapat |
+| `HEADLESS` | Playwright headless calisma modu |
+| `CUSTOM_MIN_PRICE` | Workflow dispatch min fiyat |
+| `CUSTOM_MAX_PRICE` | Workflow dispatch max fiyat |
+| `BYPASS_AI` | AI analizini atla/aktif et |
+| `FINGERPRINT_DIAGNOSTIC` | Runtime profil ozeti ve imza loglarini ac/kapat |
+| `FINGERPRINT_STRICT_MODE` | Profil policy mismatch durumunda fail-fast |
+| `EXPECTED_TIMEZONE` | Beklenen timezone (or. Europe/Istanbul) |
+| `EXPECTED_LOCALE` | Beklenen locale (or. tr-TR) |
+| `EXPECTED_PLATFORM` | Platform substring kontrolu (or. win32) |
+
+Bu turda `SCRAPEOPS_API_KEY` migration'i kapsam disidir ve mevcut duzende birakilmistir.
+
+### Runtime profil kontrolu (fingerprint diagnostigi)
+
+Scraper, tarayici acilisinda runtime profil ozeti (timezone, locale, platform, webdriver ve imza) loglar.
+
+- `FINGERPRINT_DIAGNOSTIC=true` ise bu diagnostik loglar aktif olur.
+- `FINGERPRINT_STRICT_MODE=true` ve policy mismatch varsa kosu `FINGERPRINT_POLICY_FAILED` ile fail-fast durur.
+- `EXPECTED_TIMEZONE`, `EXPECTED_LOCALE`, `EXPECTED_PLATFORM` ile beklenen ortam tanimlanabilir.
+
+### Haftada 2 rastgele gun politikasi
+
+Scraper workflow'u cron ile her gun tetiklenir, ancak calisma politikasi su sekildedir:
+
+- Her hafta icin deterministic bir seed ile 2 rastgele gun secilir.
+- Yalnizca secilen 2 gunde scraping adimlari calisir.
+- Diger gunlerde workflow erken ve basarili sekilde skip edilir.
+- Schedule tetiklerinde ek olarak jitter beklemesi uygulanir (0-5400 sn), boylece calisma saati sabit bir imza birakmaz.
+
+Manuel `workflow_dispatch` tetiklemeleri bu politikayi bypass eder ve dogrudan calisir.
+
 ## Daha saglam yontem: sahibinden bildirimlerini Telegram'a dusurme
 
 GitHub tarafi sahibinden'in bot korumasina takildigi icin, daha guvenilir secenek sahibinden'in kendi bildirimlerini kullanmaktir.
