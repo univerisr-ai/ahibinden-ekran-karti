@@ -91,7 +91,7 @@ jobs:
         if: steps.run_policy.outputs.should_run == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: 🐍 Python Kurulumu
         if: steps.run_policy.outputs.should_run == 'true'
