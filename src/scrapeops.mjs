@@ -22,6 +22,9 @@ const COOKIE_ENV_VAR = 'SAHIBINDEN_COOKIES';
 const SAHIBINDEN_COOKIE_FILE = process.env.SAHIBINDEN_COOKIE_FILE || 'cookies.json';
 const REQUIRE_SAHIBINDEN_COOKIES =
   (process.env.REQUIRE_SAHIBINDEN_COOKIES || 'false').toLowerCase() === 'true';
+const HEADLESS_MODE = (process.env.HEADLESS || 'false').toLowerCase() === 'true';
+const NON_INTERACTIVE_MODE =
+  HEADLESS_MODE || (process.env.CI || 'false').toLowerCase() === 'true';
 
 const FINGERPRINT_DIAGNOSTIC =
   (process.env.FINGERPRINT_DIAGNOSTIC || 'true').toLowerCase() === 'true';
@@ -43,12 +46,18 @@ const SCRAPEDO_PROXY_PARAMS =
 
 
 const DEFAULT_NAV_TIMEOUT_MS = parseInt(process.env.NAV_TIMEOUT_MS || '90000', 10);
-const CHALLENGE_WAIT_MS = parseInt(process.env.CHALLENGE_WAIT_MS || '180000', 10);
+const CHALLENGE_WAIT_MS = parseInt(
+  process.env.CHALLENGE_WAIT_MS || (NON_INTERACTIVE_MODE ? '300000' : '180000'),
+  10,
+);
 const CHALLENGE_CLICK_INTERVAL_MS = parseInt(process.env.CHALLENGE_CLICK_INTERVAL_MS || '3500', 10);
 const CHALLENGE_RELOAD_INTERVAL_MS = parseInt(process.env.CHALLENGE_RELOAD_INTERVAL_MS || '20000', 10);
 const CHECKBOX_SETTLE_MS = parseInt(process.env.CHECKBOX_SETTLE_MS || '2200', 10);
 const TLOADING_MAX_RELOADS = parseInt(process.env.TLOADING_MAX_RELOADS || '2', 10);
-const TLOADING_STUCK_RELOAD_MS = parseInt(process.env.TLOADING_STUCK_RELOAD_MS || '14000', 10);
+const TLOADING_STUCK_RELOAD_MS = parseInt(
+  process.env.TLOADING_STUCK_RELOAD_MS || (NON_INTERACTIVE_MODE ? '35000' : '14000'),
+  10,
+);
 const TURNSTILE_TOKEN_MIN_LEN = parseInt(process.env.TURNSTILE_TOKEN_MIN_LEN || '20', 10);
 const TLOADING_MANUAL_GRACE_MS = parseInt(process.env.TLOADING_MANUAL_GRACE_MS || '18000', 10);
 const TLOADING_CONTINUE_STABLE_MS = parseInt(process.env.TLOADING_CONTINUE_STABLE_MS || '5000', 10);
@@ -1103,7 +1112,7 @@ async function waitForChallengeSolve(maxWaitMs = CHALLENGE_WAIT_MS) {
 
     if (now - lastInteractionTs >= CHALLENGE_CLICK_INTERVAL_MS) {
       if (isTLoading) {
-        if (now < manualWindowUntil) {
+        if (!NON_INTERACTIVE_MODE && now < manualWindowUntil) {
           if (now - lastManualWindowLogTs >= 5000) {
             const remain = Math.max(0, Math.ceil((manualWindowUntil - now) / 1000));
             console.log(`  ⏸️ /cs/tloading: manuel doğrulama penceresi açık (${remain} sn).`);
@@ -1196,9 +1205,13 @@ async function waitForChallengeSolve(maxWaitMs = CHALLENGE_WAIT_MS) {
         }
 
         if (sawTLoadingVerificationLock && tloadingNoTokenCycles >= 4) {
-          manualWindowUntil = Date.now() + TLOADING_MANUAL_GRACE_MS;
           tloadingNoTokenCycles = 0;
-          console.log('  ⏸️ Turnstile token oluşmadı; kısa manuel doğrulama penceresi açıldı.');
+          if (NON_INTERACTIVE_MODE) {
+            console.log('  ℹ️ Turnstile token oluşmadı; CI modunda manuel bekleme atlandı, otomatik deneme sürüyor.');
+          } else {
+            manualWindowUntil = Date.now() + TLOADING_MANUAL_GRACE_MS;
+            console.log('  ⏸️ Turnstile token oluşmadı; kısa manuel doğrulama penceresi açıldı.');
+          }
         }
 
         const tokenReady = tloadingStateNow.tokenLen >= TURNSTILE_TOKEN_MIN_LEN;
@@ -1277,7 +1290,10 @@ async function waitForChallengeSolve(maxWaitMs = CHALLENGE_WAIT_MS) {
     const stillTLoading = isTLoadingPage(html, postActionUrl);
 
     if (stillTLoading) {
-      const allowReloadInTLoading = !sawTLoadingVerificationLock && postActionNow >= manualWindowUntil;
+      const allowReloadInTLoading =
+        !NON_INTERACTIVE_MODE &&
+        !sawTLoadingVerificationLock &&
+        postActionNow >= manualWindowUntil;
       const shouldReloadTLoading =
         allowReloadInTLoading &&
         tloadingReloadCount < TLOADING_MAX_RELOADS &&
@@ -1328,6 +1344,10 @@ async function waitForChallengeSolve(maxWaitMs = CHALLENGE_WAIT_MS) {
     // Sayfa kapanmış olabilir
   }
 
+  console.log(
+    `  ⚠️ Challenge timeout detayi: nonInteractive=${NON_INTERACTIVE_MODE ? 1 : 0}, tloadingReloads=${tloadingReloadCount}, verificationLock=${sawTLoadingVerificationLock ? 1 : 0}, noTokenCycles=${tloadingNoTokenCycles}.`,
+  );
+
   return {
     solved: false,
     html: finalHtml,
@@ -1345,7 +1365,7 @@ async function ensureBrowser() {
   sessionCookieCount = 0;
 
   try {
-    const isHeadless = (process.env.HEADLESS || 'false').toLowerCase() === 'true';
+    const isHeadless = HEADLESS_MODE;
 
     const launchArgs = [
       '--ignore-certificate-errors',
@@ -1482,7 +1502,11 @@ async function maybeHandleChallenge() {
     return true;
   }
 
-  console.log('  🛡️ Challenge tespit edildi. "Devam Et" veya Cloudflare doğrulama kutusunu tamamlayın.');
+  if (NON_INTERACTIVE_MODE) {
+    console.log('  🛡️ Challenge tespit edildi. CI/non-interactive modda otomatik çözüm deneniyor.');
+  } else {
+    console.log('  🛡️ Challenge tespit edildi. "Devam Et" veya Cloudflare doğrulama kutusunu tamamlayın.');
+  }
   const waited = await waitForChallengeSolve(CHALLENGE_WAIT_MS);
 
   if (!waited.solved) {

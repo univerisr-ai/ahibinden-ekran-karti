@@ -23,6 +23,9 @@ on:
         type: boolean
         default: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   scrape:
     name: 🔍 Scrape & Analyze
@@ -103,13 +106,13 @@ jobs:
           sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64
           pip install DrissionPage pyvirtualdisplay xvfbwrapper requests
 
-      - name: 🚀 Browser Kurulumu (Playwright için)
-        if: steps.run_policy.outputs.should_run == 'true'
-        run: npx playwright install chromium --with-deps
-
       - name: 📦 Bağımlılıkları Yükle
         if: steps.run_policy.outputs.should_run == 'true'
         run: npm install
+
+      - name: 🚀 Browser Kurulumu (Playwright için)
+        if: steps.run_policy.outputs.should_run == 'true'
+        run: npx playwright install chromium --with-deps
 
       - name: 🌀 Cloudflare WARP Proxy Kurulumu
         if: steps.run_policy.outputs.should_run == 'true'
@@ -138,7 +141,8 @@ jobs:
         if: steps.run_policy.outputs.should_run == 'true'
         env:
           USE_WARP_PROXY: 'true'
-          HEADLESS: 'false'
+          HEADLESS: 'true'
+          CHALLENGE_WAIT_MS: '300000'
           REQUIRE_SAHIBINDEN_COOKIES: 'true'
 
           # ── Cookie bootstrap (GitHub Secret) ────────────────

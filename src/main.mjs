@@ -119,7 +119,7 @@ async function main() {
     } else if (initCode === 'AUTH_REQUIRED') {
       msg = '❌ Login gerekli sayfaya dusuldu. Cookie gecersiz veya eksik olabilir.';
     } else if (initCode === 'CHALLENGE_TIMEOUT') {
-      msg = '❌ Challenge zaman asimina ugradi. Manuel dogrulama tamamlanmadi.';
+      msg = '❌ Challenge zaman asimina ugradi. Otomatik dogrulama tamamlanmadi (cf_proof.png artifactini kontrol edin).';
     } else if (initCode === 'PROXY_INIT_FAILED') {
       msg = '❌ Baslangic asamasinda proxy/hedef erisim hatasi alindi.';
     } else if (initCode === 'FINGERPRINT_POLICY_FAILED') {
