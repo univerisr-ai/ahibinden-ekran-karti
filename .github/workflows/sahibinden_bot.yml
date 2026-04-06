@@ -1,0 +1,55 @@
+name: Sahibinden Bot (GitHub Actions)
+
+on:
+  workflow_dispatch: # GitHub üzerinden manuel olarak "Run workflow" butonu ile çalıştırmak için
+  # schedule:
+  #   - cron: '0 3 * * *' # İsteğe bağlı: Her gece saat 03:00'te otomatik çalışması için başındaki '#' işaretlerini kaldırın
+
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Kodu İndir
+      uses: actions/checkout@v3
+
+    - name: Node.js Kurulumu
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+
+    - name: Gerekli Paketleri Yükle
+      run: npm install
+
+    - name: Google Chrome'u Kur (Playwright için)
+      run: |
+        npx playwright install chrome
+        npx playwright install-deps chrome
+
+    - name: Cloudflare WARP Proxy Kurulumu
+      run: |
+        curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+        sudo apt-get update && sudo apt-get install -y cloudflare-warp
+        warp-cli --accept-tos registration new || warp-cli --accept-tos register
+        warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy
+        warp-cli --accept-tos proxy port 40000 || warp-cli --accept-tos set-proxy-port 40000
+        warp-cli --accept-tos connect
+        sleep 5
+        warp-cli --accept-tos status
+        curl -x socks5h://127.0.0.1:40000 -I https://www.cloudflare.com/cdn-cgi/trace || echo "WARP Proxy test atlandı"
+
+    - name: Botu Başlat (WARP Proxy Açık)
+      env:
+        USE_WARP_PROXY: 'true'
+        USE_SCRAPEDO_PROXY: 'false'
+        HEADLESS: 'true'
+        MAX_PAGES_PER_SEGMENT: '20'
+      run: node src/main.mjs
+
+    - name: Sonuç Listesini Çıktı Olarak Al (Artifact)
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: sahibinden-ilanlar
+        path: output.json
