@@ -43,9 +43,9 @@ jobs:
       env:
         USE_WARP_PROXY: 'true'
         USE_SCRAPEDO_PROXY: 'false'
-        HEADLESS: 'true'
+        HEADLESS: 'false'
         MAX_PAGES_PER_SEGMENT: '20'
-      run: node src/main.mjs
+      run: xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs
 
     - name: Sonuç Listesini Çıktı Olarak Al (Artifact)
       uses: actions/upload-artifact@v4

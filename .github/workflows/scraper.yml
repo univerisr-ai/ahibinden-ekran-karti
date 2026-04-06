@@ -71,6 +71,7 @@ jobs:
       - name: 🚀 GPU Fırsat Avcısını Çalıştır
         env:
           USE_WARP_PROXY: 'true'
+          HEADLESS: 'false'
           # ── Proxy (ScrapeOps) ──────────────────────────────────
           SCRAPEOPS_API_KEY: '8fa66633-b47e-4c61-a9cb-38b1463aff58'
 
@@ -87,7 +88,7 @@ jobs:
           CUSTOM_MIN_PRICE: ${{ github.event.inputs.min_fiyat }}
           CUSTOM_MAX_PRICE: ${{ github.event.inputs.max_fiyat }}
           BYPASS_AI: ${{ github.event.inputs.bypass_ai }}
-        run: node src/main.mjs
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs
 
       - name: 💾 Sonuçları Kaydet (Artifact)
         if: always()
