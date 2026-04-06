@@ -54,6 +54,7 @@ let browser = null;
 let context = null;
 let page = null;
 let hardStopStatus = null;
+const CF_PROOF_PATH = process.env.CF_PROOF_PATH || 'cf_proof.png';
 
 let stats = {
   totalRequests: 0,
@@ -65,6 +66,27 @@ let stats = {
 
 export function getStats() {
   return { ...stats };
+}
+
+export async function saveChallengeProofScreenshot(reason = '') {
+  if (!page || page.isClosed()) {
+    return null;
+  }
+
+  const suffix = reason ? ` (${reason})` : '';
+
+  try {
+    await page.screenshot({
+      path: CF_PROOF_PATH,
+      fullPage: true,
+      animations: 'disabled',
+    });
+    console.log(`  📸 Challenge ekran görüntüsü kaydedildi: ${CF_PROOF_PATH}${suffix}`);
+    return CF_PROOF_PATH;
+  } catch (err) {
+    console.log(`  ⚠️ Challenge ekran görüntüsü alınamadı: ${err.message}`);
+    return null;
+  }
 }
 
 function isChallengePage(html = '', currentUrl = '') {
@@ -1112,6 +1134,7 @@ async function maybeHandleChallenge() {
   const waited = await waitForChallengeSolve(CHALLENGE_WAIT_MS);
 
   if (!waited.solved) {
+    await saveChallengeProofScreenshot('challenge-timeout');
     console.log('  ❌ Challenge zaman aşımı. Manuel doğrulama tamamlanmadı.');
     return false;
   }
@@ -1173,6 +1196,7 @@ async function fetchPage(targetUrl, label = '') {
 
         const challengeOk = await maybeHandleChallenge();
         if (!challengeOk) {
+          await saveChallengeProofScreenshot(`fetch-attempt-${attempt}`);
           await sleep(2000);
           continue;
         }
@@ -1304,6 +1328,7 @@ export async function initSession() {
     return 'OK';
   } catch (err) {
     console.log(`  ❌ Session init hatası: ${err.message}`);
+    await saveChallengeProofScreenshot('init-session-error');
     return null;
   }
 }
@@ -1331,5 +1356,6 @@ export default {
   initSession,
   scrapeSegment,
   getStats,
+  saveChallengeProofScreenshot,
   closeBrowser,
 };

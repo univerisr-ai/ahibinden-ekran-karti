@@ -13,7 +13,7 @@ import {
   OPENROUTER_API_KEY,
   getActiveSegments,
 } from './config.mjs';
-import { initSession, scrapeSegment, getStats, closeBrowser } from './scrapeops.mjs';
+import { initSession, scrapeSegment, getStats, saveChallengeProofScreenshot, closeBrowser } from './scrapeops.mjs';
 import { parseAllPages, deduplicateListings, filterInvalidListings } from './parser.mjs';
 import { evaluateAllListings, selectTopOpportunities, fallbackSelection } from './ai_evaluator.mjs';
 
@@ -102,7 +102,8 @@ async function main() {
   // ADIM 1: Cloudflare bypass
   const session = await initSession();
   if (!session) {
-    const msg = '❌ Cloudflare geçilemedi! GitHub Actions IP engellenmiş olabilir.';
+    await saveChallengeProofScreenshot('init-session-failed');
+    const msg = '❌ Cloudflare geçilemedi! Challenge tamamlanmadı veya erişim engellendi.';
     console.error(`  ${msg}`);
     await sendTelegram(msg);
     await closeBrowser();
@@ -117,6 +118,12 @@ async function main() {
   for (const [priceMin, priceMax] of segments) {
     const result = await scrapeSegment(priceMin, priceMax);
     segmentResults.push({ priceMin, priceMax, result });
+
+    if (result.status === 'ACTION_REQUIRED') {
+      console.log('\n  🛑 Scrape.do hesap/domain kısıtı algılandı. Taramayı erken durduruyorum.');
+      await sendTelegram('🛑 Scrape.do bu domain için ACTION REQUIRED döndü. support@scrape.do üzerinden whitelist talep etmeniz gerekiyor.');
+      break;
+    }
   }
 
   // ADIM 3: Parse
@@ -150,6 +157,7 @@ async function main() {
   let topDeals = [];
   if (allListings.length === 0) {
     console.log('\n  ⚠️ Hiç ilan çekilemedi.');
+    await sendTelegram('⚠️ Hiç ilan çekilemedi. Tarama tamamlandı ancak sonuç bulunamadı.');
   } else if (BYPASS_AI) {
     console.log('\n  ⏭️ AI atlandı, en ucuzlar seçilecek.');
     topDeals = fallbackSelection(allListings);
@@ -190,6 +198,7 @@ async function main() {
 
   // JSON kaydet
   const fs = await import('fs');
+  const { fileURLToPath } = await import('url');
   const outputData = {
     timestamp: new Date().toISOString(),
     stats: st,
@@ -199,16 +208,19 @@ async function main() {
     allListings: allListings.slice(0, 500),
     elapsedSeconds: elapsedSec,
   };
-  const outputPath = new URL('../output.json', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
+  const outputPath = fileURLToPath(new URL('../output.json', import.meta.url));
   fs.writeFileSync(outputPath, JSON.stringify(outputData, null, 2), 'utf-8');
   console.log(`\n  💾 Sonuçlar: output.json`);
 
   await closeBrowser();
 
-  if (totalClean === 0) {
-    console.log('\n  ⚠️ Hiç ilan yok — erişim kontrolü gerekebilir.');
-    process.exit(1);
-  }
+  
+    if (totalClean === 0) {
+      await sendTelegram('⚠️ *HİÇ İLAN ÇEKİLEMEDİ!*\n\nErişim engeli/Cloudflare olabilir. Lütfen kontrol edin.');
+      console.log('\n  ⚠️ Hiç ilan yok — erişim kontrolü gerekebilir.');
+      process.exit(1);
+    }
+
 
   console.log('\n  🎉 Tamamlandı!');
 }
@@ -216,6 +228,8 @@ async function main() {
 main().catch(async err => {
   console.error(`\n  💀 KRİTİK: ${err.message}`);
   console.error(err.stack);
+
+  await saveChallengeProofScreenshot('fatal-main-catch');
   
   if (TELEGRAM_TOKEN && TELEGRAM_CHAT_ID) {
     try {
