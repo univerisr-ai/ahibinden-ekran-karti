@@ -386,6 +386,10 @@ export async function saveChallengeProofScreenshot(reason = '') {
 }
 
 function isChallengePage(html = '', currentUrl = '') {
+  if (looksLikeListingsPage(html, currentUrl)) {
+    return false;
+  }
+
   const h = String(html || '').toLowerCase();
   const u = String(currentUrl || '').toLowerCase();
 
@@ -423,6 +427,24 @@ function isChallengePage(html = '', currentUrl = '') {
   );
 }
 
+function looksLikeListingsPage(html = '', currentUrl = '') {
+  const h = String(html || '').toLowerCase();
+  const u = String(currentUrl || '').toLowerCase();
+
+  const hasListingRows =
+    h.includes('searchresultsitem') ||
+    h.includes('classifiedtitle') ||
+    h.includes('searchresultspricevalue');
+
+  const hasResultSummary = h.includes('aramanizda') && h.includes('sonuc bulundu');
+  const onSearchRoute =
+    u.includes('/ekran-karti') ||
+    u.includes('/arama') ||
+    u.includes('/arama?q=');
+
+  return hasListingRows || (onSearchRoute && hasResultSummary);
+}
+
 function isAuthRequiredPage(html = '', currentUrl = '') {
   const h = String(html || '').toLowerCase();
   const u = String(currentUrl || '').toLowerCase();
@@ -441,6 +463,10 @@ function isAuthRequiredPage(html = '', currentUrl = '') {
 }
 
 function isTLoadingPage(html = '', currentUrl = '') {
+  if (looksLikeListingsPage(html, currentUrl)) {
+    return false;
+  }
+
   const h = String(html || '').toLowerCase();
   const u = String(currentUrl || '').toLowerCase();
 
