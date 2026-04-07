@@ -71,17 +71,14 @@ jobs:
 
           if [ "$dow" -eq "$day1" ] || [ "$dow" -eq "$day2" ]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "Run policy: Bugun secili gunlerden biri, kosu devam edecek."
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
             jitter_seconds=0
+            echo "Run policy: Bugun secili gun degil, schedule kosusu atlanacak."
           fi
 
           echo "jitter_seconds=${jitter_seconds}" >> "$GITHUB_OUTPUT"
-
-      - name: ⏭️ Bugun planli gun degil, kosu atlandi
-        if: steps.run_policy.outputs.should_run != 'true'
-        run: |
-          echo "Bu hafta icin secilen 2 gun disinda. Workflow skip edildi."
 
       - name: 📥 Checkout
         if: steps.run_policy.outputs.should_run == 'true'
