@@ -19,49 +19,112 @@ import { evaluateAllListings, selectTopOpportunities, fallbackSelection } from '
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-async function sendTelegramChunk(chunk, useMarkdown = true) {
-  const payload = {
-    chat_id: TELEGRAM_CHAT_ID,
-    text: chunk,
-    disable_web_page_preview: true,
-  };
+function uniqueNonEmpty(values) {
+  return Array.from(new Set(values.map((v) => String(v || '').trim()).filter(Boolean)));
+}
 
-  if (useMarkdown) {
-    payload.parse_mode = 'Markdown';
+function maskChatId(chatId) {
+  const s = String(chatId || '').trim();
+  if (!s) return 'n/a';
+  if (s.length <= 4) return '***';
+  return `${s.slice(0, 2)}***${s.slice(-2)}`;
+}
+
+function getTelegramTargets() {
+  const tokens = uniqueNonEmpty([
+    TELEGRAM_TOKEN,
+    process.env.TELEGRAM_BOT_TOKEN,
+    process.env.TELEGRAM_BOT_TOKEN_1,
+    process.env.TELEGRAM_BOT_TOKEN_2,
+  ]);
+
+  const chatIds = uniqueNonEmpty([
+    process.env.TELEGRAM_CHAT_ID,
+    TELEGRAM_CHAT_ID,
+    process.env.TELEGRAM_USER_ID,
+    process.env.TELEGRAM_CHAT_ID_1,
+    process.env.TELEGRAM_CHAT_ID_2,
+  ]);
+
+  return { tokens, chatIds };
+}
+
+function isCantInitiateConversation(status, errText = '') {
+  return status === 403 && /can't initiate conversation with a user/i.test(String(errText));
+}
+
+async function sendTelegramChunk(chunk, useMarkdown = true) {
+  const { tokens, chatIds } = getTelegramTargets();
+  if (tokens.length === 0 || chatIds.length === 0) {
+    throw new Error('Telegram token/chat ID bulunamadi.');
   }
 
-  const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  const errors = [];
 
-  if (!response.ok) {
-    const errText = await response.text();
+  for (const token of tokens) {
+    for (const chatId of chatIds) {
+      const payload = {
+        chat_id: chatId,
+        text: chunk,
+        disable_web_page_preview: true,
+      };
 
-    // Markdown parse hatalarında düz metin fallback ile rapor kaybını engelle.
-    if (useMarkdown && response.status === 400 && /can't parse entities/i.test(errText)) {
-      const plainResponse = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: TELEGRAM_CHAT_ID,
-          text: chunk,
-          disable_web_page_preview: true,
-        }),
-      });
-
-      if (!plainResponse.ok) {
-        const plainErrText = await plainResponse.text();
-        throw new Error(`Telegram API Error: ${plainResponse.status} - ${plainErrText}`);
+      if (useMarkdown) {
+        payload.parse_mode = 'Markdown';
       }
 
-      console.log('  ℹ️ Telegram Markdown parse hatasi: düz metin fallback kullanildi.');
-      return;
-    }
+      const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    throw new Error(`Telegram API Error: ${response.status} - ${errText}`);
+      if (response.ok) {
+        return;
+      }
+
+      const errText = await response.text();
+
+      // Markdown parse hatalarında aynı hedefe düz metin fallback ile tekrar dene.
+      if (useMarkdown && response.status === 400 && /can't parse entities/i.test(errText)) {
+        const plainResponse = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: chunk,
+            disable_web_page_preview: true,
+          }),
+        });
+
+        if (plainResponse.ok) {
+          console.log('  ℹ️ Telegram Markdown parse hatasi: düz metin fallback kullanildi.');
+          return;
+        }
+
+        const plainErrText = await plainResponse.text();
+        errors.push({ status: plainResponse.status, errText: plainErrText, chatId });
+        continue;
+      }
+
+      if (isCantInitiateConversation(response.status, errText)) {
+        console.log(`  ⚠️ Telegram hedefi reddetti (${maskChatId(chatId)}), alternatif hedef deneniyor.`);
+      }
+
+      errors.push({ status: response.status, errText, chatId });
+    }
   }
+
+  const allCantInitiate =
+    errors.length > 0 && errors.every((e) => isCantInitiateConversation(e.status, e.errText));
+  if (allCantInitiate) {
+    throw new Error(
+      'Telegram 403: Bot hedef kullanıcıyla konuşma başlatamıyor. Bota /start gönderin veya geçerli TELEGRAM_CHAT_ID kullanın.',
+    );
+  }
+
+  const lastErr = errors[errors.length - 1];
+  throw new Error(`Telegram API Error: ${lastErr?.status || 'unknown'} - ${lastErr?.errText || 'unknown error'}`);
 }
 
 // ─── Telegram ────────────────────────────────────────────────
@@ -88,7 +151,8 @@ async function sendTelegram(text) {
 }
 
 async function sendTelegramPhoto(photoPath, caption = "Ekran Görüntüsü / Screenshot") {
-  if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) {
+  const { tokens, chatIds } = getTelegramTargets();
+  if (tokens.length === 0 || chatIds.length === 0) {
     console.log('  ⚠️ Telegram token/chat ID tanımlı değil, fotoğraf gönderilmiyor.');
     return;
   }
@@ -99,33 +163,53 @@ async function sendTelegramPhoto(photoPath, caption = "Ekran Görüntüsü / Scr
       return;
     }
     
-    const formData = new FormData();
-    formData.append('chat_id', TELEGRAM_CHAT_ID);
-    formData.append('caption', caption);
-    
-    // Convert local file to Blob for native fetch FormData
     const buffer = fs.readFileSync(photoPath);
-    const blob = new Blob([buffer], { type: 'image/png' });
-    formData.append('photo', blob, 'cf_proof.png');
-    
-    console.log(`  📸 Telegram'a fotoğraf gönderiliyor: ${photoPath}`);
-    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendPhoto`, {
-      method: 'POST',
-      body: formData
-    });
-    
-    if (!response.ok) {
-       const errText = await response.text();
-       throw new Error(`Telegram API Error: ${response.status} - ${errText}`);
+    const errors = [];
+
+    for (const token of tokens) {
+      for (const chatId of chatIds) {
+        const formData = new FormData();
+        formData.append('chat_id', chatId);
+        formData.append('caption', caption);
+
+        const blob = new Blob([buffer], { type: 'image/png' });
+        formData.append('photo', blob, 'cf_proof.png');
+
+        console.log(`  📸 Telegram'a fotoğraf gönderiliyor: ${photoPath} -> ${maskChatId(chatId)}`);
+        const response = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (response.ok) {
+          console.log('  ✅ Telegram resimli rapor gönderildi!');
+          return;
+        }
+
+        const errText = await response.text();
+        if (isCantInitiateConversation(response.status, errText)) {
+          console.log(`  ⚠️ Telegram hedefi reddetti (${maskChatId(chatId)}), alternatif hedef deneniyor.`);
+        }
+        errors.push({ status: response.status, errText, chatId });
+      }
     }
-    console.log('  ✅ Telegram resimli rapor gönderildi!');
+
+    const allCantInitiate =
+      errors.length > 0 && errors.every((e) => isCantInitiateConversation(e.status, e.errText));
+    if (allCantInitiate) {
+      throw new Error('Telegram 403: Bot hedef kullanıcıyla konuşma başlatamıyor. Bota /start gönderin veya geçerli TELEGRAM_CHAT_ID kullanın.');
+    }
+
+    const lastErr = errors[errors.length - 1];
+    throw new Error(`Telegram API Error: ${lastErr?.status || 'unknown'} - ${lastErr?.errText || 'unknown error'}`);
   } catch (err) {
     console.log(`  ❌ Telegram fotoğraf gönderme hatası: ${err.message}`);
   }
 }
 
 async function sendTelegramDocument(filePath, caption = 'Detayli tarama dosyasi') {
-  if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) {
+  const { tokens, chatIds } = getTelegramTargets();
+  if (tokens.length === 0 || chatIds.length === 0) {
     console.log('  ⚠️ Telegram token/chat ID tanımlı değil, dosya gönderilmiyor.');
     return;
   }
@@ -148,26 +232,45 @@ async function sendTelegramDocument(filePath, caption = 'Detayli tarama dosyasi'
     }
 
     const fileName = path.basename(filePath);
-    const formData = new FormData();
-    formData.append('chat_id', TELEGRAM_CHAT_ID);
-    formData.append('caption', String(caption).slice(0, 1024));
-
     const buffer = fs.readFileSync(filePath);
-    const blob = new Blob([buffer], { type: 'application/json' });
-    formData.append('document', blob, fileName);
+    const errors = [];
 
-    console.log(`  📎 Telegram'a dosya gönderiliyor: ${fileName}`);
-    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument`, {
-      method: 'POST',
-      body: formData,
-    });
+    for (const token of tokens) {
+      for (const chatId of chatIds) {
+        const formData = new FormData();
+        formData.append('chat_id', chatId);
+        formData.append('caption', String(caption).slice(0, 1024));
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Telegram API Error: ${response.status} - ${errText}`);
+        const blob = new Blob([buffer], { type: 'application/json' });
+        formData.append('document', blob, fileName);
+
+        console.log(`  📎 Telegram'a dosya gönderiliyor: ${fileName} -> ${maskChatId(chatId)}`);
+        const response = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (response.ok) {
+          console.log('  ✅ Telegram dosya gönderimi başarılı!');
+          return;
+        }
+
+        const errText = await response.text();
+        if (isCantInitiateConversation(response.status, errText)) {
+          console.log(`  ⚠️ Telegram hedefi reddetti (${maskChatId(chatId)}), alternatif hedef deneniyor.`);
+        }
+        errors.push({ status: response.status, errText, chatId });
+      }
     }
 
-    console.log('  ✅ Telegram dosya gönderimi başarılı!');
+    const allCantInitiate =
+      errors.length > 0 && errors.every((e) => isCantInitiateConversation(e.status, e.errText));
+    if (allCantInitiate) {
+      throw new Error('Telegram 403: Bot hedef kullanıcıyla konuşma başlatamıyor. Bota /start gönderin veya geçerli TELEGRAM_CHAT_ID kullanın.');
+    }
+
+    const lastErr = errors[errors.length - 1];
+    throw new Error(`Telegram API Error: ${lastErr?.status || 'unknown'} - ${lastErr?.errText || 'unknown error'}`);
   } catch (err) {
     console.log(`  ❌ Telegram dosya gönderme hatası: ${err.message}`);
   }
