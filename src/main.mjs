@@ -124,6 +124,55 @@ async function sendTelegramPhoto(photoPath, caption = "Ekran Görüntüsü / Scr
   }
 }
 
+async function sendTelegramDocument(filePath, caption = 'Detayli tarama dosyasi') {
+  if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) {
+    console.log('  ⚠️ Telegram token/chat ID tanımlı değil, dosya gönderilmiyor.');
+    return;
+  }
+
+  try {
+    const fs = await import('fs');
+    const path = await import('path');
+
+    if (!fs.existsSync(filePath)) {
+      console.log(`  ❌ Gönderilecek dosya bulunamadı: ${filePath}`);
+      return;
+    }
+
+    const stat = fs.statSync(filePath);
+    const telegramLimitBytes = 49 * 1024 * 1024;
+    if (stat.size > telegramLimitBytes) {
+      console.log(`  ⚠️ Dosya çok büyük (${Math.round(stat.size / 1024 / 1024)} MB), Telegram'a yüklenemedi.`);
+      await sendTelegram(`⚠️ output.json dosyasi cok buyuk oldugu icin Telegram'a yuklenemedi (${Math.round(stat.size / 1024 / 1024)} MB).`);
+      return;
+    }
+
+    const fileName = path.basename(filePath);
+    const formData = new FormData();
+    formData.append('chat_id', TELEGRAM_CHAT_ID);
+    formData.append('caption', String(caption).slice(0, 1024));
+
+    const buffer = fs.readFileSync(filePath);
+    const blob = new Blob([buffer], { type: 'application/json' });
+    formData.append('document', blob, fileName);
+
+    console.log(`  📎 Telegram'a dosya gönderiliyor: ${fileName}`);
+    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Telegram API Error: ${response.status} - ${errText}`);
+    }
+
+    console.log('  ✅ Telegram dosya gönderimi başarılı!');
+  } catch (err) {
+    console.log(`  ❌ Telegram dosya gönderme hatası: ${err.message}`);
+  }
+}
+
 // ─── Rapor ───────────────────────────────────────────────────
 function buildReport(stats, totalRaw, totalClean, topDeals, elapsedSec) {
   const minutes = Math.floor(elapsedSec / 60);
@@ -301,28 +350,40 @@ async function main() {
   const { fileURLToPath } = await import('url');
   const outputData = {
     timestamp: new Date().toISOString(),
+    sessionNumber: SESSION_NUMBER,
     stats: st,
     totalRaw,
     totalClean,
+    segmentBreakdown: segmentResults.map(({ priceMin, priceMax, result }) => ({
+      priceMin,
+      priceMax,
+      status: result?.status || 'UNKNOWN',
+      pages: result?.pages || 0,
+      totalFound: result?.totalFound || 0,
+    })),
     topDeals,
-    allListings: allListings.slice(0, 500),
+    allListings,
     elapsedSeconds: elapsedSec,
   };
   const outputPath = fileURLToPath(new URL('../output.json', import.meta.url));
   fs.writeFileSync(outputPath, JSON.stringify(outputData, null, 2), 'utf-8');
   console.log(`\n  💾 Sonuçlar: output.json`);
 
+  await sendTelegramDocument(
+    outputPath,
+    `📎 Detayli tarama dosyasi\nSession: #${SESSION_NUMBER}\nToplam: ${totalClean.toLocaleString('tr')} ilan`,
+  );
+
+  if (totalClean === 0) {
+    await saveChallengeProofScreenshot('zero-listings');
+    await sendTelegramPhoto('cf_proof.png', '⚠️ HİÇ İLAN ÇEKİLEMEDİ! - Cloudflare engelini kontrol edin.');
+    await sendTelegram('⚠️ *HİÇ İLAN ÇEKİLEMEDİ!*\n\nErişim engeli/Cloudflare olabilir. Lütfen kontrol edin.');
+    console.log('\n  ⚠️ Hiç ilan yok — erişim kontrolü gerekebilir.');
+    await closeBrowser();
+    process.exit(1);
+  }
+
   await closeBrowser();
-
-  
-    if (totalClean === 0) {
-      await saveChallengeProofScreenshot('zero-listings');
-      await sendTelegramPhoto('cf_proof.png', '⚠️ HİÇ İLAN ÇEKİLEMEDİ! - Cloudflare engelini kontrol edin.');
-      await sendTelegram('⚠️ *HİÇ İLAN ÇEKİLEMEDİ!*\n\nErişim engeli/Cloudflare olabilir. Lütfen kontrol edin.');
-      console.log('\n  ⚠️ Hiç ilan yok — erişim kontrolü gerekebilir.');
-      process.exit(1);
-    }
-
 
   console.log('\n  🎉 Tamamlandı!');
 }
