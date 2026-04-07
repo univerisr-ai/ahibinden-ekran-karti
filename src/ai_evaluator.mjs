@@ -9,6 +9,7 @@ import {
   AI_PROVIDER,
   GEMINI_API_KEY,
   OPENROUTER_API_KEY,
+  OPENROUTER_MODEL,
   AI_CHUNK_SIZE,
   AI_DELAY_BETWEEN_CHUNKS_MS,
   AI_TOP_RESULTS,
@@ -112,7 +113,7 @@ async function callOpenRouter(userPrompt) {
       'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
     },
     body: JSON.stringify({
-      model: 'google/gemini-flash-1.5',
+      model: OPENROUTER_MODEL,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },
@@ -162,6 +163,7 @@ async function evaluateChunk(chunk, chunkIndex, totalChunks) {
     fiyat: item.fiyat,
     konum: item.konum,
     tarih: item.tarih,
+    url: item.url,
   }));
 
   const userPrompt = JSON.stringify(compactData, null, 0);

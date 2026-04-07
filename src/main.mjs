@@ -33,7 +33,7 @@ async function sendTelegram(text) {
       remaining = remaining.substring(4000);
     }
     for (const chunk of chunks) {
-      await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+      const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -43,11 +43,52 @@ async function sendTelegram(text) {
           disable_web_page_preview: true,
         }),
       });
+      if (!response.ok) {
+         const errText = await response.text();
+         throw new Error(`Telegram API Error: ${response.status} - ${errText}`);
+      }
       await sleep(500);
     }
     console.log('  ✅ Telegram raporu gönderildi!');
   } catch (err) {
     console.log(`  ❌ Telegram hata: ${err.message}`);
+  }
+}
+
+async function sendTelegramPhoto(photoPath, caption = "Ekran Görüntüsü / Screenshot") {
+  if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) {
+    console.log('  ⚠️ Telegram token/chat ID tanımlı değil, fotoğraf gönderilmiyor.');
+    return;
+  }
+  try {
+    const fs = await import('fs');
+    if (!fs.existsSync(photoPath)) {
+      console.log(`  ❌ Fotoğraf bulunamadı: ${photoPath}`);
+      return;
+    }
+    
+    const formData = new FormData();
+    formData.append('chat_id', TELEGRAM_CHAT_ID);
+    formData.append('caption', caption);
+    
+    // Convert local file to Blob for native fetch FormData
+    const buffer = fs.readFileSync(photoPath);
+    const blob = new Blob([buffer], { type: 'image/png' });
+    formData.append('photo', blob, 'cf_proof.png');
+    
+    console.log(`  📸 Telegram'a fotoğraf gönderiliyor: ${photoPath}`);
+    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendPhoto`, {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!response.ok) {
+       const errText = await response.text();
+       throw new Error(`Telegram API Error: ${response.status} - ${errText}`);
+    }
+    console.log('  ✅ Telegram resimli rapor gönderildi!');
+  } catch (err) {
+    console.log(`  ❌ Telegram fotoğraf gönderme hatası: ${err.message}`);
   }
 }
 
@@ -243,6 +284,8 @@ async function main() {
 
   
     if (totalClean === 0) {
+      await saveChallengeProofScreenshot('zero-listings');
+      await sendTelegramPhoto('cf_proof.png', '⚠️ HİÇ İLAN ÇEKİLEMEDİ! - Cloudflare engelini kontrol edin.');
       await sendTelegram('⚠️ *HİÇ İLAN ÇEKİLEMEDİ!*\n\nErişim engeli/Cloudflare olabilir. Lütfen kontrol edin.');
       console.log('\n  ⚠️ Hiç ilan yok — erişim kontrolü gerekebilir.');
       process.exit(1);
@@ -261,16 +304,11 @@ main().catch(async err => {
   if (TELEGRAM_TOKEN && TELEGRAM_CHAT_ID) {
     try {
       const errorMsg = `💀 *Sistem Çöktü!*\n\n*Hata:* \`${err.message}\`\n\n_Detaylı loglar için GitHub Actions'ı kontrol edin._`;
-      await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: TELEGRAM_CHAT_ID,
-          text: errorMsg,
-          parse_mode: 'Markdown'
-        }),
-      });
-    } catch(e) {}
+      await sendTelegram(errorMsg);
+      await sendTelegramPhoto('cf_proof.png', `💀 Sistem Çöktü: ${err.message.substring(0, 100)}`);
+    } catch(e) {
+      console.error(`  ❌ Fatal catch içinde Telegram hata: ${e.message}`);
+    }
   }
 
   await closeBrowser();

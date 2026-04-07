@@ -120,53 +120,10 @@ async function acknowledgeUpdates(token, maxUpdateId) {
   });
 }
 
-const SCRAPEOPS_API_KEY = String(process.env.SCRAPEOPS_API_KEY || "").trim();
-
-async function fetchViaScrapeOps(targetUrl) {
-  if (!SCRAPEOPS_API_KEY) {
-    throw new Error("Missing SCRAPEOPS_API_KEY secret.");
-  }
-
-  const params = new URLSearchParams({
-    api_key: SCRAPEOPS_API_KEY,
-    url: targetUrl,
-    bypass: "cloudflare_level_3",
-    render_js: "true",
-    residential: "true",
-    wait: "5000",
-  });
-
-  const apiUrl = `https://proxy.scrapeops.io/v1/?${params}`;
-  console.log("ScrapeOps API proxy ile sayfa aliniyor...");
-
-  const response = await fetch(apiUrl, {
-    signal: AbortSignal.timeout(120000),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`ScrapeOps proxy HTTP ${response.status}: ${body}`);
-  }
-
-  return await response.text();
-}
-
 async function captureArtifacts() {
   await mkdir(ARTIFACTS_DIR, { recursive: true });
 
-  // 1) ScrapeOps API proxy ile sahibinden HTML'ini al
-  let html;
-  let fetchMethod = "scrapeops";
-  try {
-    html = await fetchViaScrapeOps(TARGET_URL);
-    console.log(`ScrapeOps basarili, ${html.length} byte HTML alindi.`);
-  } catch (err) {
-    console.error(`ScrapeOps basarisiz: ${err.message}`);
-    console.log("Dogrudan Playwright ile deneniyor...");
-    fetchMethod = "direct";
-  }
-
-  // 2) Playwright ile render et ve screenshot al
+  // Playwright ile render et ve screenshot al
   const launchOptions = { headless: true };
   if (PLAYWRIGHT_CHANNEL) {
     launchOptions.channel = PLAYWRIGHT_CHANNEL;
@@ -184,24 +141,17 @@ async function captureArtifacts() {
   const page = await context.newPage();
 
   let title;
-  if (fetchMethod === "scrapeops" && html) {
-    // ScrapeOps'tan alinan HTML'i Playwright'a yukle
-    await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 30000 });
-    await page.waitForTimeout(3000);
-    title = await page.title();
-    await writeFile(HTML_PATH, html, "utf8");
-  } else {
-    // Dogrudan Playwright ile sayfaya git (fallback)
-    await page.goto(TARGET_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
-    await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
-    await page.waitForTimeout(4000);
-    title = await page.title();
-    html = await page.content();
-    await writeFile(HTML_PATH, html, "utf8");
-  }
+  
+  // Dogrudan Playwright ile sayfaya git
+  await page.goto(TARGET_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(4000);
+  title = await page.title();
+  const html = await page.content();
+  await writeFile(HTML_PATH, html, "utf8");
 
   await page.screenshot({ path: SCREENSHOT_PATH, fullPage: false });
-  console.log(`Screenshot alindi. Baslik: ${title || "bulunamadi"} (yontem: ${fetchMethod})`);
+  console.log(`Screenshot alindi. Baslik: ${title || "bulunamadi"} (yontem: direct)`);
 
   await context.close();
   await browser.close();

@@ -1,16 +1,19 @@
 /**
  * CONFIG.MJS — Tek Gerçek Kaynak
- * Optimize ScrapeOps (1-10 kredi proxy)
+ * WARP + Cookie odakli calisma
  */
 import 'dotenv/config';
 
-// ─── ScrapeOps Ayarları ──────────────────────────────────────
-const key1 = '8fa66633-b47e-4c61-a9cb-38b1463aff58'; // VPN ile açılan yepyeni key
-const key2 = 'e887aa8c-f620-47db-a6f0-2513b1c5099a';
-export const SCRAPEOPS_API_KEY = key1; 
+// ─── ScrapeOps Ayarlari (opsiyonel) ──────────────────────────
+export const SCRAPEOPS_API_KEY =
+  process.env.SCRAPEOPS_API_KEY ||
+  process.env.SCRAPEOPS_API_KEY_1 ||
+  process.env.SCRAPEOPS_API_KEY_2 ||
+  '';
 export const MAX_CREDITS_PER_RUN = 300; // Güvenlik limiti
+const USE_SCRAPEDO_PROXY = (process.env.USE_SCRAPEDO_PROXY || 'false').toLowerCase() === 'true';
 
-if (!SCRAPEOPS_API_KEY) {
+if (USE_SCRAPEDO_PROXY && !SCRAPEOPS_API_KEY) {
   console.log('❌ SCRAPEOPS API KEY EKSİK!');
   process.exit(1);
 }
@@ -30,9 +33,10 @@ export const TELEGRAM_CHAT_ID =
   '';
 
 // ─── AI ──────────────────────────────────────────────────────
-export const AI_PROVIDER = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
+export const AI_PROVIDER = (process.env.AI_PROVIDER_SECRET || process.env.AI_PROVIDER || 'gemini').toLowerCase();
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+export const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-flash-1.5';
 export const AI_CHUNK_SIZE = 100;
 export const AI_DELAY_BETWEEN_CHUNKS_MS = 2000;
 export const AI_TOP_RESULTS = 5;

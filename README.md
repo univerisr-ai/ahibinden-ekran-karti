@@ -121,7 +121,12 @@ GitHub'da `Settings > Secrets and variables > Actions` altina sunlari ekleyin:
 - `SAHIBINDEN_COOKIES`
 - `TELEGRAM_BOT_TOKEN_1` veya `TELEGRAM_BOT_TOKEN_2`
 - `TELEGRAM_USER_ID` (alternatif: `TELEGRAM_CHAT_ID`)
-- (opsiyonel) `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `AI_PROVIDER`
+- (opsiyonel) `GEMINI_API_KEY`, `OPENROUTER_API_KEY`
+
+GitHub Variables (opsiyonel):
+
+- `AI_PROVIDER` (ornek: `openrouter` veya `gemini`)
+- `OPENROUTER_MODEL` (ornek: `anthropic/claude-3.5-sonnet`)
 
 ### SAHIBINDEN_COOKIES formati
 
@@ -176,8 +181,6 @@ Repo kokune `cookies.json` koyarsaniz, `SAHIBINDEN_COOKIES` yokken lokalde otoma
 | `EXPECTED_TIMEZONE` | Beklenen timezone (or. Europe/Istanbul) |
 | `EXPECTED_LOCALE` | Beklenen locale (or. tr-TR) |
 | `EXPECTED_PLATFORM` | Platform substring kontrolu (or. win32) |
-
-Bu turda `SCRAPEOPS_API_KEY` migration'i kapsam disidir ve mevcut duzende birakilmistir.
 
 ### Runtime profil kontrolu (fingerprint diagnostigi)
 

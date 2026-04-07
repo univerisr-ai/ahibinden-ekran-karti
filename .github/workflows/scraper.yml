@@ -91,7 +91,7 @@ jobs:
         if: steps.run_policy.outputs.should_run == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
 
       - name: 🐍 Python Kurulumu
         if: steps.run_policy.outputs.should_run == 'true'
@@ -141,22 +141,28 @@ jobs:
         if: steps.run_policy.outputs.should_run == 'true'
         env:
           USE_WARP_PROXY: 'true'
-          HEADLESS: 'true'
+          HEADLESS: 'false'
           CHALLENGE_WAIT_MS: '300000'
           REQUIRE_SAHIBINDEN_COOKIES: 'true'
+          BROWSER_LOCALE: 'tr-TR'
+          BROWSER_TIMEZONE: 'Europe/Istanbul'
+          BROWSER_PLATFORM: 'Win32'
+          EXPECTED_LOCALE: 'tr-TR'
+          EXPECTED_TIMEZONE: 'Europe/Istanbul'
+          EXPECTED_PLATFORM: 'win'
 
           # ── Cookie bootstrap (GitHub Secret) ────────────────
           SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
 
-          # ── Proxy (ScrapeOps) ──────────────────────────────────
-          SCRAPEOPS_API_KEY: '8fa66633-b47e-4c61-a9cb-38b1463aff58'
-
           # ── Telegram ───────────────────────────────────────
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN_1 || secrets.TELEGRAM_BOT_TOKEN_2 }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_USER_ID || secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
+          TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
+          TELEGRAM_USER_ID: ${{ secrets.TELEGRAM_USER_ID }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
           # ── AI (Gemini / OpenRouter) ────────────────────────
-          AI_PROVIDER: ${{ secrets.AI_PROVIDER || 'gemini' }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER }}
+          OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 

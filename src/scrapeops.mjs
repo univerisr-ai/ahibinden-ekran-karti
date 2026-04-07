@@ -34,6 +34,17 @@ const EXPECTED_TIMEZONE = String(process.env.EXPECTED_TIMEZONE || '').trim();
 const EXPECTED_LOCALE = String(process.env.EXPECTED_LOCALE || '').trim();
 const EXPECTED_PLATFORM = String(process.env.EXPECTED_PLATFORM || '').trim().toLowerCase();
 
+const BROWSER_LOCALE = String(process.env.BROWSER_LOCALE || EXPECTED_LOCALE || 'tr-TR').trim() || 'tr-TR';
+const BROWSER_TIMEZONE =
+  String(process.env.BROWSER_TIMEZONE || EXPECTED_TIMEZONE || 'Europe/Istanbul').trim() ||
+  'Europe/Istanbul';
+const BROWSER_USER_AGENT =
+  String(
+    process.env.BROWSER_USER_AGENT ||
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  ).trim();
+const BROWSER_PLATFORM = String(process.env.BROWSER_PLATFORM || 'Win32').trim() || 'Win32';
+
 const USE_WARP_PROXY = (process.env.USE_WARP_PROXY || 'false').toLowerCase() === 'true';
 
 const USE_SCRAPEDO_PROXY = (process.env.USE_SCRAPEDO_PROXY || 'false').toLowerCase() === 'true';
@@ -1372,6 +1383,7 @@ async function ensureBrowser() {
       '--disable-blink-features=AutomationControlled',
       '--disable-infobars',
       '--no-sandbox',
+      `--lang=${BROWSER_LOCALE}`,
     ];
     const launchEnv = { ...process.env };
 
@@ -1411,6 +1423,9 @@ async function ensureBrowser() {
     context = await browser.newContext({
       ignoreHTTPSErrors: true,
       viewport: { width: 1366, height: 900 },
+      locale: BROWSER_LOCALE,
+      timezoneId: BROWSER_TIMEZONE,
+      userAgent: BROWSER_USER_AGENT,
     });
 
     const cookieBundle = loadSahibindenCookies();
@@ -1440,9 +1455,17 @@ async function ensureBrowser() {
       console.log('  ⚠️ Cookie payload bulundu ama kullanilabilir cookie yok.');
     }
 
-    await context.addInitScript(() => {
+    await context.addInitScript(({ browserLocale, browserPlatform }) => {
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
       window.chrome = { runtime: {} };
+      Object.defineProperty(navigator, 'language', { get: () => browserLocale });
+      Object.defineProperty(navigator, 'languages', {
+        get: () => [browserLocale, 'tr', 'en-US', 'en'],
+      });
+      Object.defineProperty(navigator, 'platform', { get: () => browserPlatform });
+    }, {
+      browserLocale: BROWSER_LOCALE,
+      browserPlatform: BROWSER_PLATFORM,
     });
 
     page = await context.newPage();
