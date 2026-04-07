@@ -388,24 +388,38 @@ export async function saveChallengeProofScreenshot(reason = '') {
 function isChallengePage(html = '', currentUrl = '') {
   const h = String(html || '').toLowerCase();
   const u = String(currentUrl || '').toLowerCase();
-  return (
-    u.includes('/cs/hloading') ||
-    u.includes('/cs/tloading') ||
+
+  const onChallengePath = u.includes('/cs/hloading') || u.includes('/cs/tloading');
+  const hasStrongChallengeText =
     h.includes('baglantiniz kontrol ediliyor') ||
     h.includes('ba\u011flant\u0131n\u0131z kontrol ediliyor') ||
     h.includes('tarayicinizi kontrol ediyoruz') ||
     h.includes('tarayıcınızı kontrol ediyoruz') ||
-    h.includes('devam et butonuna') ||
-    h.includes('devam et') ||
-    h.includes('basili tutun') ||
-    h.includes('bas\u0131l\u0131 tutun') ||
     h.includes('guvenlik dogrulamasi gerceklestirme') ||
     h.includes('güvenlik doğrulaması gerçekleştirme') ||
     h.includes('gercek kisi oldugunuzu dogrulayin') ||
     h.includes('gerçek kişi olduğunuzu doğrulayın') ||
     h.includes('just a moment') ||
     h.includes('challenge-platform') ||
-    h.includes('cf-chl')
+    h.includes('cf-chl');
+
+  // "Devam Et" metni tek başına normal sayfalarda da geçebilir.
+  // Bu yüzden sadece challenge widget/akış işaretleriyle birlikteyken dikkate alınır.
+  const hasGenericContinueHint =
+    h.includes('devam et butonuna') ||
+    h.includes('basili tutun') ||
+    h.includes('bas\u0131l\u0131 tutun');
+  const hasChallengeWidgetHint =
+    h.includes('cf-turnstile') ||
+    h.includes('turnstile') ||
+    h.includes('btn-continue') ||
+    h.includes('cf_chl') ||
+    h.includes('challenge-platform');
+
+  return (
+    onChallengePath ||
+    hasStrongChallengeText ||
+    (hasGenericContinueHint && hasChallengeWidgetHint)
   );
 }
 
@@ -429,12 +443,20 @@ function isAuthRequiredPage(html = '', currentUrl = '') {
 function isTLoadingPage(html = '', currentUrl = '') {
   const h = String(html || '').toLowerCase();
   const u = String(currentUrl || '').toLowerCase();
-  return (
-    u.includes('/cs/tloading') ||
+
+  const onTLoadingPath = u.includes('/cs/tloading');
+  const hasTLoadingText =
     h.includes('tarayicinizi kontrol ediyoruz') ||
     h.includes('tarayıcınızı kontrol ediyoruz') ||
-    h.includes('devam et butonuna') ||
-    h.includes('devam et')
+    h.includes('devam et butonuna');
+  const hasTLoadingWidget =
+    h.includes('btn-continue') ||
+    h.includes('cf-turnstile') ||
+    h.includes('turnstile');
+
+  return (
+    onTLoadingPath ||
+    (hasTLoadingText && hasTLoadingWidget)
   );
 }
 
@@ -1353,6 +1375,15 @@ async function waitForChallengeSolve(maxWaitMs = CHALLENGE_WAIT_MS) {
     finalUrl = page && !page.isClosed() ? page.url() : '';
   } catch (_) {
     // Sayfa kapanmış olabilir
+  }
+
+  // Timeout anında challenge'dan çıkılmış ama son kontrolde kaçmış olabilir.
+  if (finalHtml && !isChallengePage(finalHtml, finalUrl)) {
+    return {
+      solved: true,
+      html: finalHtml,
+      url: finalUrl,
+    };
   }
 
   console.log(

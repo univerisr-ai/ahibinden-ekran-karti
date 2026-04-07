@@ -19,6 +19,51 @@ import { evaluateAllListings, selectTopOpportunities, fallbackSelection } from '
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+async function sendTelegramChunk(chunk, useMarkdown = true) {
+  const payload = {
+    chat_id: TELEGRAM_CHAT_ID,
+    text: chunk,
+    disable_web_page_preview: true,
+  };
+
+  if (useMarkdown) {
+    payload.parse_mode = 'Markdown';
+  }
+
+  const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+
+    // Markdown parse hatalarında düz metin fallback ile rapor kaybını engelle.
+    if (useMarkdown && response.status === 400 && /can't parse entities/i.test(errText)) {
+      const plainResponse = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: TELEGRAM_CHAT_ID,
+          text: chunk,
+          disable_web_page_preview: true,
+        }),
+      });
+
+      if (!plainResponse.ok) {
+        const plainErrText = await plainResponse.text();
+        throw new Error(`Telegram API Error: ${plainResponse.status} - ${plainErrText}`);
+      }
+
+      console.log('  ℹ️ Telegram Markdown parse hatasi: düz metin fallback kullanildi.');
+      return;
+    }
+
+    throw new Error(`Telegram API Error: ${response.status} - ${errText}`);
+  }
+}
+
 // ─── Telegram ────────────────────────────────────────────────
 async function sendTelegram(text) {
   if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) {
@@ -33,20 +78,7 @@ async function sendTelegram(text) {
       remaining = remaining.substring(4000);
     }
     for (const chunk of chunks) {
-      const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: TELEGRAM_CHAT_ID,
-          text: chunk,
-          parse_mode: 'Markdown',
-          disable_web_page_preview: true,
-        }),
-      });
-      if (!response.ok) {
-         const errText = await response.text();
-         throw new Error(`Telegram API Error: ${response.status} - ${errText}`);
-      }
+      await sendTelegramChunk(chunk, true);
       await sleep(500);
     }
     console.log('  ✅ Telegram raporu gönderildi!');
