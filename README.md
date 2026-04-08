@@ -80,9 +80,9 @@ GitHub'da `Settings > Secrets and variables > Actions` icine sunlari ekle:
 
 - `TELEGRAM_BOT_TOKEN_1`
 - `TELEGRAM_BOT_TOKEN_2`
-- `TELEGRAM_USER_ID`
+- `TELEGRAM_CHAT_ID`
 
-`TELEGRAM_CHAT_ID` eski ad olarak desteklenir, ama yeni kurulumda `TELEGRAM_USER_ID` kullanmak daha dogrudur.
+`TELEGRAM_USER_ID` sadece fallback olarak desteklenir. Grup icine gonderim icin `TELEGRAM_CHAT_ID` kullanin.
 
 ### Kullanimi
 
@@ -120,7 +120,8 @@ GitHub'da `Settings > Secrets and variables > Actions` altina sunlari ekleyin:
 
 - `SAHIBINDEN_COOKIES`
 - `TELEGRAM_BOT_TOKEN_1` veya `TELEGRAM_BOT_TOKEN_2`
-- `TELEGRAM_USER_ID` (alternatif: `TELEGRAM_CHAT_ID`)
+- `TELEGRAM_CHAT_ID` (grup icin onerilen)
+- `TELEGRAM_USER_ID` (opsiyonel fallback)
 - (opsiyonel) `GEMINI_API_KEY`, `OPENROUTER_API_KEY`
 
 GitHub Variables (opsiyonel):

@@ -28,8 +28,8 @@ export const TELEGRAM_TOKEN =
   process.env.TELEGRAM_BOT_TOKEN_2 ||
   '';
 export const TELEGRAM_CHAT_ID =
-  process.env.TELEGRAM_USER_ID ||
   process.env.TELEGRAM_CHAT_ID ||
+  process.env.TELEGRAM_USER_ID ||
   '';
 
 // ─── AI ──────────────────────────────────────────────────────

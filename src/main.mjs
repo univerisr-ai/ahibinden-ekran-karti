@@ -18,6 +18,7 @@ import { parseAllPages, deduplicateListings, filterInvalidListings } from './par
 import { evaluateAllListings, selectTopOpportunities, fallbackSelection } from './ai_evaluator.mjs';
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+let telegramTargetModeLogged = false;
 
 function uniqueNonEmpty(values) {
   return Array.from(new Set(values.map((v) => String(v || '').trim()).filter(Boolean)));
@@ -38,13 +39,30 @@ function getTelegramTargets() {
     process.env.TELEGRAM_BOT_TOKEN_2,
   ]);
 
-  const chatIds = uniqueNonEmpty([
+  const groupChatIds = uniqueNonEmpty([
     process.env.TELEGRAM_CHAT_ID,
-    TELEGRAM_CHAT_ID,
-    process.env.TELEGRAM_USER_ID,
     process.env.TELEGRAM_CHAT_ID_1,
     process.env.TELEGRAM_CHAT_ID_2,
   ]);
+
+  const fallbackUserChatIds = uniqueNonEmpty([
+    process.env.TELEGRAM_USER_ID,
+    TELEGRAM_CHAT_ID,
+  ]);
+
+  const chatIds = groupChatIds.length > 0 ? groupChatIds : fallbackUserChatIds;
+
+  if (!telegramTargetModeLogged) {
+    if (groupChatIds.length > 0) {
+      console.log(`  ℹ️ Telegram hedef modu: group-first (${groupChatIds.length} chat).`);
+      if (String(process.env.TELEGRAM_USER_ID || '').trim()) {
+        console.log('  ℹ️ TELEGRAM_CHAT_ID tanimli oldugu icin TELEGRAM_USER_ID bu kosuda yoksayildi.');
+      }
+    } else {
+      console.log('  ⚠️ TELEGRAM_CHAT_ID bulunamadi, TELEGRAM_USER_ID fallback kullaniliyor.');
+    }
+    telegramTargetModeLogged = true;
+  }
 
   return { tokens, chatIds };
 }
