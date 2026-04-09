@@ -24,6 +24,28 @@ function uniqueNonEmpty(values) {
   return Array.from(new Set(values.map((v) => String(v || '').trim()).filter(Boolean)));
 }
 
+function normalizeTelegramChatId(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^['"`]+/, '')
+    .replace(/['"`]+$/, '')
+    .trim();
+}
+
+function expandTelegramChatIds(values) {
+  const expanded = [];
+  for (const value of values) {
+    const cleaned = normalizeTelegramChatId(value);
+    if (!cleaned) continue;
+
+    for (const part of cleaned.split(/[\n,;\s]+/)) {
+      const normalized = normalizeTelegramChatId(part);
+      if (normalized) expanded.push(normalized);
+    }
+  }
+  return uniqueNonEmpty(expanded);
+}
+
 function maskChatId(chatId) {
   const s = String(chatId || '').trim();
   if (!s) return 'n/a';
@@ -32,7 +54,7 @@ function maskChatId(chatId) {
 }
 
 function isGroupChatId(chatId) {
-  return /^-\d+$/.test(String(chatId || '').trim());
+  return /^-\d+$/.test(normalizeTelegramChatId(chatId));
 }
 
 function getTelegramTargets() {
@@ -43,7 +65,7 @@ function getTelegramTargets() {
     process.env.TELEGRAM_BOT_TOKEN_2,
   ]);
 
-  const rawChatIds = uniqueNonEmpty([
+  const rawChatIds = expandTelegramChatIds([
     process.env.TELEGRAM_CHAT_ID,
     TELEGRAM_CHAT_ID,
     process.env.TELEGRAM_CHAT_ID_1,
@@ -57,12 +79,17 @@ function getTelegramTargets() {
     if (chatIds.length > 0) {
       console.log(`  ℹ️ Telegram hedef modu: group-only (${chatIds.length} chat).`);
       if (skippedNonGroupIds.length > 0) {
+        const sample = skippedNonGroupIds.slice(0, 2).map(maskChatId).join(', ');
         console.log(
-          `  ⚠️ ${skippedNonGroupIds.length} adet grup-disindaki chat id yoksayildi (DM engeli).`,
+          `  ⚠️ ${skippedNonGroupIds.length} adet grup-disindaki chat id yoksayildi (DM engeli). Ornek: ${sample}`,
         );
       }
     } else {
-      console.log('  ⚠️ Gecerli grup TELEGRAM_CHAT_ID bulunamadi. Bot ozele yazmayacak.');
+      if (rawChatIds.length > 0) {
+        console.log('  ⚠️ TELEGRAM_CHAT_ID tanimli ama grup formatina uymuyor. Ornek format: -1001234567890 (tirnak/@ kullanmayin).');
+      } else {
+        console.log('  ⚠️ Gecerli grup TELEGRAM_CHAT_ID bulunamadi. Bot ozele yazmayacak.');
+      }
     }
     telegramTargetModeLogged = true;
   }
@@ -77,7 +104,7 @@ function isCantInitiateConversation(status, errText = '') {
 async function sendTelegramChunk(chunk, useMarkdown = true) {
   const { tokens, chatIds } = getTelegramTargets();
   if (tokens.length === 0 || chatIds.length === 0) {
-    throw new Error('Telegram token/chat ID bulunamadi.');
+    throw new Error('Telegram token/gecerli grup chat ID bulunamadi.');
   }
 
   const errors = [];
@@ -150,7 +177,8 @@ async function sendTelegramChunk(chunk, useMarkdown = true) {
 
 // ─── Telegram ────────────────────────────────────────────────
 async function sendTelegram(text) {
-  if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) {
+  const { tokens, chatIds } = getTelegramTargets();
+  if (tokens.length === 0 || chatIds.length === 0) {
     console.log('  ⚠️ Telegram token/chat ID tanımlı değil.');
     return;
   }
