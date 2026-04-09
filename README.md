@@ -120,8 +120,7 @@ GitHub'da `Settings > Secrets and variables > Actions` altina sunlari ekleyin:
 
 - `SAHIBINDEN_COOKIES`
 - `TELEGRAM_BOT_TOKEN_1` veya `TELEGRAM_BOT_TOKEN_2`
-- `TELEGRAM_CHAT_ID` (grup icin onerilen)
-- `TELEGRAM_USER_ID` (opsiyonel fallback)
+- `TELEGRAM_CHAT_ID` (grup icin zorunlu, `-100...` formatinda)
 - (opsiyonel) `GEMINI_API_KEY`, `OPENROUTER_API_KEY`
 
 GitHub Variables (opsiyonel):

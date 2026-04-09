@@ -31,6 +31,10 @@ function maskChatId(chatId) {
   return `${s.slice(0, 2)}***${s.slice(-2)}`;
 }
 
+function isGroupChatId(chatId) {
+  return /^-\d+$/.test(String(chatId || '').trim());
+}
+
 function getTelegramTargets() {
   const tokens = uniqueNonEmpty([
     TELEGRAM_TOKEN,
@@ -39,27 +43,26 @@ function getTelegramTargets() {
     process.env.TELEGRAM_BOT_TOKEN_2,
   ]);
 
-  const groupChatIds = uniqueNonEmpty([
+  const rawChatIds = uniqueNonEmpty([
     process.env.TELEGRAM_CHAT_ID,
+    TELEGRAM_CHAT_ID,
     process.env.TELEGRAM_CHAT_ID_1,
     process.env.TELEGRAM_CHAT_ID_2,
   ]);
 
-  const fallbackUserChatIds = uniqueNonEmpty([
-    process.env.TELEGRAM_USER_ID,
-    TELEGRAM_CHAT_ID,
-  ]);
-
-  const chatIds = groupChatIds.length > 0 ? groupChatIds : fallbackUserChatIds;
+  const chatIds = rawChatIds.filter((x) => isGroupChatId(x));
+  const skippedNonGroupIds = rawChatIds.filter((x) => !isGroupChatId(x));
 
   if (!telegramTargetModeLogged) {
-    if (groupChatIds.length > 0) {
-      console.log(`  ℹ️ Telegram hedef modu: group-first (${groupChatIds.length} chat).`);
-      if (String(process.env.TELEGRAM_USER_ID || '').trim()) {
-        console.log('  ℹ️ TELEGRAM_CHAT_ID tanimli oldugu icin TELEGRAM_USER_ID bu kosuda yoksayildi.');
+    if (chatIds.length > 0) {
+      console.log(`  ℹ️ Telegram hedef modu: group-only (${chatIds.length} chat).`);
+      if (skippedNonGroupIds.length > 0) {
+        console.log(
+          `  ⚠️ ${skippedNonGroupIds.length} adet grup-disindaki chat id yoksayildi (DM engeli).`,
+        );
       }
     } else {
-      console.log('  ⚠️ TELEGRAM_CHAT_ID bulunamadi, TELEGRAM_USER_ID fallback kullaniliyor.');
+      console.log('  ⚠️ Gecerli grup TELEGRAM_CHAT_ID bulunamadi. Bot ozele yazmayacak.');
     }
     telegramTargetModeLogged = true;
   }
