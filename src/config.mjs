@@ -29,7 +29,7 @@ export const TELEGRAM_TOKEN =
   '';
 export const TELEGRAM_CHAT_ID =
   process.env.TELEGRAM_CHAT_ID ||
-  '';
+  '-5083436032';
 
 // ─── AI ──────────────────────────────────────────────────────
 export const AI_PROVIDER = (process.env.AI_PROVIDER_SECRET || process.env.AI_PROVIDER || 'gemini').toLowerCase();

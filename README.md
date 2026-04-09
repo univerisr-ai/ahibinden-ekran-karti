@@ -82,7 +82,7 @@ GitHub'da `Settings > Secrets and variables > Actions` icine sunlari ekle:
 - `TELEGRAM_BOT_TOKEN_2`
 - `TELEGRAM_CHAT_ID`
 
-`TELEGRAM_USER_ID` sadece fallback olarak desteklenir. Grup icine gonderim icin `TELEGRAM_CHAT_ID` kullanin.
+Bu projede DM fallback kapalidir. Grup icine gonderim icin `TELEGRAM_CHAT_ID` kullanin.
 
 ### Kullanimi
 
