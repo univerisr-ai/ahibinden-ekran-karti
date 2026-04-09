@@ -25,10 +25,14 @@ function uniqueNonEmpty(values) {
 }
 
 function normalizeTelegramChatId(value) {
+  // Secret'ta Unicode eksi veya gorunmez karakterler olabiliyor; normalize et.
   return String(value || '')
     .trim()
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+    .replace(/[\u2010-\u2015\u2212\uFE63\uFF0D]/g, '-')
     .replace(/^['"`]+/, '')
     .replace(/['"`]+$/, '')
+    .replace(/^chat_id\s*[:=]\s*/i, '')
     .trim();
 }
 
