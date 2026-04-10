@@ -156,6 +156,12 @@ jobs:
           TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
+          # ── Analyzer relay (bot-only tetikleme) ────────────
+          ANALYZER_DISPATCH_TOKEN: ${{ secrets.ANALYZER_DISPATCH_TOKEN }}
+          ANALYZER_REPO_OWNER: ${{ vars.ANALYZER_REPO_OWNER }}
+          ANALYZER_REPO_NAME: ${{ vars.ANALYZER_REPO_NAME }}
+          ANALYZER_DISPATCH_EVENT: ${{ vars.ANALYZER_DISPATCH_EVENT }}
+
           # ── AI (Gemini / OpenRouter) ────────────────────────
           AI_PROVIDER: ${{ vars.AI_PROVIDER }}
           OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}

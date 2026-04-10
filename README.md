@@ -121,12 +121,18 @@ GitHub'da `Settings > Secrets and variables > Actions` altina sunlari ekleyin:
 - `SAHIBINDEN_COOKIES`
 - `TELEGRAM_BOT_TOKEN_1` veya `TELEGRAM_BOT_TOKEN_2`
 - `TELEGRAM_CHAT_ID` (grup icin zorunlu, `-100...` veya `-...` formatinda; degeri tirnaksiz girin)
+- (opsiyonel, bot-only relay) `ANALYZER_DISPATCH_TOKEN` (2elAnaliz reposuna `repository_dispatch` gonderebilen token)
 - (opsiyonel) `GEMINI_API_KEY`, `OPENROUTER_API_KEY`
 
 GitHub Variables (opsiyonel):
 
 - `AI_PROVIDER` (ornek: `openrouter` veya `gemini`)
 - `OPENROUTER_MODEL` (ornek: `anthropic/claude-3.5-sonnet`)
+- (opsiyonel, relay) `ANALYZER_REPO_OWNER` (varsayilan: `univerisr-ai`)
+- (opsiyonel, relay) `ANALYZER_REPO_NAME` (varsayilan: `2elAnaliz`)
+- (opsiyonel, relay) `ANALYZER_DISPATCH_EVENT` (varsayilan: `telegram_file_ready`)
+
+Not: Telegram'da botlar diger bot mesajlarini update olarak goremez. Bu nedenle bot-only akista scraper, dosyayi Telegram'a gonderdikten sonra `file_id` ile analyzer workflow'unu `repository_dispatch` uzerinden tetikler.
 
 ### SAHIBINDEN_COOKIES formati
 
@@ -176,6 +182,10 @@ Repo kokune `cookies.json` koyarsaniz, `SAHIBINDEN_COOKIES` yokken lokalde otoma
 | `CUSTOM_MIN_PRICE` | Workflow dispatch min fiyat |
 | `CUSTOM_MAX_PRICE` | Workflow dispatch max fiyat |
 | `BYPASS_AI` | AI analizini atla/aktif et |
+| `ANALYZER_DISPATCH_TOKEN` | 2elAnaliz reposuna `repository_dispatch` atmak icin PAT / token |
+| `ANALYZER_REPO_OWNER` | Analyzer repo owner (varsayilan `univerisr-ai`) |
+| `ANALYZER_REPO_NAME` | Analyzer repo adi (varsayilan `2elAnaliz`) |
+| `ANALYZER_DISPATCH_EVENT` | Repository dispatch event tipi (varsayilan `telegram_file_ready`) |
 | `FINGERPRINT_DIAGNOSTIC` | Runtime profil ozeti ve imza loglarini ac/kapat |
 | `FINGERPRINT_STRICT_MODE` | Profil policy mismatch durumunda fail-fast |
 | `EXPECTED_TIMEZONE` | Beklenen timezone (or. Europe/Istanbul) |

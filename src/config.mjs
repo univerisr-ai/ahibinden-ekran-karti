@@ -31,6 +31,11 @@ export const TELEGRAM_CHAT_ID =
   process.env.TELEGRAM_CHAT_ID ||
   '-5083436032';
 
+export const ANALYZER_DISPATCH_TOKEN = process.env.ANALYZER_DISPATCH_TOKEN || '';
+export const ANALYZER_REPO_OWNER = process.env.ANALYZER_REPO_OWNER || 'univerisr-ai';
+export const ANALYZER_REPO_NAME = process.env.ANALYZER_REPO_NAME || '2elAnaliz';
+export const ANALYZER_DISPATCH_EVENT = process.env.ANALYZER_DISPATCH_EVENT || 'telegram_file_ready';
+
 // ─── AI ──────────────────────────────────────────────────────
 export const AI_PROVIDER = (process.env.AI_PROVIDER_SECRET || process.env.AI_PROVIDER || 'gemini').toLowerCase();
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';

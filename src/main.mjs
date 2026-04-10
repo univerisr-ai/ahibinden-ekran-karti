@@ -6,6 +6,10 @@ import {
   SESSION_NUMBER,
   TELEGRAM_TOKEN,
   TELEGRAM_CHAT_ID,
+  ANALYZER_DISPATCH_TOKEN,
+  ANALYZER_REPO_OWNER,
+  ANALYZER_REPO_NAME,
+  ANALYZER_DISPATCH_EVENT,
   CONCURRENCY_LIMIT,
   BYPASS_AI,
   AI_PROVIDER,
@@ -103,6 +107,60 @@ function getTelegramTargets() {
 
 function isCantInitiateConversation(status, errText = '') {
   return status === 403 && /can't initiate conversation with a user/i.test(String(errText));
+}
+
+async function triggerAnalyzerDispatch(sentMessage, dispatchMeta = {}) {
+  if (!ANALYZER_DISPATCH_TOKEN) {
+    return;
+  }
+
+  const owner = String(ANALYZER_REPO_OWNER || '').trim();
+  const repo = String(ANALYZER_REPO_NAME || '').trim();
+  if (!owner || !repo) {
+    console.log('  ⚠️ Analyzer dispatch atlandi: hedef repo ayari eksik.');
+    return;
+  }
+
+  const doc = sentMessage?.document;
+  const fileId = String(doc?.file_id || '').trim();
+  if (!fileId) {
+    console.log('  ⚠️ Analyzer dispatch atlandi: Telegram file_id bulunamadi.');
+    return;
+  }
+
+  const eventType = String(ANALYZER_DISPATCH_EVENT || 'telegram_file_ready').trim() || 'telegram_file_ready';
+  const chatId = sentMessage?.chat?.id != null ? String(sentMessage.chat.id) : '';
+  const payload = {
+    event_type: eventType,
+    client_payload: {
+      file_id: fileId,
+      file_name: String(doc?.file_name || dispatchMeta?.fileName || 'output.json'),
+      chat_id: chatId,
+      token_hint: String(dispatchMeta?.tokenHint || '').trim(),
+      session_number: String(SESSION_NUMBER),
+      source: 'sahibinden-gpu-scraper',
+      total_clean: Number.isFinite(Number(dispatchMeta?.totalClean)) ? Number(dispatchMeta.totalClean) : 0,
+    },
+  };
+
+  const endpoint = `https://api.github.com/repos/${owner}/${repo}/dispatches`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${ANALYZER_DISPATCH_TOKEN}`,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`dispatch failed (${response.status}): ${errText}`);
+  }
+
+  console.log(`  ✅ Analyzer dispatch tetiklendi (${owner}/${repo}, event=${eventType}).`);
 }
 
 async function sendTelegramChunk(chunk, useMarkdown = true) {
@@ -260,7 +318,7 @@ async function sendTelegramPhoto(photoPath, caption = "Ekran Görüntüsü / Scr
   }
 }
 
-async function sendTelegramDocument(filePath, caption = 'Detayli tarama dosyasi') {
+async function sendTelegramDocument(filePath, caption = 'Detayli tarama dosyasi', dispatchMeta = {}) {
   const { tokens, chatIds } = getTelegramTargets();
   if (tokens.length === 0 || chatIds.length === 0) {
     console.log('  ⚠️ Telegram token/chat ID tanımlı değil, dosya gönderilmiyor.');
@@ -303,12 +361,31 @@ async function sendTelegramDocument(filePath, caption = 'Detayli tarama dosyasi'
           body: formData,
         });
 
-        if (response.ok) {
+        const rawBody = await response.text();
+        let apiResult = null;
+        try {
+          apiResult = rawBody ? JSON.parse(rawBody) : null;
+        } catch {
+          apiResult = null;
+        }
+
+        if (response.ok && apiResult?.ok) {
           console.log('  ✅ Telegram dosya gönderimi başarılı!');
+
+          try {
+            await triggerAnalyzerDispatch(apiResult.result, {
+              ...dispatchMeta,
+              fileName,
+              tokenHint: String(token).slice(-8),
+            });
+          } catch (dispatchErr) {
+            console.log(`  ⚠️ Analyzer dispatch hatasi: ${dispatchErr.message}`);
+          }
+
           return;
         }
 
-        const errText = await response.text();
+        const errText = rawBody || JSON.stringify(apiResult || {});
         if (isCantInitiateConversation(response.status, errText)) {
           console.log(`  ⚠️ Telegram hedefi reddetti (${maskChatId(chatId)}), alternatif hedef deneniyor.`);
         }
@@ -528,6 +605,7 @@ async function main() {
   await sendTelegramDocument(
     outputPath,
     `📎 Detayli tarama dosyasi\nSession: #${SESSION_NUMBER}\nToplam: ${totalClean.toLocaleString('tr')} ilan`,
+    { totalClean },
   );
 
   if (totalClean === 0) {
