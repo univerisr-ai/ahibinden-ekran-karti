@@ -484,6 +484,7 @@ async function main() {
     const safeCode = String(initCode).replace(/_/g, '-');
     console.error(`  ${msg} [${initCode}]`);
     await sendTelegram(`${msg}\nKod: ${safeCode}`);
+    await sendTelegramPhoto('cf_proof.png', `📸 Hata Ekranı: ${msg}`);
     await closeBrowser();
     process.exit(1);
   }
