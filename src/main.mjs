@@ -140,7 +140,6 @@ async function triggerAnalyzerDispatch(sentMessage, dispatchMeta = {}) {
       session_number: String(SESSION_NUMBER),
       source: 'sahibinden-gpu-scraper',
       total_clean: Number.isFinite(Number(dispatchMeta?.totalClean)) ? Number(dispatchMeta.totalClean) : 0,
-      is_fallback: !!dispatchMeta?.isFallback,
     },
   };
 
@@ -428,12 +427,10 @@ function buildReport(stats, totalRaw, totalClean, topDeals, elapsedSec) {
     report += `🏆 *EN İYİ ${topDeals.length} FIRSAT*\n\n`;
     topDeals.forEach((deal, i) => {
       const medal = medals[i] || `${i + 1}.`;
-      const statusIcon = deal.is_ai_analyzed ? '✨ [AI ONAYLI]' : '⚠️ [ANALİZ EDİLMEDİ]';
-      report += `${medal} *${deal.baslik || 'İsimsiz'}* ${statusIcon}\n`;
+      report += `${medal} *${deal.baslik || 'İsimsiz'}*\n`;
       report += `   💰 ${deal.fiyat_str || `${deal.fiyat?.toLocaleString('tr')} TL`}\n`;
       if (deal.konum) report += `   📍 ${deal.konum}\n`;
       if (deal.puan) report += `   🤖 AI: ${deal.puan}/100\n`;
-      if (!deal.is_ai_analyzed && deal.aciklama) report += `   📝 Detay: ${deal.aciklama}\n`;
       report += `   🔗 [İlana Git](${deal.url})\n\n`;
     });
   } else {
@@ -605,12 +602,10 @@ async function main() {
   fs.writeFileSync(outputPath, JSON.stringify(outputData, null, 2), 'utf-8');
   console.log(`\n  💾 Sonuçlar: output.json`);
 
-  const isFallbackUsed = topDeals.length > 0 && topDeals.some(d => d.is_ai_analyzed === false);
-
   await sendTelegramDocument(
     outputPath,
-    `📎 Detayli tarama dosyasi\nSession: #${SESSION_NUMBER}\nToplam: ${totalClean.toLocaleString('tr')} ilan\nAI Analiz: ${isFallbackUsed ? '❌ Devre Dışı / Yapılamadı' : '✅ Başarılı'}`,
-    { totalClean, isFallback: isFallbackUsed },
+    `📎 Detayli tarama dosyasi\nSession: #${SESSION_NUMBER}\nToplam: ${totalClean.toLocaleString('tr')} ilan`,
+    { totalClean },
   );
 
   if (totalClean === 0) {
