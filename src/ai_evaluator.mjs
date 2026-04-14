@@ -210,6 +210,7 @@ export async function evaluateAllListings(listings) {
     // Referans verileri geri ekle (AI sadece ID ve puan döndürüyor)
     for (const result of results) {
       const original = listings.find(l => l.ilan_id === result.ilan_id);
+      result.is_ai_analyzed = true;
       if (original) {
         result.url = original.url;
         result.konum = original.konum;
@@ -258,10 +259,11 @@ export function fallbackSelection(listings, topN = AI_TOP_RESULTS) {
       fiyat_str: item.fiyat_str,
       konum: item.konum,
       url: item.url,
-      puan: 50,
+      puan: null,
+      is_ai_analyzed: false,
       gercek_deger_tahmini: null,
       kar_marji_yuzde: null,
-      aciklama: 'AI analizi yapılamadı — fiyat sıralamasına göre seçildi.',
+      aciklama: 'AI analizi yapılamadı (AI ONAYI YOK) — fiyat sıralamasına göre seçildi.',
     }));
 }
 

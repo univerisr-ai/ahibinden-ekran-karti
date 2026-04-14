@@ -140,6 +140,7 @@ async function triggerAnalyzerDispatch(sentMessage, dispatchMeta = {}) {
       session_number: String(SESSION_NUMBER),
       source: 'sahibinden-gpu-scraper',
       total_clean: Number.isFinite(Number(dispatchMeta?.totalClean)) ? Number(dispatchMeta.totalClean) : 0,
+      is_fallback: !!dispatchMeta?.isFallback,
     },
   };
 
@@ -427,7 +428,8 @@ function buildReport(stats, totalRaw, totalClean, topDeals, elapsedSec) {
     report += `🏆 *EN İYİ ${topDeals.length} FIRSAT*\n\n`;
     topDeals.forEach((deal, i) => {
       const medal = medals[i] || `${i + 1}.`;
-      report += `${medal} *${deal.baslik || 'İsimsiz'}*\n`;
+      const statusIcon = deal.is_ai_analyzed ? '✨ [AI ONAYLI]' : '⚠️ [ANALİZ EDİLMEDİ]';
+      report += `${medal} *${deal.baslik || 'İsimsiz'}* ${statusIcon}\n`;
       report += `   💰 ${deal.fiyat_str || `${deal.fiyat?.toLocaleString('tr')} TL`}\n`;
       if (deal.konum) report += `   📍 ${deal.konum}\n`;
       if (deal.puan) report += `   🤖 AI: ${deal.puan}/100\n`;
@@ -538,6 +540,7 @@ async function main() {
 
   // ADIM 5: AI
   let topDeals = [];
+  let isFallback = BYPASS_AI;
   if (allListings.length === 0) {
     console.log('\n  ⚠️ Hiç ilan çekilemedi.');
     await sendTelegram('⚠️ Hiç ilan çekilemedi. Tarama tamamlandı ancak sonuç bulunamadı.');
@@ -551,12 +554,15 @@ async function main() {
       try {
         const aiResults = await evaluateAllListings(allListings);
         topDeals = selectTopOpportunities(aiResults);
+        isFallback = false;
       } catch (err) {
         console.log(`  ❌ AI hatası: ${err.message}`);
         topDeals = fallbackSelection(allListings);
+        isFallback = true;
       }
     } else {
       topDeals = fallbackSelection(allListings);
+      isFallback = true;
     }
   }
 
@@ -603,10 +609,11 @@ async function main() {
   fs.writeFileSync(outputPath, JSON.stringify(outputData, null, 2), 'utf-8');
   console.log(`\n  💾 Sonuçlar: output.json`);
 
+  const aiStatusLabel = isFallback ? '❌ Devre Dışı / Yapılamadı' : '✅ Başarılı';
   await sendTelegramDocument(
     outputPath,
-    `📎 Detayli tarama dosyasi\nSession: #${SESSION_NUMBER}\nToplam: ${totalClean.toLocaleString('tr')} ilan`,
-    { totalClean },
+    `📎 Detayli tarama dosyasi\nSession: #${SESSION_NUMBER}\nToplam: ${totalClean.toLocaleString('tr')} ilan\nAI Analiz: ${aiStatusLabel}`,
+    { totalClean, isFallback },
   );
 
   if (totalClean === 0) {
