@@ -217,6 +217,7 @@ export async function evaluateAllListings(listings) {
         result.fiyat_str = original.fiyat_str;
         result.baslik = result.baslik || original.baslik;
       }
+      result.is_ai_analyzed = true;
     }
 
     allResults.push(...results);
@@ -258,10 +259,11 @@ export function fallbackSelection(listings, topN = AI_TOP_RESULTS) {
       fiyat_str: item.fiyat_str,
       konum: item.konum,
       url: item.url,
-      puan: 50,
+      puan: null,
       gercek_deger_tahmini: null,
       kar_marji_yuzde: null,
-      aciklama: 'AI analizi yapılamadı — fiyat sıralamasına göre seçildi.',
+      aciklama: 'AI onayı yok — fiyat ucuzluğuna göre listeye eklendi.',
+      is_ai_analyzed: false,
     }));
 }
 
