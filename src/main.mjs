@@ -6,6 +6,7 @@ import {
   SESSION_NUMBER,
   TELEGRAM_TOKEN,
   TELEGRAM_CHAT_ID,
+  ENABLE_TELEGRAM,
   ANALYZER_DISPATCH_TOKEN,
   ANALYZER_REPO_OWNER,
   ANALYZER_REPO_NAME,
@@ -23,6 +24,7 @@ import { evaluateAllListings, selectTopOpportunities, fallbackSelection } from '
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 let telegramTargetModeLogged = false;
+let telegramDisabledModeLogged = false;
 
 function uniqueNonEmpty(values) {
   return Array.from(new Set(values.map((v) => String(v || '').trim()).filter(Boolean)));
@@ -109,8 +111,9 @@ function isCantInitiateConversation(status, errText = '') {
   return status === 403 && /can't initiate conversation with a user/i.test(String(errText));
 }
 
-async function triggerAnalyzerDispatch(sentMessage, dispatchMeta = {}) {
+async function triggerAnalyzerDispatch(dispatchMeta = {}) {
   if (!ANALYZER_DISPATCH_TOKEN) {
+    console.log('  ⚠️ Analyzer dispatch atlandi: ANALYZER_DISPATCH_TOKEN tanimli degil.');
     return;
   }
 
@@ -121,24 +124,40 @@ async function triggerAnalyzerDispatch(sentMessage, dispatchMeta = {}) {
     return;
   }
 
-  const doc = sentMessage?.document;
-  const fileId = String(doc?.file_id || '').trim();
-  if (!fileId) {
-    console.log('  ⚠️ Analyzer dispatch atlandi: Telegram file_id bulunamadi.');
-    return;
-  }
-
   const eventType = String(ANALYZER_DISPATCH_EVENT || 'telegram_file_ready').trim() || 'telegram_file_ready';
-  const chatId = sentMessage?.chat?.id != null ? String(sentMessage.chat.id) : '';
+  const sourceStatus = String(dispatchMeta?.sourceStatus || 'ANALIZ_EDILMEDI').trim() || 'ANALIZ_EDILMEDI';
+  const sourceMessage =
+    String(
+      dispatchMeta?.sourceMessage ||
+      'Scraper tamamlandi; veri analiz edilmedi durumunda analyzer servisine gonderildi.',
+    ).trim();
+
   const payload = {
     event_type: eventType,
     client_payload: {
-      file_id: fileId,
-      file_name: String(doc?.file_name || dispatchMeta?.fileName || 'output.json'),
-      chat_id: chatId,
-      token_hint: String(dispatchMeta?.tokenHint || '').trim(),
+      file_name: 'output.json',
+      github_run_id: String(process.env.GITHUB_RUN_ID || ''),
+      source_repository: String(process.env.GITHUB_REPOSITORY || ''),
+      source_run_url:
+        process.env.GITHUB_RUN_ID && process.env.GITHUB_REPOSITORY
+          ? `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+          : '',
+      artifact_name:
+        String(dispatchMeta?.artifactName || '').trim() ||
+        `scraper-results-${String(process.env.GITHUB_RUN_ID || 'local').trim() || 'local'}`,
+      scrape_status: String(dispatchMeta?.scrapeStatus || 'SCRAPE_COMPLETED').trim() || 'SCRAPE_COMPLETED',
+      listing_count: Number.isFinite(Number(dispatchMeta?.listingCount))
+        ? Number(dispatchMeta.listingCount)
+        : 0,
+      started_at: String(dispatchMeta?.startedAt || '').trim(),
+      finished_at: String(dispatchMeta?.finishedAt || '').trim(),
+      pipeline_message: String(dispatchMeta?.pipelineMessage || sourceMessage).trim(),
       session_number: String(SESSION_NUMBER),
       source: 'sahibinden-gpu-scraper',
+      source_status: sourceStatus,
+      source_message: sourceMessage,
+      target_status: 'ANALIZ_EDILECEK',
+      target_message: '2elAnaliz veriyi alip analiz edecek ve Vercel dashboard icin latest-summary.json uretecek.',
       total_clean: Number.isFinite(Number(dispatchMeta?.totalClean)) ? Number(dispatchMeta.totalClean) : 0,
       is_fallback: !!dispatchMeta?.isFallback,
     },
@@ -240,6 +259,14 @@ async function sendTelegramChunk(chunk, useMarkdown = true) {
 
 // ─── Telegram ────────────────────────────────────────────────
 async function sendTelegram(text) {
+  if (!ENABLE_TELEGRAM) {
+    if (!telegramDisabledModeLogged) {
+      console.log('  ℹ️ Telegram bildirimi devre disi (ENABLE_TELEGRAM=false).');
+      telegramDisabledModeLogged = true;
+    }
+    return;
+  }
+
   const { tokens, chatIds } = getTelegramTargets();
   if (tokens.length === 0 || chatIds.length === 0) {
     console.log('  ⚠️ Telegram token/chat ID tanımlı değil.');
@@ -263,6 +290,14 @@ async function sendTelegram(text) {
 }
 
 async function sendTelegramPhoto(photoPath, caption = "Ekran Görüntüsü / Screenshot") {
+  if (!ENABLE_TELEGRAM) {
+    if (!telegramDisabledModeLogged) {
+      console.log('  ℹ️ Telegram bildirimi devre disi (ENABLE_TELEGRAM=false).');
+      telegramDisabledModeLogged = true;
+    }
+    return;
+  }
+
   const { tokens, chatIds } = getTelegramTargets();
   if (tokens.length === 0 || chatIds.length === 0) {
     console.log('  ⚠️ Telegram token/chat ID tanımlı değil, fotoğraf gönderilmiyor.');
@@ -319,7 +354,15 @@ async function sendTelegramPhoto(photoPath, caption = "Ekran Görüntüsü / Scr
   }
 }
 
-async function sendTelegramDocument(filePath, caption = 'Detayli tarama dosyasi', dispatchMeta = {}) {
+async function sendTelegramDocument(filePath, caption = 'Detayli tarama dosyasi') {
+  if (!ENABLE_TELEGRAM) {
+    if (!telegramDisabledModeLogged) {
+      console.log('  ℹ️ Telegram bildirimi devre disi (ENABLE_TELEGRAM=false).');
+      telegramDisabledModeLogged = true;
+    }
+    return;
+  }
+
   const { tokens, chatIds } = getTelegramTargets();
   if (tokens.length === 0 || chatIds.length === 0) {
     console.log('  ⚠️ Telegram token/chat ID tanımlı değil, dosya gönderilmiyor.');
@@ -372,17 +415,6 @@ async function sendTelegramDocument(filePath, caption = 'Detayli tarama dosyasi'
 
         if (response.ok && apiResult?.ok) {
           console.log('  ✅ Telegram dosya gönderimi başarılı!');
-
-          try {
-            await triggerAnalyzerDispatch(apiResult.result, {
-              ...dispatchMeta,
-              fileName,
-              tokenHint: String(token).slice(-8),
-            });
-          } catch (dispatchErr) {
-            console.log(`  ⚠️ Analyzer dispatch hatasi: ${dispatchErr.message}`);
-          }
-
           return;
         }
 
@@ -446,6 +478,7 @@ function buildReport(stats, totalRaw, totalClean, topDeals, elapsedSec) {
 // ─── ANA ─────────────────────────────────────────────────────
 async function main() {
   const startTime = Date.now();
+  const startTimeIso = new Date().toISOString();
 
   console.log('');
   console.log('  ═══════════════════════════════════════════════════════');
@@ -604,16 +637,82 @@ async function main() {
     topDeals,
     allListings,
     elapsedSeconds: elapsedSec,
+    runMeta: {
+      repository: String(process.env.GITHUB_REPOSITORY || ''),
+      githubRunId: String(process.env.GITHUB_RUN_ID || ''),
+      githubRunUrl:
+        process.env.GITHUB_RUN_ID && process.env.GITHUB_REPOSITORY
+          ? `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+          : '',
+      artifactName:
+        String(process.env.GITHUB_RUN_ID || '').trim()
+          ? `scraper-results-${String(process.env.GITHUB_RUN_ID).trim()}`
+          : '',
+      startedAt: startTimeIso,
+      finishedAt: new Date().toISOString(),
+      scrapeStatus: totalClean > 0 ? 'SCRAPE_COMPLETED' : 'SCRAPE_EMPTY',
+      listingCount: totalClean,
+    },
   };
   const outputPath = fileURLToPath(new URL('../output.json', import.meta.url));
   fs.writeFileSync(outputPath, JSON.stringify(outputData, null, 2), 'utf-8');
+  const pipelineMessages = [
+    {
+      service: 'scraper',
+      status: 'ANALIZ_EDILMEDI',
+      message: 'Scraper ilanlari cekti ve output.json olusturdu.',
+      timestamp: new Date().toISOString(),
+    },
+  ];
+  const pipelineMessagePath = fileURLToPath(new URL('../pipeline-messages.json', import.meta.url));
+  fs.writeFileSync(pipelineMessagePath, JSON.stringify(pipelineMessages, null, 2), 'utf-8');
   console.log(`\n  💾 Sonuçlar: output.json`);
+  console.log('  📨 Servis mesaji kaydi: pipeline-messages.json');
+
+  const artifactName =
+    String(process.env.GITHUB_RUN_ID || '').trim()
+      ? `scraper-results-${String(process.env.GITHUB_RUN_ID).trim()}`
+      : 'scraper-results-local';
+  const scrapeStatus = totalClean > 0 ? 'SCRAPE_COMPLETED' : 'SCRAPE_EMPTY';
+  const dispatchMessage =
+    totalClean > 0
+      ? 'Scraper ilanlari cekti; dosya analiz edilmeden 2elAnaliz servisine iletildi.'
+      : 'Scraper calisti ancak temiz ilan bulunamadi; bos/az veri analyzer servisine iletildi.';
+
+  try {
+    await triggerAnalyzerDispatch({
+      totalClean,
+      isFallback,
+      sourceStatus: 'ANALIZ_EDILMEDI',
+      sourceMessage: dispatchMessage,
+      scrapeStatus,
+      listingCount: totalClean,
+      artifactName,
+      startedAt: startTimeIso,
+      finishedAt: outputData.runMeta.finishedAt,
+      pipelineMessage: dispatchMessage,
+    });
+    pipelineMessages.push({
+      service: 'scraper',
+      status: 'ANALIZ_ICIN_GONDERILDI',
+      message: `output.json 2elAnaliz servisine repository_dispatch ile gonderildi (artifact: ${artifactName}).`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (dispatchErr) {
+    console.log(`  ⚠️ Analyzer dispatch hatasi: ${dispatchErr.message}`);
+    pipelineMessages.push({
+      service: 'scraper',
+      status: 'ANALIZ_DISPATCH_HATA',
+      message: `Analyzer dispatch basarisiz oldu: ${dispatchErr.message}`,
+      timestamp: new Date().toISOString(),
+    });
+  }
+  fs.writeFileSync(pipelineMessagePath, JSON.stringify(pipelineMessages, null, 2), 'utf-8');
 
   const aiStatusLabel = isFallback ? '❌ Devre Dışı / Yapılamadı' : '✅ Başarılı';
   await sendTelegramDocument(
     outputPath,
     `📎 Detayli tarama dosyasi\nSession: #${SESSION_NUMBER}\nToplam: ${totalClean.toLocaleString('tr')} ilan\nAI Analiz: ${aiStatusLabel}`,
-    { totalClean, isFallback },
   );
 
   if (totalClean === 0) {

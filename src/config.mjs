@@ -30,6 +30,7 @@ export const TELEGRAM_TOKEN =
 export const TELEGRAM_CHAT_ID =
   process.env.TELEGRAM_CHAT_ID ||
   '-5083436032';
+export const ENABLE_TELEGRAM = (process.env.ENABLE_TELEGRAM || 'false').toLowerCase() === 'true';
 
 export const ANALYZER_DISPATCH_TOKEN = process.env.ANALYZER_DISPATCH_TOKEN || '';
 export const ANALYZER_REPO_OWNER = process.env.ANALYZER_REPO_OWNER || 'univerisr-ai';

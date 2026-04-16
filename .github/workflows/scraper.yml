@@ -46,6 +46,13 @@ jobs:
             exit 0
           fi
 
+          if [ "${{ vars.PIPELINE_PAUSED }}" = "true" ]; then
+            echo "Run policy: PIPELINE_PAUSED=true oldugu icin schedule kosusu atlanacak."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "jitter_seconds=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           week="$(date -u +%G-%V)"
           dow="$(date -u +%u)" # 1=Mon ... 7=Sun
           seed_input="${GITHUB_REPOSITORY}|${week}|sahibinden-weekly-two-days"
@@ -136,6 +143,7 @@ jobs:
 
       - name: 🚀 GPU Fırsat Avcısını Çalıştır
         if: steps.run_policy.outputs.should_run == 'true'
+        shell: bash
         env:
           USE_WARP_PROXY: 'true'
           HEADLESS: 'false'
@@ -155,6 +163,7 @@ jobs:
           TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
           TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ENABLE_TELEGRAM: 'false'
 
           # ── Analyzer relay (bot-only tetikleme) ────────────
           ANALYZER_DISPATCH_TOKEN: ${{ secrets.ANALYZER_DISPATCH_TOKEN }}
@@ -172,14 +181,59 @@ jobs:
           CUSTOM_MIN_PRICE: ${{ github.event.inputs.min_fiyat }}
           CUSTOM_MAX_PRICE: ${{ github.event.inputs.max_fiyat }}
           BYPASS_AI: ${{ github.event.inputs.bypass_ai }}
-        run: xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs
+        run: |
+          set -o pipefail
+          xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs 2>&1 | tee scraper.log
 
       - name: 💾 Sonuçları Kaydet (Artifact)
         if: always() && steps.run_policy.outputs.should_run == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: scraper-results-${{ github.run_number }}
+          name: scraper-results-${{ github.run_id }}
           path: |
             output.json
+            pipeline-messages.json
             cf_proof.png
-          retention-days: 30
+          retention-days: 7
+
+      - name: 📣 Telegram failure alert
+        if: failure() && steps.run_policy.outputs.should_run == 'true'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
+          TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set +e
+
+          TOKEN="${TELEGRAM_BOT_TOKEN_1:-${TELEGRAM_BOT_TOKEN_2:-}}"
+          CHAT_ID="${TELEGRAM_CHAT_ID:-}"
+
+          if [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ]; then
+            echo "Telegram alert skipped: token/chat id missing."
+            exit 0
+          fi
+
+          gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed > failed.log 2>/dev/null || true
+
+          summary="$(grep -m 1 -E 'Error:|ERR!|Traceback|Exception|FATAL|KRITIK|CRITICAL|❌' failed.log || true)"
+          if [ -z "$summary" ] && [ -f scraper.log ]; then
+            summary="$(grep -m 1 -E 'Error:|ERR!|Traceback|Exception|FATAL|KRITIK|CRITICAL|❌' scraper.log || true)"
+          fi
+          if [ -z "$summary" ]; then
+            summary="Ilk hata ozeti otomatik cikarilamadi; run logunu kontrol et."
+          fi
+
+          summary="${summary//$'\r'/ }"
+          summary="${summary//$'\n'/ }"
+
+          message="GPU pipeline alarmi
+          Repo: $GITHUB_REPOSITORY
+          Workflow: $GITHUB_WORKFLOW
+          Run URL: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          Ozet: ${summary:0:700}"
+
+          curl -fsS -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
+            --data-urlencode "chat_id=$CHAT_ID" \
+            --data-urlencode "text=$message" >/dev/null || true
