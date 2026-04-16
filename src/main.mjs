@@ -135,7 +135,6 @@ async function triggerAnalyzerDispatch(dispatchMeta = {}) {
   const payload = {
     event_type: eventType,
     client_payload: {
-      file_name: 'output.json',
       github_run_id: String(process.env.GITHUB_RUN_ID || ''),
       source_repository: String(process.env.GITHUB_REPOSITORY || ''),
       source_run_url:
@@ -152,13 +151,6 @@ async function triggerAnalyzerDispatch(dispatchMeta = {}) {
       started_at: String(dispatchMeta?.startedAt || '').trim(),
       finished_at: String(dispatchMeta?.finishedAt || '').trim(),
       pipeline_message: String(dispatchMeta?.pipelineMessage || sourceMessage).trim(),
-      session_number: String(SESSION_NUMBER),
-      source: 'sahibinden-gpu-scraper',
-      source_status: sourceStatus,
-      source_message: sourceMessage,
-      target_status: 'ANALIZ_EDILECEK',
-      target_message: '2elAnaliz veriyi alip analiz edecek ve Vercel dashboard icin latest-summary.json uretecek.',
-      total_clean: Number.isFinite(Number(dispatchMeta?.totalClean)) ? Number(dispatchMeta.totalClean) : 0,
       is_fallback: !!dispatchMeta?.isFallback,
     },
   };
