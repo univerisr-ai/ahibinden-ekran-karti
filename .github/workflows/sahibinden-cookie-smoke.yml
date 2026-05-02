@@ -49,6 +49,7 @@ jobs:
           let usable = 0;
           let expired = 0;
           let scopedForSahibinden = 0;
+          const inventory = [];
 
           function isAllowedHost(hostname) {
             const host = String(hostname || '').trim().toLowerCase().replace(/^\.+/, '');
@@ -68,6 +69,9 @@ jobs:
 
             const hasDomain = typeof cookie.domain === 'string' && cookie.domain.trim();
             const hasUrl = typeof cookie.url === 'string' && cookie.url.trim();
+            const scope = hasDomain ? cookie.domain.trim() : cookie.url.trim();
+            const path = typeof cookie.path === 'string' && cookie.path.trim() ? cookie.path.trim() : '/';
+            const key = `${cookie.name.trim()} | ${scope} | ${path}`;
 
             if (!hasDomain && !hasUrl) {
               console.error(`::error title=Invalid cookie::Cookie #${index + 1} must include domain or url.`);
@@ -75,22 +79,28 @@ jobs:
             }
 
             const expiresRaw = cookie.expires ?? cookie.expirationDate;
+            let expiresLabel = 'session';
             if (expiresRaw !== undefined && expiresRaw !== null && expiresRaw !== '') {
               const expires = Number(expiresRaw);
               if (!Number.isFinite(expires)) {
                 console.error(`::error title=Invalid cookie::Cookie #${index + 1} has a non-numeric expiration.`);
                 process.exit(1);
               }
+              expiresLabel = new Date(Math.floor(expires) * 1000).toISOString();
               if (expires > 0 && expires <= nowSec) {
                 expired += 1;
+                inventory.push({ key, status: 'expired', expiresLabel, scoped: false });
                 continue;
               }
             }
 
             usable += 1;
+            let scoped = false;
 
             if (hasDomain && isAllowedHost(cookie.domain)) {
               scopedForSahibinden += 1;
+              scoped = true;
+              inventory.push({ key, status: 'usable', expiresLabel, scoped });
               continue;
             }
 
@@ -98,12 +108,15 @@ jobs:
               try {
                 if (isAllowedHost(new URL(cookie.url).hostname)) {
                   scopedForSahibinden += 1;
+                  scoped = true;
                 }
               } catch {
                 console.error(`::error title=Invalid cookie::Cookie #${index + 1} has an invalid url.`);
                 process.exit(1);
               }
             }
+
+            inventory.push({ key, status: 'usable', expiresLabel, scoped });
           }
 
           if (usable === 0) {
@@ -117,4 +130,9 @@ jobs:
           }
 
           console.log(`Cookie payload is valid. Total: ${parsed.length}, usable: ${usable}, expired skipped: ${expired}, Sahibinden scoped: ${scopedForSahibinden}.`);
+          console.log('Safe cookie inventory (name, scope, path, status, expiration only):');
+          for (const item of inventory.sort((a, b) => a.key.localeCompare(b.key))) {
+            const scopeStatus = item.scoped ? 'sahibinden-scope' : 'other-scope';
+            console.log(`- ${item.key} | ${item.status} | ${scopeStatus} | expires: ${item.expiresLabel}`);
+          }
           NODE
