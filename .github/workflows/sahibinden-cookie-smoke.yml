@@ -1,0 +1,120 @@
+name: Sahibinden cookie smoke check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sahibinden-cookie-smoke-check
+  cancel-in-progress: false
+
+jobs:
+  cookie-smoke-check:
+    name: Validate SAHIBINDEN_COOKIES
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Validate cookie payload safely
+        shell: bash
+        env:
+          SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
+        run: |
+          set -euo pipefail
+
+          node <<'NODE'
+          const payload = String(process.env.SAHIBINDEN_COOKIES || '').trim();
+
+          if (!payload) {
+            console.error('::error title=Missing secret::SAHIBINDEN_COOKIES is empty or not configured.');
+            process.exit(1);
+          }
+
+          let parsed;
+          try {
+            parsed = JSON.parse(payload);
+          } catch (error) {
+            console.error(`::error title=Invalid JSON::SAHIBINDEN_COOKIES could not be parsed as JSON: ${error.message}`);
+            process.exit(1);
+          }
+
+          if (!Array.isArray(parsed)) {
+            console.error('::error title=Invalid schema::SAHIBINDEN_COOKIES must be a JSON array of cookie objects.');
+            process.exit(1);
+          }
+
+          const nowSec = Math.floor(Date.now() / 1000);
+          let usable = 0;
+          let expired = 0;
+          let scopedForSahibinden = 0;
+
+          function isAllowedHost(hostname) {
+            const host = String(hostname || '').trim().toLowerCase().replace(/^\.+/, '');
+            return host === 'sahibinden.com' || host.endsWith('.sahibinden.com') || host === 'shbdn.com' || host.endsWith('.shbdn.com');
+          }
+
+          for (const [index, cookie] of parsed.entries()) {
+            if (!cookie || typeof cookie !== 'object' || Array.isArray(cookie)) {
+              console.error(`::error title=Invalid cookie::Cookie #${index + 1} must be an object.`);
+              process.exit(1);
+            }
+
+            if (typeof cookie.name !== 'string' || !cookie.name.trim() || typeof cookie.value !== 'string') {
+              console.error(`::error title=Invalid cookie::Cookie #${index + 1} must have string name and value fields.`);
+              process.exit(1);
+            }
+
+            const hasDomain = typeof cookie.domain === 'string' && cookie.domain.trim();
+            const hasUrl = typeof cookie.url === 'string' && cookie.url.trim();
+
+            if (!hasDomain && !hasUrl) {
+              console.error(`::error title=Invalid cookie::Cookie #${index + 1} must include domain or url.`);
+              process.exit(1);
+            }
+
+            const expiresRaw = cookie.expires ?? cookie.expirationDate;
+            if (expiresRaw !== undefined && expiresRaw !== null && expiresRaw !== '') {
+              const expires = Number(expiresRaw);
+              if (!Number.isFinite(expires)) {
+                console.error(`::error title=Invalid cookie::Cookie #${index + 1} has a non-numeric expiration.`);
+                process.exit(1);
+              }
+              if (expires > 0 && expires <= nowSec) {
+                expired += 1;
+                continue;
+              }
+            }
+
+            usable += 1;
+
+            if (hasDomain && isAllowedHost(cookie.domain)) {
+              scopedForSahibinden += 1;
+              continue;
+            }
+
+            if (hasUrl) {
+              try {
+                if (isAllowedHost(new URL(cookie.url).hostname)) {
+                  scopedForSahibinden += 1;
+                }
+              } catch {
+                console.error(`::error title=Invalid cookie::Cookie #${index + 1} has an invalid url.`);
+                process.exit(1);
+              }
+            }
+          }
+
+          if (usable === 0) {
+            console.error('::error title=No usable cookies::All cookies are expired or unusable.');
+            process.exit(1);
+          }
+
+          if (scopedForSahibinden === 0) {
+            console.error('::error title=Wrong cookie scope::No usable cookies are scoped for sahibinden.com or shbdn.com.');
+            process.exit(1);
+          }
+
+          console.log(`Cookie payload is valid. Total: ${parsed.length}, usable: ${usable}, expired skipped: ${expired}, Sahibinden scoped: ${scopedForSahibinden}.`);
+          NODE
