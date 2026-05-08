@@ -3,8 +3,15 @@ artifacts/
 sahibinden_test*.html
 test_*.html
 output.json
+cf_proof.png
+extra-links.json
 .env
+auth.json
+*.auth.json
+cookies.json
 state.json
+.playwright/
 .chrome_profile/
+.chrome_profile_sahibinden/
 eski sürümler/
 önceki konuşamalr.md

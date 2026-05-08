@@ -5,7 +5,9 @@
   "description": "Sahibinden GPU Fırsat Avcısı — Otonom AI Scraping Sistemi",
   "scripts": {
     "start": "node src/main.mjs",
-    "test": "node src/main.mjs --test"
+    "test": "node src/main.mjs --test",
+    "test:unit": "node --test test/*.test.mjs",
+    "session:save": "node scripts/save-sahibinden-session.mjs"
   },
   "dependencies": {
     "cheerio": "^1.0.0",

@@ -15,6 +15,15 @@ import {
 import { chromium } from 'playwright';
 import fs from 'fs';
 import crypto from 'crypto';
+import {
+  STORAGE_STATE_B64_ENV_VAR,
+  STORAGE_STATE_ENV_VAR,
+  loadSahibindenStorageState,
+} from './session_state.mjs';
+import {
+  resolvePersistentProfileDir,
+  shouldUsePersistentContext,
+} from './browser_profile.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -1475,41 +1484,93 @@ async function ensureBrowser() {
       };
     }
 
-    browser = await chromium.launch(launchOptions);
-
-    context = await browser.newContext({
+    const storageBundle = loadSahibindenStorageState();
+    const contextOptions = {
       ignoreHTTPSErrors: true,
       viewport: { width: 1366, height: 900 },
       locale: BROWSER_LOCALE,
       timezoneId: BROWSER_TIMEZONE,
       userAgent: BROWSER_USER_AGENT,
-    });
+    };
 
-    const cookieBundle = loadSahibindenCookies();
-    sessionCookieSource = cookieBundle.source;
-    sessionCookieCount = cookieBundle.cookies.length;
+    const usePersistentContext = shouldUsePersistentContext();
+    const persistentProfileDir = resolvePersistentProfileDir();
 
-    if (cookieBundle.source === 'env') {
-      console.log(`  🍪 Cookie kaynagi: ENV/Secret (${COOKIE_ENV_VAR}).`);
-    } else if (cookieBundle.source === 'file') {
-      console.log(`  🍪 Cookie kaynagi: ${SAHIBINDEN_COOKIE_FILE}.`);
+    if (!usePersistentContext && storageBundle.storageState && storageBundle.cookieCount > 0) {
+      contextOptions.storageState = storageBundle.storageState;
+    }
+
+    if (usePersistentContext) {
+      context = await chromium.launchPersistentContext(persistentProfileDir, {
+        ...launchOptions,
+        ...contextOptions,
+      });
+      browser = typeof context.browser === 'function' ? context.browser() : null;
+      console.log(`  🗂️ Persistent profile: ${persistentProfileDir}`);
     } else {
-      console.log('  ℹ️ Cookie kaynagi bulunamadi, cerezsiz oturum denenecek.');
+      browser = await chromium.launch(launchOptions);
+      context = await browser.newContext(contextOptions);
+      console.log('  🗂️ Persistent profile devre disi; gecici browser context kullaniliyor.');
     }
 
-    if (cookieBundle.droppedExpired > 0) {
-      console.log(`  ⚠️ ${cookieBundle.droppedExpired} adet suresi gecmis cookie elendi.`);
+    if (storageBundle.source === 'env-b64') {
+      console.log(`  🔐 Oturum state kaynagi: ENV/Secret (${STORAGE_STATE_B64_ENV_VAR}).`);
+    } else if (storageBundle.source === 'env') {
+      console.log(`  🔐 Oturum state kaynagi: ENV/Secret (${STORAGE_STATE_ENV_VAR}).`);
+    } else if (storageBundle.source === 'file') {
+      console.log('  🔐 Oturum state kaynagi: auth.json.');
     }
 
-    if (cookieBundle.cookies.length > 0) {
-      try {
-        await context.addCookies(cookieBundle.cookies);
-      } catch (err) {
-        throw makeCookieBootstrapError('COOKIE_ADD_FAILED', `Cookie tarayiciya eklenemedi: ${err.message}`);
+    if (storageBundle.droppedExpired > 0) {
+      console.log(`  ⚠️ Oturum state icinden ${storageBundle.droppedExpired} adet suresi gecmis cookie elendi.`);
+    }
+
+    if (storageBundle.droppedUnrelated > 0) {
+      console.log(`  ℹ️ Oturum state icinden ${storageBundle.droppedUnrelated} adet ilgisiz domain cookie'si alinmadi.`);
+    }
+
+    if (storageBundle.cookieCount > 0) {
+      if (usePersistentContext) {
+        try {
+          await context.addCookies(storageBundle.storageState.cookies);
+        } catch (err) {
+          throw makeCookieBootstrapError('COOKIE_ADD_FAILED', `Auth state cookie tarayiciya eklenemedi: ${err.message}`);
+        }
       }
-      console.log(`  ✅ ${cookieBundle.cookies.length}/${cookieBundle.inputCount} cookie yuklendi.`);
-    } else if (cookieBundle.source !== 'none') {
-      console.log('  ⚠️ Cookie payload bulundu ama kullanilabilir cookie yok.');
+      sessionCookieSource = `storage-state:${storageBundle.source}`;
+      sessionCookieCount = storageBundle.cookieCount;
+      console.log(`  ✅ Auth state yuklendi (${storageBundle.cookieCount}/${storageBundle.inputCookieCount} cookie, ${storageBundle.originCount} origin).`);
+    } else if (storageBundle.source !== 'none') {
+      console.log('  ⚠️ Auth state bulundu ama kullanilabilir sahibinden cookie yok; cookie fallback denenecek.');
+    }
+
+    if (storageBundle.cookieCount === 0) {
+      const cookieBundle = loadSahibindenCookies();
+      sessionCookieSource = cookieBundle.source;
+      sessionCookieCount = cookieBundle.cookies.length;
+
+      if (cookieBundle.source === 'env') {
+        console.log(`  🍪 Cookie kaynagi: ENV/Secret (${COOKIE_ENV_VAR}).`);
+      } else if (cookieBundle.source === 'file') {
+        console.log(`  🍪 Cookie kaynagi: ${SAHIBINDEN_COOKIE_FILE}.`);
+      } else {
+        console.log('  ℹ️ Cookie kaynagi bulunamadi, cerezsiz oturum denenecek.');
+      }
+
+      if (cookieBundle.droppedExpired > 0) {
+        console.log(`  ⚠️ ${cookieBundle.droppedExpired} adet suresi gecmis cookie elendi.`);
+      }
+
+      if (cookieBundle.cookies.length > 0) {
+        try {
+          await context.addCookies(cookieBundle.cookies);
+        } catch (err) {
+          throw makeCookieBootstrapError('COOKIE_ADD_FAILED', `Cookie tarayiciya eklenemedi: ${err.message}`);
+        }
+        console.log(`  ✅ ${cookieBundle.cookies.length}/${cookieBundle.inputCount} cookie yuklendi.`);
+      } else if (cookieBundle.source !== 'none') {
+        console.log('  ⚠️ Cookie payload bulundu ama kullanilabilir cookie yok.');
+      }
     }
 
     await context.addInitScript(({ browserLocale, browserPlatform }) => {
@@ -1558,7 +1619,9 @@ async function ensureBrowser() {
     if (
       err &&
       typeof err.code === 'string' &&
-      (err.code.startsWith('COOKIE_') || err.code.startsWith('FINGERPRINT_'))
+      (err.code.startsWith('COOKIE_') ||
+        err.code.startsWith('FINGERPRINT_') ||
+        err.code.startsWith('STORAGE_STATE_'))
     ) {
       sessionInitFailureCode = err.code;
       console.log(`  ❌ Oturum policy hatasi: ${err.message}`);
@@ -1757,6 +1820,15 @@ export async function scrapeSegment(priceMin, priceMax) {
   return { htmlPages, totalFound: totalCount, pages: htmlPages.length, status: 'OK' };
 }
 
+export async function scrapeDetailUrl(detailUrl) {
+  const targetUrl = String(detailUrl || '').trim();
+  if (!targetUrl) {
+    return { html: null, status: 'INVALID_URL' };
+  }
+
+  return fetchPage(targetUrl, `extra-link: ${targetUrl}`);
+}
+
 export async function initSession() {
   const ok = await ensureBrowser();
   if (!ok) {
@@ -1838,6 +1910,7 @@ export async function closeBrowser() {
 export default {
   initSession,
   scrapeSegment,
+  scrapeDetailUrl,
   getStats,
   saveChallengeProofScreenshot,
   closeBrowser,

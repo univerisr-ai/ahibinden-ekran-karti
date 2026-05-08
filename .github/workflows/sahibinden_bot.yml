@@ -2,8 +2,21 @@ name: Sahibinden Bot (GitHub Actions)
 
 on:
   workflow_dispatch: # GitHub üzerinden manuel olarak "Run workflow" butonu ile çalıştırmak için
-  # schedule:
-  #   - cron: '0 3 * * *' # İsteğe bağlı: Her gece saat 03:00'te otomatik çalışması için başındaki '#' işaretlerini kaldırın
+    inputs:
+      headless:
+        description: 'Chrome headless calissin mi?'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      max_pages_per_segment:
+        description: 'Segment basina maksimum sayfa'
+        required: true
+        default: '20'
+  schedule:
+    - cron: '0 0 * * 1' # Her pazartesi 03:00 Turkiye saati
 
 jobs:
   run-scraper:
@@ -26,26 +39,29 @@ jobs:
         npx playwright install chrome
         npx playwright install-deps chrome
 
-    - name: Cloudflare WARP Proxy Kurulumu
-      run: |
-        curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-        sudo apt-get update && sudo apt-get install -y cloudflare-warp
-        warp-cli --accept-tos registration new || warp-cli --accept-tos register
-        warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy
-        warp-cli --accept-tos proxy port 40000 || warp-cli --accept-tos set-proxy-port 40000
-        warp-cli --accept-tos connect
-        sleep 5
-        warp-cli --accept-tos status
-        curl -x socks5h://127.0.0.1:40000 -I https://www.cloudflare.com/cdn-cgi/trace || echo "WARP Proxy test atlandı"
+    - name: Sahibinden Playwright Profil Cache
+      uses: actions/cache@v4
+      with:
+        path: .playwright/sahibinden-profile
+        key: sahibinden-playwright-profile-${{ runner.os }}-v1
+        restore-keys: |
+          sahibinden-playwright-profile-${{ runner.os }}-
 
-    - name: Botu Başlat (WARP Proxy Açık)
+    - name: Botu Başlat (Proxy Kapalı)
       env:
-        USE_WARP_PROXY: 'true'
+        USE_WARP_PROXY: 'false'
         USE_SCRAPEDO_PROXY: 'false'
-        HEADLESS: 'false'
-        MAX_PAGES_PER_SEGMENT: '20'
-      run: xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs
+        HEADLESS: ${{ inputs.headless || 'true' }}
+        MAX_PAGES_PER_SEGMENT: ${{ inputs.max_pages_per_segment || '20' }}
+        SAHIBINDEN_PERSISTENT_CONTEXT: 'true'
+        SAHIBINDEN_USER_DATA_DIR: .playwright/sahibinden-profile
+        SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
+      run: |
+        if [ "$HEADLESS" = "true" ]; then
+          node src/main.mjs
+        else
+          xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs
+        fi
 
     - name: Sonuç Listesini Çıktı Olarak Al (Artifact)
       uses: actions/upload-artifact@v4
