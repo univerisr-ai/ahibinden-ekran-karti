@@ -6,7 +6,7 @@ on:
       headless:
         description: 'Chrome headless calissin mi?'
         required: true
-        default: 'true'
+        default: 'false'
         type: choice
         options:
           - 'true'
@@ -51,7 +51,7 @@ jobs:
       env:
         USE_WARP_PROXY: 'false'
         USE_SCRAPEDO_PROXY: 'false'
-        HEADLESS: ${{ inputs.headless || 'true' }}
+        HEADLESS: ${{ inputs.headless || 'false' }}
         MAX_PAGES_PER_SEGMENT: ${{ inputs.max_pages_per_segment || '20' }}
         SAHIBINDEN_PERSISTENT_CONTEXT: 'true'
         SAHIBINDEN_USER_DATA_DIR: .playwright/sahibinden-profile
