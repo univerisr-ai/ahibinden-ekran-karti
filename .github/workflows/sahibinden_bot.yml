@@ -56,6 +56,7 @@ jobs:
         SAHIBINDEN_PERSISTENT_CONTEXT: 'true'
         SAHIBINDEN_USER_DATA_DIR: .playwright/sahibinden-profile
         SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
+        SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
       run: |
         if [ "$HEADLESS" = "true" ]; then
           node src/main.mjs
