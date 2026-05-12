@@ -16,7 +16,7 @@ on:
         required: true
         default: '20'
   schedule:
-    - cron: '0 0 * * 1' # Her pazartesi 03:00 Turkiye saati
+    - cron: '0 0 * * *' # Her gun 03:00 Turkiye saati; cache/cookie canli tutma kosusu
 
 jobs:
   run-scraper:
@@ -56,7 +56,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .playwright/sahibinden-profile
-        key: sahibinden-playwright-profile-${{ runner.os }}-v1
+        key: sahibinden-playwright-profile-${{ runner.os }}-${{ github.run_id }}
         restore-keys: |
           sahibinden-playwright-profile-${{ runner.os }}-
 
@@ -65,21 +65,26 @@ jobs:
         USE_WARP_PROXY: 'true'
         USE_SCRAPEDO_PROXY: 'false'
         HEADLESS: ${{ inputs.headless || 'false' }}
-        MAX_PAGES_PER_SEGMENT: ${{ inputs.max_pages_per_segment || '20' }}
+        MAX_PAGES_PER_SEGMENT: ${{ github.event_name == 'schedule' && '1' || inputs.max_pages_per_segment || '20' }}
         SAHIBINDEN_PERSISTENT_CONTEXT: 'true'
         SAHIBINDEN_USER_DATA_DIR: .playwright/sahibinden-profile
         SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
         SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
       run: |
+        set -o pipefail
         if [ "$HEADLESS" = "true" ]; then
-          node src/main.mjs
+          node src/main.mjs 2>&1 | tee scraper.log
         else
-          xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs
+          xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs 2>&1 | tee scraper.log
         fi
 
-    - name: Sonuç Listesini Çıktı Olarak Al (Artifact)
+    - name: Sonuç ve Hata Kanıtlarını Artifact Olarak Al
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: sahibinden-ilanlar
-        path: output.json
+        path: |
+          output.json
+          cf_proof.png
+          scraper.log
+        if-no-files-found: warn
