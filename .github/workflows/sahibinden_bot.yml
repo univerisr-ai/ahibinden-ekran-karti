@@ -16,7 +16,11 @@ on:
         required: true
         default: '20'
   schedule:
-    - cron: '0 0 * * *' # Her gun 03:00 Turkiye saati; cache/cookie canli tutma kosusu
+    - cron: '7 0 * * *' # Her gun 03:07 Turkiye saati; saat basi GitHub cron yogunluguna takilmamak icin
+
+concurrency:
+  group: sahibinden-profile-cache
+  cancel-in-progress: false
 
 jobs:
   run-scraper:

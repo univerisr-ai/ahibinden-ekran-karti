@@ -41,6 +41,13 @@ test('keeps only sahibinden cookies and origins from a Playwright storage state'
         {
           origin: 'https://www.sahibinden.com',
           localStorage: [{ name: 'searchPrefs', value: 'gpu' }],
+          indexedDB: [
+            {
+              name: 'auth-cache',
+              version: 1,
+              stores: [],
+            },
+          ],
         },
         {
           origin: 'https://accounts.example.com',
@@ -63,6 +70,13 @@ test('keeps only sahibinden cookies and origins from a Playwright storage state'
     {
       origin: 'https://www.sahibinden.com',
       localStorage: [{ name: 'searchPrefs', value: 'gpu' }],
+      indexedDB: [
+        {
+          name: 'auth-cache',
+          version: 1,
+          stores: [],
+        },
+      ],
     },
   ]);
 });

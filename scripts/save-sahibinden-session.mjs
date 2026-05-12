@@ -492,7 +492,7 @@ async function main() {
       throw new Error('Login dogrulanamadi. Hesap, sifre veya ek dogrulama ekranini kontrol edin.');
     }
 
-    const rawState = await context.storageState();
+    const rawState = await context.storageState({ indexedDB: true });
     const filtered = filterSahibindenStorageState(rawState);
     if (filtered.cookieCount === 0) {
       throw new Error('Kaydedilecek sahibinden cookie bulunamadi.');
