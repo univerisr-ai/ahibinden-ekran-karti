@@ -10,8 +10,10 @@ auth.json
 *.auth.json
 cookies.json
 state.json
+login-inspection-report.json
 .playwright/
 .chrome_profile/
 .chrome_profile_sahibinden/
+.chrome_profile_sahibinden_inspect/
 eski sürümler/
 önceki konuşamalr.md
