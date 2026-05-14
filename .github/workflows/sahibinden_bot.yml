@@ -16,7 +16,10 @@ on:
         required: true
         default: '20'
   schedule:
-    - cron: '7 0 * * *' # Her gun 03:07 Turkiye saati; saat basi GitHub cron yogunluguna takilmamak icin
+    # Haftada iki yenileme penceresi; GitHub cron yogunluguna takilmamak icin garip dakikalar.
+    # Turkiye saati: Sali 07:57, Cumartesi 21:13.
+    - cron: '57 4 * * 2'
+    - cron: '13 18 * * 6'
 
 concurrency:
   group: sahibinden-profile-cache
