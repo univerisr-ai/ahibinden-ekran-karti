@@ -49,6 +49,87 @@ function firstElement($root, selectors) {
   return null;
 }
 
+function normalizeImageUrl(value = '') {
+  const raw = String(value || '').trim().replace(/&amp;/g, '&');
+  if (!raw) return '';
+
+  try {
+    return new URL(raw, BASE_SITE).toString();
+  } catch {
+    return raw;
+  }
+}
+
+function isPlaceholderImageUrl(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  return (
+    !normalized ||
+    normalized.startsWith('data:') ||
+    normalized.includes('no-image-camera') ||
+    normalized.includes('/no-image') ||
+    normalized.includes('blank.gif') ||
+    normalized.includes('spacer.gif') ||
+    normalized.includes('transparent')
+  );
+}
+
+function looksLikeImageUrl(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  return (
+    normalized.includes('shbdn.com/photos/') ||
+    normalized.includes('/photos/') ||
+    /\.(?:jpe?g|png|webp|avif)(?:[?#]|$)/i.test(normalized)
+  );
+}
+
+function parseSrcsetCandidates(value = '') {
+  return String(value || '')
+    .split(',')
+    .map((part) => part.trim().split(/\s+/)[0] || '')
+    .filter(Boolean);
+}
+
+function firstUsableImageUrl(values) {
+  for (const value of values) {
+    const normalized = normalizeImageUrl(value);
+    if (!isPlaceholderImageUrl(normalized) && looksLikeImageUrl(normalized)) {
+      return normalized;
+    }
+  }
+  return '';
+}
+
+function extractImageUrl($row) {
+  const candidates = [];
+  const rowAttrs = $row.attr() || {};
+
+  candidates.push(...Object.values(rowAttrs));
+
+  $row.find('img').each((_, img) => {
+    const attrs = img.attribs || {};
+    candidates.push(
+      attrs['data-src'],
+      attrs['data-original'],
+      attrs['data-lazy'],
+      attrs['data-lazy-src'],
+      attrs['data-img'],
+      attrs['data-image'],
+      ...parseSrcsetCandidates(attrs['data-srcset']),
+      ...parseSrcsetCandidates(attrs.srcset),
+      attrs.src,
+    );
+  });
+
+  const directMatch = firstUsableImageUrl(candidates);
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const rowHtml = $row.html() || '';
+  const htmlMatches = rowHtml.match(/(?:https?:)?\/\/[^"'\s<>]+shbdn\.com\/photos\/[^"'\s<>]+/gi) || [];
+  return firstUsableImageUrl(htmlMatches);
+}
+
 // ─── Tek Sayfa Parse ─────────────────────────────────────────
 export function parseListingPage(html, segmentLabel = '') {
   const $ = cheerio.load(html);
@@ -127,10 +208,7 @@ export function parseListingPage(html, segmentLabel = '') {
     const tarih = dateEl.length ? dateEl.text().trim() : '';
 
     // Resim
-    const imgEl = $row.find('img').first();
-    const resim = imgEl.length
-      ? (imgEl.attr('src') || imgEl.attr('data-src') || '')
-      : '';
+    const resim = extractImageUrl($row);
 
     let url = '';
     try {
