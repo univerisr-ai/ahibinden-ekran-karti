@@ -454,7 +454,11 @@ function looksLikeListingsPage(html = '', currentUrl = '') {
   return hasListingRows || (onSearchRoute && hasResultSummary);
 }
 
-function isAuthRequiredPage(html = '', currentUrl = '') {
+export function isAuthRequiredPage(html = '', currentUrl = '') {
+  if (looksLikeListingsPage(html, currentUrl)) {
+    return false;
+  }
+
   const h = String(html || '').toLowerCase();
   const u = String(currentUrl || '').toLowerCase();
 
