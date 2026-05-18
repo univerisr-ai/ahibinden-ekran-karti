@@ -78,12 +78,218 @@ jobs:
         SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
         SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
       run: |
-        set -o pipefail
+        set +e
         if [ "$HEADLESS" = "true" ]; then
           node src/main.mjs 2>&1 | tee scraper.log
+          scraper_code=${PIPESTATUS[0]}
         else
           xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs 2>&1 | tee scraper.log
+          scraper_code=${PIPESTATUS[0]}
         fi
+
+        echo "SCRAPER_EXIT_CODE=$scraper_code" >> "$GITHUB_ENV"
+
+        node --input-type=module <<'NODE'
+        import fs from 'node:fs';
+
+        const now = new Date().toISOString();
+        const runId = process.env.GITHUB_RUN_ID || '';
+        const repository = process.env.GITHUB_REPOSITORY || '';
+        const runUrl = runId && repository ? `https://github.com/${repository}/actions/runs/${runId}` : '';
+        const artifactName = runId ? `scraper-results-${runId}` : '';
+        const log = fs.existsSync('scraper.log') ? fs.readFileSync('scraper.log', 'utf8') : '';
+
+        function classifyFallback() {
+          const lower = log.toLowerCase();
+
+          if (
+            lower.includes('storage_state_parse_invalid') ||
+            lower.includes('storage_state_schema_invalid') ||
+            lower.includes('cookie_parse_invalid') ||
+            lower.includes('cookie_schema_invalid') ||
+            lower.includes('cookie_add_failed')
+          ) {
+            return {
+              scrapeStatus: 'SCRAPE_CONFIG_ERROR',
+              pipelineStatus: 'CONFIG_ERROR',
+              message: 'Sahibinden oturum/config formati hatali; secret veya auth state duzeltilmeli.',
+            };
+          }
+
+          if (
+            lower.includes('cookie_empty_after_filter') ||
+            lower.includes('kullanilabilir cookie kalmadi')
+          ) {
+            return {
+              scrapeStatus: 'SCRAPE_AUTH_EXPIRED',
+              pipelineStatus: 'AUTH_EXPIRED',
+              message: 'Sahibinden cookie/storage state icinde kullanilabilir oturum kalmadi.',
+            };
+          }
+
+          if (
+            lower.includes('auth_required') ||
+            lower.includes('cookie_required_missing') ||
+            lower.includes('login gerekli') ||
+            lower.includes('oturum secret')
+          ) {
+            return {
+              scrapeStatus: 'SCRAPE_AUTH_REQUIRED',
+              pipelineStatus: 'AUTH_REQUIRED',
+              message: 'Sahibinden login gerekli sayfaya dustu. Cookie/storage state yenilenmeli.',
+            };
+          }
+
+          if (
+            lower.includes('challenge') ||
+            lower.includes('cloudflare') ||
+            lower.includes('cf_proof') ||
+            lower.includes('blocked') ||
+            lower.includes('erisim')
+          ) {
+            return {
+              scrapeStatus: 'SCRAPE_BLOCKED',
+              pipelineStatus: 'SOURCE_BLOCKED',
+              message: 'Sahibinden erisim/challenge nedeniyle tarama durdu.',
+            };
+          }
+
+          return {
+            scrapeStatus: 'SCRAPE_FAILED',
+            pipelineStatus: 'SCRAPE_FAILED',
+            message: 'Sahibinden scraper output uretmeden tamamlandi veya hata verdi.',
+          };
+        }
+
+        function readOutput() {
+          if (!fs.existsSync('output.json')) return null;
+
+          try {
+            const output = JSON.parse(fs.readFileSync('output.json', 'utf8'));
+            const listingCount = Number(output.runMeta?.listingCount ?? output.totalClean ?? output.allListings?.length ?? 0);
+            const scrapeStatus = String(output.runMeta?.scrapeStatus || (listingCount > 0 ? 'SCRAPE_COMPLETED' : 'SCRAPE_EMPTY'));
+
+            return { output, scrapeStatus, listingCount };
+          } catch (err) {
+            return {
+              output: null,
+              scrapeStatus: 'SCRAPE_OUTPUT_INVALID',
+              listingCount: 0,
+              parseError: err.message,
+            };
+          }
+        }
+
+        let current = readOutput();
+        if (!current || current.scrapeStatus === 'SCRAPE_OUTPUT_INVALID') {
+          const fallback = current?.scrapeStatus === 'SCRAPE_OUTPUT_INVALID'
+            ? {
+                scrapeStatus: 'SCRAPE_OUTPUT_INVALID',
+                pipelineStatus: 'OUTPUT_INVALID',
+                message: `output.json okunamadi: ${current.parseError}`,
+              }
+            : classifyFallback();
+
+          const output = {
+            timestamp: now,
+            sessionNumber: Number(process.env.SESSION_NUMBER || 1),
+            stats: {},
+            totalRaw: 0,
+            totalClean: 0,
+            segmentBreakdown: [],
+            topDeals: [],
+            allListings: [],
+            elapsedSeconds: 0,
+            isFallback: true,
+            runMeta: {
+              repository,
+              githubRunId: runId,
+              githubRunUrl: runUrl,
+              artifactName,
+              startedAt: '',
+              finishedAt: now,
+              scrapeStatus: fallback.scrapeStatus,
+              listingCount: 0,
+            },
+          };
+
+          const messages = [
+            {
+              service: 'scraper',
+              status: fallback.pipelineStatus,
+              message: fallback.message,
+              timestamp: now,
+            },
+          ];
+
+          fs.writeFileSync('output.json', JSON.stringify(output, null, 2));
+          fs.writeFileSync('pipeline-messages.json', JSON.stringify(messages, null, 2));
+          current = { output, scrapeStatus: fallback.scrapeStatus, listingCount: 0 };
+          console.log(`Fallback output.json yazildi: ${fallback.scrapeStatus}`);
+        } else if (!fs.existsSync('pipeline-messages.json')) {
+          fs.writeFileSync('pipeline-messages.json', JSON.stringify([
+            {
+              service: 'scraper',
+              status: current.scrapeStatus,
+              message: `Scraper status: ${current.scrapeStatus}`,
+              timestamp: now,
+            },
+          ], null, 2));
+        }
+
+        fs.appendFileSync(process.env.GITHUB_ENV, `SCRAPE_STATUS=${current.scrapeStatus}\nSCRAPE_LISTING_COUNT=${current.listingCount}\n`);
+        console.log(`Sahibinden scrape status: ${current.scrapeStatus}; listings=${current.listingCount}`);
+        NODE
+
+        status=$(node --input-type=module <<'NODE'
+        import fs from 'node:fs';
+
+        try {
+          const output = JSON.parse(fs.readFileSync('output.json', 'utf8'));
+          const listingCount = Number(output.runMeta?.listingCount ?? output.totalClean ?? output.allListings?.length ?? 0);
+          console.log(String(output.runMeta?.scrapeStatus || (listingCount > 0 ? 'SCRAPE_COMPLETED' : 'SCRAPE_EMPTY')));
+        } catch {
+          console.log('NO_OUTPUT');
+        }
+        NODE
+        )
+
+        if [ "$scraper_code" -ne 0 ]; then
+          case "$status" in
+            SCRAPE_BLOCKED|SCRAPE_AUTH_REQUIRED|SCRAPE_AUTH_EXPIRED|SCRAPE_EMPTY)
+              echo "Soft scraper status: $status; artifactler yuklensin diye workflow devam ediyor."
+              exit 0
+              ;;
+            *)
+              exit "$scraper_code"
+              ;;
+          esac
+        fi
+
+    - name: Scrape status oku
+      id: scrape_status
+      if: always()
+      run: |
+        node --input-type=module <<'NODE'
+        import fs from 'node:fs';
+
+        let status = 'NO_OUTPUT';
+        let listingCount = 0;
+
+        try {
+          if (fs.existsSync('output.json')) {
+            const output = JSON.parse(fs.readFileSync('output.json', 'utf8'));
+            listingCount = Number(output.runMeta?.listingCount ?? output.totalClean ?? output.allListings?.length ?? 0);
+            status = String(output.runMeta?.scrapeStatus || (listingCount > 0 ? 'SCRAPE_COMPLETED' : 'SCRAPE_EMPTY'));
+          }
+        } catch (err) {
+          status = 'SCRAPE_OUTPUT_INVALID';
+          console.log(`output.json okunamadi: ${err.message}`);
+        }
+
+        fs.appendFileSync(process.env.GITHUB_OUTPUT, `status=${status}\nlisting_count=${listingCount}\n`);
+        console.log(`Sahibinden scrape status: ${status}; listings=${listingCount}`);
+        NODE
 
     - name: Sonuç ve Hata Kanıtlarını Artifact Olarak Al
       uses: actions/upload-artifact@v4
@@ -98,7 +304,7 @@ jobs:
         if-no-files-found: warn
 
     - name: 2elAnaliz Dashboard'u Tetikle
-      if: success()
+      if: success() && steps.scrape_status.outputs.status == 'SCRAPE_COMPLETED'
       env:
         ANALYZER_DISPATCH_TOKEN: ${{ secrets.ANALYZER_DISPATCH_TOKEN }}
         ANALYZER_REPO_OWNER: ${{ vars.ANALYZER_REPO_OWNER || 'univerisr-ai' }}
