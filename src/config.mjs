@@ -49,7 +49,7 @@ export const AI_TOP_RESULTS = 5;
 // ─── Sahibinden ──────────────────────────────────────────────
 export const BASE_URL = 'https://www.sahibinden.com/ekran-karti-masaustu';
 export const ITEMS_PER_PAGE = 50;
-export const MAX_PAGES_PER_SEGMENT = parseInt(process.env.MAX_PAGES_PER_SEGMENT || '20', 10); // Segment başına 20 sayfa = 1000 ilan x 10 segment = 10000 ilan kapasitesi.
+export const MAX_PAGES_PER_SEGMENT = parseInt(process.env.MAX_PAGES_PER_SEGMENT || '20', 10); // Segment basina 20 sayfa; yogun fiyat araliklari daha ince bolunur.
 
 // ─── Performans ──────────────────────────────────────────────
 export const CONCURRENCY_LIMIT = 1;
@@ -57,17 +57,25 @@ export const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '2', 10);
 export const REQUEST_DELAY_MS = parseInt(process.env.REQUEST_DELAY_MS || '700', 10);
 
 // ─── Fiyat Segmentleri (TL) ─────────────────────────────────
-// Daha optimize edilmiş 10 segment
+// Yogun ekran karti fiyat araliklarini daha ince bolerek 1000 ilanlik sayfa tavanina takilmamayi hedefler.
 export const PRICE_SEGMENTS = [
-  [0,       2000],
-  [2000,    4000],
+  [0,       1000],
+  [1000,    2000],
+  [2000,    3000],
+  [3000,    4000],
   [4000,    6000],
-  [6000,    9000],
-  [9000,    14000],
-  [14000,   20000],
-  [20000,   30000],
-  [30000,   50000],
-  [50000,   90000],
+  [6000,    8000],
+  [8000,    10000],
+  [10000,   12000],
+  [12000,   14000],
+  [14000,   17000],
+  [17000,   20000],
+  [20000,   25000],
+  [25000,   30000],
+  [30000,   40000],
+  [40000,   50000],
+  [50000,   70000],
+  [70000,   90000],
   [90000,   999000],
 ];
 
