@@ -72,7 +72,7 @@ jobs:
         USE_WARP_PROXY: 'true'
         USE_SCRAPEDO_PROXY: 'false'
         HEADLESS: ${{ inputs.headless || 'false' }}
-        MAX_PAGES_PER_SEGMENT: ${{ github.event_name == 'schedule' && '3' || inputs.max_pages_per_segment || '20' }}
+        MAX_PAGES_PER_SEGMENT: ${{ github.event_name == 'schedule' && '10' || inputs.max_pages_per_segment || '20' }}
         SAHIBINDEN_PERSISTENT_CONTEXT: 'true'
         SAHIBINDEN_USER_DATA_DIR: .playwright/sahibinden-profile
         SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
