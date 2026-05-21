@@ -10,7 +10,7 @@ export const SCRAPEOPS_API_KEY =
   process.env.SCRAPEOPS_API_KEY_1 ||
   process.env.SCRAPEOPS_API_KEY_2 ||
   '';
-export const MAX_CREDITS_PER_RUN = 300; // Güvenlik limiti
+export const MAX_CREDITS_PER_RUN = parseInt(process.env.MAX_CREDITS_PER_RUN || '1000', 10); // 5000+ ilan hedefi icin sayfa butcesi.
 const USE_SCRAPEDO_PROXY = (process.env.USE_SCRAPEDO_PROXY || 'false').toLowerCase() === 'true';
 
 if (USE_SCRAPEDO_PROXY && !SCRAPEOPS_API_KEY) {
@@ -49,7 +49,7 @@ export const AI_TOP_RESULTS = 5;
 // ─── Sahibinden ──────────────────────────────────────────────
 export const BASE_URL = 'https://www.sahibinden.com/ekran-karti-masaustu';
 export const ITEMS_PER_PAGE = 50;
-export const MAX_PAGES_PER_SEGMENT = parseInt(process.env.MAX_PAGES_PER_SEGMENT || '20', 10); // Segment basina 20 sayfa; yogun fiyat araliklari daha ince bolunur.
+export const MAX_PAGES_PER_SEGMENT = parseInt(process.env.MAX_PAGES_PER_SEGMENT || '40', 10); // 5000+ ilan hedefi icin segment basina daha derin tarama.
 
 // ─── Performans ──────────────────────────────────────────────
 export const CONCURRENCY_LIMIT = 1;

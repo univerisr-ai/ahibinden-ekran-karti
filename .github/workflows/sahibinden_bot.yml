@@ -14,7 +14,7 @@ on:
       max_pages_per_segment:
         description: 'Segment basina maksimum sayfa'
         required: true
-        default: '20'
+        default: '40'
   schedule:
     # Haftada iki yenileme penceresi; GitHub cron yogunluguna takilmamak icin garip dakikalar.
     # Turkiye saati: Sali 07:57, Cumartesi 21:13.
@@ -72,7 +72,8 @@ jobs:
         USE_WARP_PROXY: 'true'
         USE_SCRAPEDO_PROXY: 'false'
         HEADLESS: ${{ inputs.headless || 'false' }}
-        MAX_PAGES_PER_SEGMENT: ${{ github.event_name == 'schedule' && '10' || inputs.max_pages_per_segment || '20' }}
+        MAX_PAGES_PER_SEGMENT: ${{ github.event_name == 'schedule' && '30' || inputs.max_pages_per_segment || '40' }}
+        MAX_CREDITS_PER_RUN: '1000'
         SAHIBINDEN_PERSISTENT_CONTEXT: 'true'
         SAHIBINDEN_USER_DATA_DIR: .playwright/sahibinden-profile
         SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
