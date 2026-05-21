@@ -67,8 +67,22 @@ jobs:
           SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
           SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
         run: |
+          set +e
           set -o pipefail
           xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node scripts/sahibinden-keepalive.mjs 2>&1 | tee keepalive.log
+          keepalive_code=${PIPESTATUS[0]}
+          set -e
+
+          if [ "${keepalive_code}" -eq 0 ]; then
+            exit 0
+          fi
+
+          if grep -Eq 'CHALLENGE_TIMEOUT|SOURCE_BLOCKED|Cloudflare|challenge' keepalive.log; then
+            echo "Keepalive dis erisim/challenge nedeniyle yenilenemedi; kanit artifact'i yuklenecek ve workflow soft-success olarak bitecek."
+            exit 0
+          fi
+
+          exit "${keepalive_code}"
 
       - name: Eski profil cachelerini temizle
         if: always()
