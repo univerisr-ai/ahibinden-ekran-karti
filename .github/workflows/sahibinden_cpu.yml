@@ -17,7 +17,7 @@ on:
       max_pages_per_segment:
         description: 'Segment basina maksimum sayfa'
         required: false
-        default: '40'
+        default: '60'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -150,13 +150,13 @@ jobs:
           HEADLESS: 'false'
           CHALLENGE_WAIT_MS: '300000'
           REQUIRE_SAHIBINDEN_COOKIES: 'true'
-          MAX_PAGES_PER_SEGMENT: ${{ github.event.inputs.max_pages_per_segment || '40' }}
           BROWSER_LOCALE: 'tr-TR'
           BROWSER_TIMEZONE: 'Europe/Istanbul'
           BROWSER_PLATFORM: 'Win32'
           EXPECTED_LOCALE: 'tr-TR'
           EXPECTED_TIMEZONE: 'Europe/Istanbul'
           EXPECTED_PLATFORM: 'win'
+          MAX_PAGES_PER_SEGMENT: ${{ github.event.inputs.max_pages_per_segment || '60' }}
 
           SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
           SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
@@ -165,6 +165,10 @@ jobs:
           TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           ENABLE_TELEGRAM: 'false'
+          ANALYZER_DISPATCH_TOKEN: ${{ secrets.ANALYZER_DISPATCH_TOKEN }}
+          ANALYZER_REPO_OWNER: ${{ vars.ANALYZER_REPO_OWNER || 'univerisr-ai' }}
+          ANALYZER_REPO_NAME: ${{ vars.ANALYZER_REPO_NAME || '2elAnaliz' }}
+          ANALYZER_DISPATCH_EVENT: ${{ vars.ANALYZER_DISPATCH_EVENT || 'telegram_file_ready' }}
 
           CUSTOM_MIN_PRICE: ${{ github.event.inputs.min_fiyat }}
           CUSTOM_MAX_PRICE: ${{ github.event.inputs.max_fiyat }}

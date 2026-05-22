@@ -48,8 +48,10 @@ test('supports an isolated CPU Sahibinden category profile', async () => {
   assert.equal(config.PRODUCT_TYPE, 'cpu');
   assert.equal(config.PRODUCT_LABEL, 'Islemci');
   assert.equal(config.BASE_URL, 'https://www.sahibinden.com/islemci-masaustu');
-  assert.deepEqual(config.PRICE_SEGMENTS[0], [0, 500]);
-  assert.ok(config.PRICE_SEGMENTS.some(([min, max]) => min === 14000 && max === 18000));
+  assert.deepEqual(config.PRICE_SEGMENTS[0], [0, 250]);
+  assert.ok(config.PRICE_SEGMENTS.length >= 30);
+  assert.ok(config.PRICE_SEGMENTS.some(([min, max]) => min === 3000 && max === 3250));
+  assert.ok(config.PRICE_SEGMENTS.some(([min, max]) => min === 12000 && max === 15000));
 });
 
 test('allows explicit category URL override without changing the selected product label', async () => {
