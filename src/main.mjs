@@ -27,6 +27,7 @@ import {
 import { initSession, scrapeSegment, getStats, saveChallengeProofScreenshot, closeBrowser } from './scrapeops.mjs';
 import { parseAllPages, deduplicateListings, filterInvalidListings } from './parser.mjs';
 import { evaluateAllListings, selectTopOpportunities, fallbackSelection } from './ai_evaluator.mjs';
+import { buildAnalyzerDispatchPayload } from './analyzer_dispatch_payload.mjs';
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 let telegramTargetModeLogged = false;
@@ -130,39 +131,13 @@ async function triggerAnalyzerDispatch(dispatchMeta = {}) {
     return;
   }
 
-  const eventType = String(ANALYZER_DISPATCH_EVENT || 'telegram_file_ready').trim() || 'telegram_file_ready';
-  const sourceStatus = String(dispatchMeta?.sourceStatus || 'ANALIZ_EDILMEDI').trim() || 'ANALIZ_EDILMEDI';
-  const sourceMessage =
-    String(
-      dispatchMeta?.sourceMessage ||
-      'Scraper tamamlandi; veri analiz edilmedi durumunda analyzer servisine gonderildi.',
-    ).trim();
-
-  const payload = {
-    event_type: eventType,
-    client_payload: {
-      github_run_id: String(process.env.GITHUB_RUN_ID || ''),
-      source_repository: String(process.env.GITHUB_REPOSITORY || ''),
-      source_run_url:
-        process.env.GITHUB_RUN_ID && process.env.GITHUB_REPOSITORY
-          ? `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
-          : '',
-      artifact_name:
-        String(dispatchMeta?.artifactName || '').trim() ||
-        `${PRODUCT_ARTIFACT_PREFIX}-${String(process.env.GITHUB_RUN_ID || 'local').trim() || 'local'}`,
-      product_type: String(dispatchMeta?.productType || PRODUCT_TYPE).trim() || PRODUCT_TYPE,
-      product_label: String(dispatchMeta?.productLabel || PRODUCT_LABEL).trim() || PRODUCT_LABEL,
-      category_url: String(dispatchMeta?.categoryUrl || BASE_URL).trim() || BASE_URL,
-      scrape_status: String(dispatchMeta?.scrapeStatus || 'SCRAPE_COMPLETED').trim() || 'SCRAPE_COMPLETED',
-      listing_count: Number.isFinite(Number(dispatchMeta?.listingCount))
-        ? Number(dispatchMeta.listingCount)
-        : 0,
-      started_at: String(dispatchMeta?.startedAt || '').trim(),
-      finished_at: String(dispatchMeta?.finishedAt || '').trim(),
-      pipeline_message: String(dispatchMeta?.pipelineMessage || sourceMessage).trim(),
-      is_fallback: !!dispatchMeta?.isFallback,
-    },
-  };
+  const payload = buildAnalyzerDispatchPayload(dispatchMeta, {
+    analyzerDispatchEvent: ANALYZER_DISPATCH_EVENT,
+    productType: PRODUCT_TYPE,
+    productLabel: PRODUCT_LABEL,
+    baseUrl: BASE_URL,
+    productArtifactPrefix: PRODUCT_ARTIFACT_PREFIX,
+  });
 
   const endpoint = `https://api.github.com/repos/${owner}/${repo}/dispatches`;
   const response = await fetch(endpoint, {
@@ -181,7 +156,7 @@ async function triggerAnalyzerDispatch(dispatchMeta = {}) {
     throw new Error(`dispatch failed (${response.status}): ${errText}`);
   }
 
-  console.log(`  ✅ Analyzer dispatch tetiklendi (${owner}/${repo}, event=${eventType}).`);
+  console.log(`  ✅ Analyzer dispatch tetiklendi (${owner}/${repo}, event=${payload.event_type}).`);
 }
 
 async function sendTelegramChunk(chunk, useMarkdown = true) {
