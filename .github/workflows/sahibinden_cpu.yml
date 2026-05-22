@@ -1,0 +1,228 @@
+name: CPU Firsat Avcisi - Sahibinden Scraper
+
+on:
+  schedule:
+    # Her gun 10:00 UTC tetiklenir; workflow icinde haftada 2 rastgele gun politikasi uygulanir.
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+    inputs:
+      min_fiyat:
+        description: 'Minimum fiyat filtresi (TL, opsiyonel)'
+        required: false
+        default: ''
+      max_fiyat:
+        description: 'Maximum fiyat filtresi (TL, opsiyonel)'
+        required: false
+        default: ''
+      max_pages_per_segment:
+        description: 'Segment basina maksimum sayfa'
+        required: false
+        default: '40'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+concurrency:
+  group: sahibinden-cpu-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  scrape-cpu:
+    name: CPU scrape
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Haftalik run politikasi (2 rastgele gun)
+        id: run_policy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual tetikleme: policy bypass, CPU kosusu basliyor."
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "jitter_seconds=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ vars.PIPELINE_PAUSED }}" = "true" ] || [ "${{ vars.CPU_PIPELINE_PAUSED }}" = "true" ]; then
+            echo "Run policy: pipeline pause acik oldugu icin CPU schedule kosusu atlanacak."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "jitter_seconds=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          week="$(date -u +%G-%V)"
+          dow="$(date -u +%u)" # 1=Mon ... 7=Sun
+          seed_input="${GITHUB_REPOSITORY}|${week}|sahibinden-cpu-weekly-two-days"
+          seed_hex="$(printf "%s" "$seed_input" | sha256sum | cut -c1-16)"
+          seed_dec=$((16#$seed_hex))
+
+          day1=$(( (seed_dec % 7) + 1 ))
+          day2=$(( ((seed_dec / 7) % 7) + 1 ))
+
+          if [ "$day2" -eq "$day1" ]; then
+            day2=$(( (day1 % 7) + 1 ))
+          fi
+
+          if [ "$day1" -gt "$day2" ]; then
+            tmp="$day1"
+            day1="$day2"
+            day2="$tmp"
+          fi
+
+          jitter_seconds=$(( (seed_dec / 97) % 5400 ))
+
+          echo "Week: $week | UTC day: $dow | Picked days: $day1,$day2 | Jitter: ${jitter_seconds}s"
+
+          if [ "$dow" -eq "$day1" ] || [ "$dow" -eq "$day2" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "Run policy: Bugun CPU icin secili gunlerden biri, kosu devam edecek."
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            jitter_seconds=0
+            echo "Run policy: Bugun CPU icin secili gun degil, schedule kosusu atlanacak."
+          fi
+
+          echo "jitter_seconds=${jitter_seconds}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: steps.run_policy.outputs.should_run == 'true'
+        uses: actions/checkout@v4
+
+      - name: Node.js kurulumu
+        if: steps.run_policy.outputs.should_run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Python kurulumu
+        if: steps.run_policy.outputs.should_run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Python bagimliliklari
+        if: steps.run_policy.outputs.should_run == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64
+          pip install DrissionPage pyvirtualdisplay xvfbwrapper requests
+
+      - name: Node bagimliliklari
+        if: steps.run_policy.outputs.should_run == 'true'
+        run: npm ci
+
+      - name: Browser kurulumu
+        if: steps.run_policy.outputs.should_run == 'true'
+        run: npx playwright install chromium --with-deps
+
+      - name: Cloudflare WARP proxy kurulumu
+        if: steps.run_policy.outputs.should_run == 'true'
+        run: |
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update && sudo apt-get install -y cloudflare-warp
+          warp-cli --accept-tos registration new || warp-cli --accept-tos register
+          warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy
+          warp-cli --accept-tos proxy port 40000 || warp-cli --accept-tos set-proxy-port 40000
+          warp-cli --accept-tos connect
+          sleep 5
+          warp-cli --accept-tos status
+          curl -x socks5h://127.0.0.1:40000 -I https://www.cloudflare.com/cdn-cgi/trace || echo "WARP Proxy test atlandi"
+
+      - name: Schedule jitter beklemesi
+        if: steps.run_policy.outputs.should_run == 'true' && github.event_name == 'schedule'
+        shell: bash
+        run: |
+          set -euo pipefail
+          JITTER="${{ steps.run_policy.outputs.jitter_seconds }}"
+          echo "Jitter uygulanıyor: ${JITTER}s"
+          sleep "$JITTER"
+
+      - name: CPU scraper calistir
+        if: steps.run_policy.outputs.should_run == 'true'
+        shell: bash
+        env:
+          SAHIBINDEN_PRODUCT_TYPE: 'cpu'
+          USE_WARP_PROXY: 'true'
+          HEADLESS: 'false'
+          CHALLENGE_WAIT_MS: '300000'
+          REQUIRE_SAHIBINDEN_COOKIES: 'true'
+          MAX_PAGES_PER_SEGMENT: ${{ github.event.inputs.max_pages_per_segment || '40' }}
+          BROWSER_LOCALE: 'tr-TR'
+          BROWSER_TIMEZONE: 'Europe/Istanbul'
+          BROWSER_PLATFORM: 'Win32'
+          EXPECTED_LOCALE: 'tr-TR'
+          EXPECTED_TIMEZONE: 'Europe/Istanbul'
+          EXPECTED_PLATFORM: 'win'
+
+          SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
+          SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
+
+          TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
+          TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ENABLE_TELEGRAM: 'false'
+
+          CUSTOM_MIN_PRICE: ${{ github.event.inputs.min_fiyat }}
+          CUSTOM_MAX_PRICE: ${{ github.event.inputs.max_fiyat }}
+          BYPASS_AI: 'true'
+        run: |
+          set -o pipefail
+          xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs 2>&1 | tee scraper.log
+
+      - name: Sonuclari artifact olarak al
+        if: always() && steps.run_policy.outputs.should_run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraper-results-cpu-${{ github.run_id }}
+          path: |
+            output.json
+            pipeline-messages.json
+            cf_proof.png
+            scraper.log
+          retention-days: 7
+
+      - name: Telegram failure alert
+        if: failure() && steps.run_policy.outputs.should_run == 'true'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
+          TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set +e
+
+          TOKEN="${TELEGRAM_BOT_TOKEN_1:-${TELEGRAM_BOT_TOKEN_2:-}}"
+          CHAT_ID="${TELEGRAM_CHAT_ID:-}"
+
+          if [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ]; then
+            echo "Telegram alert skipped: token/chat id missing."
+            exit 0
+          fi
+
+          gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed > failed.log 2>/dev/null || true
+
+          summary="$(grep -m 1 -E 'Error:|ERR!|Traceback|Exception|FATAL|KRITIK|CRITICAL|❌' failed.log || true)"
+          if [ -z "$summary" ] && [ -f scraper.log ]; then
+            summary="$(grep -m 1 -E 'Error:|ERR!|Traceback|Exception|FATAL|KRITIK|CRITICAL|❌' scraper.log || true)"
+          fi
+          if [ -z "$summary" ]; then
+            summary="Ilk hata ozeti otomatik cikarilamadi; CPU run logunu kontrol et."
+          fi
+
+          summary="${summary//$'\r'/ }"
+          summary="${summary//$'\n'/ }"
+
+          message="CPU pipeline alarmi
+          Repo: $GITHUB_REPOSITORY
+          Workflow: $GITHUB_WORKFLOW
+          Run URL: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          Ozet: ${summary:0:700}"
+
+          curl -fsS -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
+            --data-urlencode "chat_id=$CHAT_ID" \
+            --data-urlencode "text=$message" >/dev/null || true

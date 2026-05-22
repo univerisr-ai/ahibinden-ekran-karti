@@ -16,6 +16,12 @@ import {
   AI_PROVIDER,
   GEMINI_API_KEY,
   OPENROUTER_API_KEY,
+  BASE_URL,
+  PRODUCT_ARTIFACT_PREFIX,
+  PRODUCT_BANNER_TITLE,
+  PRODUCT_LABEL,
+  PRODUCT_REPORT_TITLE,
+  PRODUCT_TYPE,
   getActiveSegments,
 } from './config.mjs';
 import { initSession, scrapeSegment, getStats, saveChallengeProofScreenshot, closeBrowser } from './scrapeops.mjs';
@@ -143,7 +149,10 @@ async function triggerAnalyzerDispatch(dispatchMeta = {}) {
           : '',
       artifact_name:
         String(dispatchMeta?.artifactName || '').trim() ||
-        `scraper-results-${String(process.env.GITHUB_RUN_ID || 'local').trim() || 'local'}`,
+        `${PRODUCT_ARTIFACT_PREFIX}-${String(process.env.GITHUB_RUN_ID || 'local').trim() || 'local'}`,
+      product_type: String(dispatchMeta?.productType || PRODUCT_TYPE).trim() || PRODUCT_TYPE,
+      product_label: String(dispatchMeta?.productLabel || PRODUCT_LABEL).trim() || PRODUCT_LABEL,
+      category_url: String(dispatchMeta?.categoryUrl || BASE_URL).trim() || BASE_URL,
       scrape_status: String(dispatchMeta?.scrapeStatus || 'SCRAPE_COMPLETED').trim() || 'SCRAPE_COMPLETED',
       listing_count: Number.isFinite(Number(dispatchMeta?.listingCount))
         ? Number(dispatchMeta.listingCount)
@@ -437,7 +446,7 @@ function buildReport(stats, totalRaw, totalClean, topDeals, elapsedSec) {
   const seconds = Math.floor(elapsedSec % 60);
   const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
 
-  let report = `📊 *EKRAN KARTI FIRSAT RAPORU*\n`;
+  let report = `📊 *${PRODUCT_REPORT_TITLE}*\n`;
   report += `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
   report += `📈 *İstatistikler*\n`;
   report += `• Taranan Segment   : ${getActiveSegments().length}\n`;
@@ -471,14 +480,17 @@ function buildReport(stats, totalRaw, totalClean, topDeals, elapsedSec) {
 async function main() {
   const startTime = Date.now();
   const startTimeIso = new Date().toISOString();
+  const aiBypassed = BYPASS_AI || PRODUCT_TYPE !== 'gpu';
 
   console.log('');
   console.log('  ═══════════════════════════════════════════════════════');
-  console.log('  🎮  SAHİBİNDEN GPU FIRSAT AVCISI v4.0');
+  console.log(`  🎮  ${PRODUCT_BANNER_TITLE} v4.0`);
   console.log('  🌐  ScrapeOps Otomatik Kademe Motoru');
   console.log('  ═══════════════════════════════════════════════════════');
+  console.log(`  🧩 Ürün: ${PRODUCT_LABEL} (${PRODUCT_TYPE})`);
+  console.log(`  🔎 Kategori: ${BASE_URL}`);
   console.log(`  🔐 Session: #${SESSION_NUMBER}`);
-  console.log(`  🤖 AI: ${BYPASS_AI ? 'DEVRE DIŞI' : AI_PROVIDER.toUpperCase()}`);
+  console.log(`  🤖 AI: ${aiBypassed ? 'DEVRE DIŞI' : AI_PROVIDER.toUpperCase()}`);
   console.log('');
 
   // ADIM 1: Cloudflare bypass
@@ -565,11 +577,11 @@ async function main() {
 
   // ADIM 5: AI
   let topDeals = [];
-  let isFallback = BYPASS_AI;
+  let isFallback = aiBypassed;
   if (allListings.length === 0) {
     console.log('\n  ⚠️ Hiç ilan çekilemedi.');
     await sendTelegram('⚠️ Hiç ilan çekilemedi. Tarama tamamlandı ancak sonuç bulunamadı.');
-  } else if (BYPASS_AI) {
+  } else if (aiBypassed) {
     console.log('\n  ⏭️ AI atlandı, en ucuzlar seçilecek.');
     topDeals = fallbackSelection(allListings);
   } else {
@@ -615,6 +627,9 @@ async function main() {
   const { fileURLToPath } = await import('url');
   const outputData = {
     timestamp: new Date().toISOString(),
+    productType: PRODUCT_TYPE,
+    productLabel: PRODUCT_LABEL,
+    sourceCategoryUrl: BASE_URL,
     sessionNumber: SESSION_NUMBER,
     stats: st,
     totalRaw,
@@ -638,8 +653,11 @@ async function main() {
           : '',
       artifactName:
         String(process.env.GITHUB_RUN_ID || '').trim()
-          ? `scraper-results-${String(process.env.GITHUB_RUN_ID).trim()}`
+          ? `${PRODUCT_ARTIFACT_PREFIX}-${String(process.env.GITHUB_RUN_ID).trim()}`
           : '',
+      productType: PRODUCT_TYPE,
+      productLabel: PRODUCT_LABEL,
+      categoryUrl: BASE_URL,
       startedAt: startTimeIso,
       finishedAt: new Date().toISOString(),
       scrapeStatus: totalClean > 0 ? 'SCRAPE_COMPLETED' : 'SCRAPE_EMPTY',
@@ -652,7 +670,7 @@ async function main() {
     {
       service: 'scraper',
       status: 'ANALIZ_EDILMEDI',
-      message: 'Scraper ilanlari cekti ve output.json olusturdu.',
+      message: `${PRODUCT_LABEL} scraper ilanlari cekti ve output.json olusturdu.`,
       timestamp: new Date().toISOString(),
     },
   ];
@@ -663,13 +681,13 @@ async function main() {
 
   const artifactName =
     String(process.env.GITHUB_RUN_ID || '').trim()
-      ? `scraper-results-${String(process.env.GITHUB_RUN_ID).trim()}`
-      : 'scraper-results-local';
+      ? `${PRODUCT_ARTIFACT_PREFIX}-${String(process.env.GITHUB_RUN_ID).trim()}`
+      : `${PRODUCT_ARTIFACT_PREFIX}-local`;
   const scrapeStatus = totalClean > 0 ? 'SCRAPE_COMPLETED' : 'SCRAPE_EMPTY';
   const dispatchMessage =
     totalClean > 0
-      ? 'Scraper ilanlari cekti; dosya analiz edilmeden 2elAnaliz servisine iletildi.'
-      : 'Scraper calisti ancak temiz ilan bulunamadi; bos/az veri analyzer servisine iletildi.';
+      ? `${PRODUCT_LABEL} scraper ilanlari cekti; dosya analiz edilmeden 2elAnaliz servisine iletildi.`
+      : `${PRODUCT_LABEL} scraper calisti ancak temiz ilan bulunamadi; bos/az veri analyzer servisine iletildi.`;
 
   try {
     await triggerAnalyzerDispatch({
@@ -680,6 +698,9 @@ async function main() {
       scrapeStatus,
       listingCount: totalClean,
       artifactName,
+      productType: PRODUCT_TYPE,
+      productLabel: PRODUCT_LABEL,
+      categoryUrl: BASE_URL,
       startedAt: startTimeIso,
       finishedAt: outputData.runMeta.finishedAt,
       pipelineMessage: dispatchMessage,
@@ -704,7 +725,7 @@ async function main() {
   const aiStatusLabel = isFallback ? '❌ Devre Dışı / Yapılamadı' : '✅ Başarılı';
   await sendTelegramDocument(
     outputPath,
-    `📎 Detayli tarama dosyasi\nSession: #${SESSION_NUMBER}\nToplam: ${totalClean.toLocaleString('tr')} ilan\nAI Analiz: ${aiStatusLabel}`,
+    `📎 ${PRODUCT_LABEL} detayli tarama dosyasi\nSession: #${SESSION_NUMBER}\nToplam: ${totalClean.toLocaleString('tr')} ilan\nAI Analiz: ${aiStatusLabel}`,
   );
 
   if (totalClean === 0) {

@@ -179,6 +179,8 @@ Repo kokune `cookies.json` koyarsaniz, `SAHIBINDEN_COOKIES` yokken lokalde otoma
 | `REQUIRE_SAHIBINDEN_COOKIES` | `true` ise cookie bootstrap zorunlu ve fail-fast |
 | `USE_WARP_PROXY` | WARP SOCKS proxy modunu ac/kapat |
 | `HEADLESS` | Playwright headless calisma modu |
+| `SAHIBINDEN_PRODUCT_TYPE` | `gpu` varsayilan, `cpu` islemci kategorisi |
+| `SAHIBINDEN_BASE_URL` | Varsayilan kategori URL'sini override eder |
 | `CUSTOM_MIN_PRICE` | Workflow dispatch min fiyat |
 | `CUSTOM_MAX_PRICE` | Workflow dispatch max fiyat |
 | `BYPASS_AI` | AI analizini atla/aktif et |
@@ -210,6 +212,19 @@ Scraper workflow'u cron ile her gun tetiklenir, ancak calisma politikasi su seki
 - Schedule tetiklerinde ek olarak jitter beklemesi uygulanir (0-5400 sn), boylece calisma saati sabit bir imza birakmaz.
 
 Manuel `workflow_dispatch` tetiklemeleri bu politikayi bypass eder ve dogrudan calisir.
+
+### CPU workflow'u
+
+`.github/workflows/sahibinden_cpu.yml` ayri bir Actions workflow'udur. Ayni scraper motorunu kullanir ama `SAHIBINDEN_PRODUCT_TYPE=cpu` ile Sahibinden islemci kategorisine gider:
+
+`https://www.sahibinden.com/islemci-masaustu`
+
+GPU workflow'una zarar vermemek icin:
+
+- GPU default profil olarak kalir; env verilmezse eski ekran karti akisi calisir.
+- CPU workflow artifact adi `scraper-results-cpu-<run_id>` olur.
+- CPU kosusu varsayilan olarak analyzer'a dispatch atmaz; once artifact uzerinden veri kalitesi kontrol edilir.
+- CPU icin AI kapali tutulur; GPU odakli prompt ile yanlis siniflama yapmasin diye fallback siralama kullanilir.
 
 ## Daha saglam yontem: sahibinden bildirimlerini Telegram'a dusurme
 

@@ -11,6 +11,7 @@ import {
   ITEMS_PER_PAGE,
   BASE_URL,
   MAX_PAGES_PER_SEGMENT,
+  WARMUP_PRICE_MAX,
 } from './config.mjs';
 import { chromium } from 'playwright';
 import fs from 'fs';
@@ -439,6 +440,13 @@ function isChallengePage(html = '', currentUrl = '') {
 function looksLikeListingsPage(html = '', currentUrl = '') {
   const h = String(html || '').toLowerCase();
   const u = String(currentUrl || '').toLowerCase();
+  const configuredPath = (() => {
+    try {
+      return new URL(BASE_URL).pathname.toLowerCase();
+    } catch {
+      return '';
+    }
+  })();
 
   const hasListingRows =
     h.includes('searchresultsitem') ||
@@ -447,7 +455,10 @@ function looksLikeListingsPage(html = '', currentUrl = '') {
 
   const hasResultSummary = h.includes('aramanizda') && h.includes('sonuc bulundu');
   const onSearchRoute =
+    (configuredPath && u.includes(configuredPath)) ||
     u.includes('/ekran-karti') ||
+    u.includes('/islemci') ||
+    u.includes('/processors') ||
     u.includes('/arama') ||
     u.includes('/arama?q=');
 
@@ -1843,7 +1854,7 @@ export async function initSession() {
   }
 
   try {
-    const warmupUrl = buildSahibindenUrl(0, 0, 2000);
+    const warmupUrl = buildSahibindenUrl(0, 0, WARMUP_PRICE_MAX);
     await page.goto(warmupUrl, {
       waitUntil: 'domcontentloaded',
       timeout: DEFAULT_NAV_TIMEOUT_MS,

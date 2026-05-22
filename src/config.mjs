@@ -46,19 +46,9 @@ export const AI_CHUNK_SIZE = 100;
 export const AI_DELAY_BETWEEN_CHUNKS_MS = 2000;
 export const AI_TOP_RESULTS = 5;
 
-// ─── Sahibinden ──────────────────────────────────────────────
-export const BASE_URL = 'https://www.sahibinden.com/ekran-karti-masaustu';
-export const ITEMS_PER_PAGE = 50;
-export const MAX_PAGES_PER_SEGMENT = parseInt(process.env.MAX_PAGES_PER_SEGMENT || '40', 10); // 5000+ ilan hedefi icin segment basina daha derin tarama.
-
-// ─── Performans ──────────────────────────────────────────────
-export const CONCURRENCY_LIMIT = 1;
-export const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '2', 10);
-export const REQUEST_DELAY_MS = parseInt(process.env.REQUEST_DELAY_MS || '700', 10);
-
-// ─── Fiyat Segmentleri (TL) ─────────────────────────────────
-// Yogun ekran karti fiyat araliklarini daha ince bolerek 1000 ilanlik sayfa tavanina takilmamayi hedefler.
-export const PRICE_SEGMENTS = [
+// ─── Urun Profilleri ─────────────────────────────────────────
+// GPU varsayilan kalir; CPU ayri workflow/env ile ayni motoru kullanir.
+const GPU_PRICE_SEGMENTS = [
   [0,       500],
   [500,     1000],
   [1000,    1500],
@@ -104,6 +94,79 @@ export const PRICE_SEGMENTS = [
   [90000,   120000],
   [120000,  999000],
 ];
+
+const CPU_PRICE_SEGMENTS = [
+  [0,       500],
+  [500,     1000],
+  [1000,    1500],
+  [1500,    2000],
+  [2000,    2500],
+  [2500,    3000],
+  [3000,    3500],
+  [3500,    4000],
+  [4000,    5000],
+  [5000,    6000],
+  [6000,    7500],
+  [7500,    9000],
+  [9000,    11000],
+  [11000,   14000],
+  [14000,   18000],
+  [18000,   25000],
+  [25000,   40000],
+  [40000,   999000],
+];
+
+export const PRODUCT_PROFILES = {
+  gpu: {
+    type: 'gpu',
+    label: 'Ekran Karti',
+    reportTitle: 'EKRAN KARTI FIRSAT RAPORU',
+    bannerTitle: 'SAHIBINDEN GPU FIRSAT AVCISI',
+    baseUrl: 'https://www.sahibinden.com/ekran-karti-masaustu',
+    priceSegments: GPU_PRICE_SEGMENTS,
+    warmupPriceMax: 2000,
+    artifactPrefix: 'scraper-results',
+  },
+  cpu: {
+    type: 'cpu',
+    label: 'Islemci',
+    reportTitle: 'ISLEMCI FIRSAT RAPORU',
+    bannerTitle: 'SAHIBINDEN CPU FIRSAT AVCISI',
+    baseUrl: 'https://www.sahibinden.com/islemci-masaustu',
+    priceSegments: CPU_PRICE_SEGMENTS,
+    warmupPriceMax: 1500,
+    artifactPrefix: 'scraper-results-cpu',
+  },
+};
+
+function normalizeProductType(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return Object.hasOwn(PRODUCT_PROFILES, normalized) ? normalized : 'gpu';
+}
+
+export const PRODUCT_TYPE = normalizeProductType(
+  process.env.SAHIBINDEN_PRODUCT_TYPE || process.env.PRODUCT_TYPE || 'gpu',
+);
+export const PRODUCT_PROFILE = PRODUCT_PROFILES[PRODUCT_TYPE];
+export const PRODUCT_LABEL = PRODUCT_PROFILE.label;
+export const PRODUCT_REPORT_TITLE = PRODUCT_PROFILE.reportTitle;
+export const PRODUCT_BANNER_TITLE = PRODUCT_PROFILE.bannerTitle;
+export const PRODUCT_ARTIFACT_PREFIX = PRODUCT_PROFILE.artifactPrefix;
+export const WARMUP_PRICE_MAX = PRODUCT_PROFILE.warmupPriceMax;
+
+// ─── Sahibinden ──────────────────────────────────────────────
+export const BASE_URL = process.env.SAHIBINDEN_BASE_URL || PRODUCT_PROFILE.baseUrl;
+export const ITEMS_PER_PAGE = 50;
+export const MAX_PAGES_PER_SEGMENT = parseInt(process.env.MAX_PAGES_PER_SEGMENT || '40', 10); // 5000+ ilan hedefi icin segment basina daha derin tarama.
+
+// ─── Performans ──────────────────────────────────────────────
+export const CONCURRENCY_LIMIT = 1;
+export const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '2', 10);
+export const REQUEST_DELAY_MS = parseInt(process.env.REQUEST_DELAY_MS || '700', 10);
+
+// ─── Fiyat Segmentleri (TL) ─────────────────────────────────
+// Yogun fiyat araliklarini bolerek Sahibinden sayfa tavanina takilmamayi hedefler.
+export const PRICE_SEGMENTS = PRODUCT_PROFILE.priceSegments;
 
 // ─── Workflow Dispatch ───────────────────────────────────────
 export const CUSTOM_MIN_PRICE = process.env.CUSTOM_MIN_PRICE ? parseInt(process.env.CUSTOM_MIN_PRICE) : null;
