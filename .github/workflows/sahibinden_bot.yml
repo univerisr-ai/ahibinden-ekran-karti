@@ -64,9 +64,9 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .playwright/sahibinden-profile
-        key: sahibinden-playwright-profile-${{ runner.os }}-${{ github.run_id }}
+        key: sahibinden-playwright-profile-v2-${{ runner.os }}-${{ github.run_id }}
         restore-keys: |
-          sahibinden-playwright-profile-${{ runner.os }}-
+          sahibinden-playwright-profile-v2-${{ runner.os }}-
 
     - name: Botu Başlat
       env:
