@@ -36,6 +36,7 @@ jobs:
           npx playwright install-deps chrome
 
       - name: Cloudflare WARP proxy kurulumu
+        if: vars.USE_WARP_PROXY == 'true'
         run: |
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
           echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
@@ -58,7 +59,7 @@ jobs:
 
       - name: Session keepalive calistir
         env:
-          USE_WARP_PROXY: 'true'
+          USE_WARP_PROXY: ${{ vars.USE_WARP_PROXY == 'true' && 'true' || 'false' }}
           USE_SCRAPEDO_PROXY: 'false'
           HEADLESS: 'false'
           CHALLENGE_WAIT_MS: '120000'
