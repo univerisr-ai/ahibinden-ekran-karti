@@ -121,7 +121,7 @@ jobs:
         run: npx playwright install chromium --with-deps
 
       - name: Cloudflare WARP proxy kurulumu
-        if: steps.run_policy.outputs.should_run == 'true' && vars.USE_WARP_PROXY == 'true'
+        if: steps.run_policy.outputs.should_run == 'true' && (vars.USE_WARP_PROXY == 'true' || vars.DOLAP_USE_WARP_PROXY == 'true')
         run: |
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
           echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
@@ -148,7 +148,9 @@ jobs:
         shell: bash
         env:
           SAHIBINDEN_PRODUCT_TYPE: 'cpu'
-          USE_WARP_PROXY: ${{ vars.USE_WARP_PROXY == 'true' && 'true' || 'false' }}
+          USE_WARP_PROXY: ${{ (vars.USE_WARP_PROXY == 'true' || vars.DOLAP_USE_WARP_PROXY == 'true') && 'true' || 'false' }}
+          SAHIBINDEN_PROXY_SERVER: ${{ secrets.SAHIBINDEN_PROXY_SERVER || vars.SAHIBINDEN_PROXY_SERVER || secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
+          DOLAP_PROXY_SERVER: ${{ secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
           HEADLESS: 'false'
           CHALLENGE_WAIT_MS: '300000'
           REQUIRE_SAHIBINDEN_COOKIES: 'true'

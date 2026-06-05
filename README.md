@@ -178,6 +178,9 @@ Repo kokune `cookies.json` koyarsaniz, `SAHIBINDEN_COOKIES` yokken lokalde otoma
 | `SAHIBINDEN_COOKIES` | Sahibinden cookie JSON payload (Secret/ENV) |
 | `REQUIRE_SAHIBINDEN_COOKIES` | `true` ise cookie bootstrap zorunlu ve fail-fast |
 | `USE_WARP_PROXY` | WARP SOCKS proxy modunu ac/kapat |
+| `DOLAP_USE_WARP_PROXY` | Dolap workflow'undaki WARP variable adini Sahibinden icin alias olarak kullanir |
+| `SAHIBINDEN_PROXY_SERVER` | Sahibinden icin acik proxy URL override'i; kimlik bilgisi URL icinde verilebilir |
+| `DOLAP_PROXY_SERVER` | Dolap scraper'daki proxy ayarini Sahibinden icin fallback olarak kullanir |
 | `HEADLESS` | Playwright headless calisma modu |
 | `SAHIBINDEN_PRODUCT_TYPE` | `gpu` varsayilan, `cpu` islemci kategorisi |
 | `SAHIBINDEN_BASE_URL` | Varsayilan kategori URL'sini override eder |

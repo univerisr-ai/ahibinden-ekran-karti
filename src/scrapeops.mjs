@@ -58,6 +58,74 @@ const BROWSER_PLATFORM = String(process.env.BROWSER_PLATFORM || 'Win32').trim() 
 const USE_WARP_PROXY = (process.env.USE_WARP_PROXY || 'false').toLowerCase() === 'true';
 
 const USE_SCRAPEDO_PROXY = (process.env.USE_SCRAPEDO_PROXY || 'false').toLowerCase() === 'true';
+const CUSTOM_PROXY_ENV_KEYS = [
+  'SAHIBINDEN_PROXY_SERVER',
+  'DOLAP_PROXY_SERVER',
+  'SCRAPER_PROXY_SERVER',
+  'PROXY_SERVER',
+];
+
+function cleanProxyValue(value) {
+  return String(value || '').trim();
+}
+
+export function buildPlaywrightProxyFromUrl(proxyUrl) {
+  const raw = cleanProxyValue(proxyUrl);
+  if (!raw) return null;
+
+  try {
+    const parsed = new URL(raw);
+    const username = decodeURIComponent(parsed.username || '');
+    const password = decodeURIComponent(parsed.password || '');
+    parsed.username = '';
+    parsed.password = '';
+
+    let server = parsed.toString();
+    if (parsed.pathname === '/' && !parsed.search && !parsed.hash) {
+      server = server.replace(/\/$/, '');
+    }
+
+    const proxy = { server };
+    if (username) proxy.username = username;
+    if (password) proxy.password = password;
+    return proxy;
+  } catch (_) {
+    return { server: raw };
+  }
+}
+
+export function resolveSahibindenProxyConfig(env = process.env) {
+  for (const key of CUSTOM_PROXY_ENV_KEYS) {
+    const value = cleanProxyValue(env[key]);
+    if (!value) continue;
+    const proxy = buildPlaywrightProxyFromUrl(value);
+    return proxy ? { source: key, ...proxy } : null;
+  }
+  return null;
+}
+
+function redactProxyServer(server) {
+  const raw = cleanProxyValue(server);
+  if (!raw) return '';
+
+  try {
+    const parsed = new URL(raw);
+    parsed.username = '';
+    parsed.password = '';
+    let redacted = parsed.toString();
+    if (parsed.pathname === '/' && !parsed.search && !parsed.hash) {
+      redacted = redacted.replace(/\/$/, '');
+    }
+    return redacted;
+  } catch (_) {
+    return raw.replace(/\/\/([^:@/]+):([^@/]+)@/, '//***:***@');
+  }
+}
+
+const CUSTOM_PROXY_CONFIG = resolveSahibindenProxyConfig();
+const USE_CUSTOM_PROXY = Boolean(CUSTOM_PROXY_CONFIG);
+const USE_ANY_PROXY = USE_CUSTOM_PROXY || USE_WARP_PROXY || USE_SCRAPEDO_PROXY;
+
 // ScrapingAnt Proxy Ayarları (Germany Residential / Ev IP'si)
 const SCRAPEDO_TOKEN = process.env.SCRAPEDO_TOKEN || 'scrapingant&browser=false&proxy_type=residential&proxy_country=de'; // ScrapingAnt Username (Ayarlar) Almanya
 const SCRAPEDO_PROXY_SERVER = process.env.SCRAPEDO_PROXY_SERVER || 'http://proxy.scrapingant.com:8080';
@@ -1468,7 +1536,7 @@ async function ensureBrowser() {
     ];
     const launchEnv = { ...process.env };
 
-    if (!USE_SCRAPEDO_PROXY && !USE_WARP_PROXY) {
+    if (!USE_ANY_PROXY) {
       // Sistem proxy'sini tamamen devre dışı bırak.
       launchArgs.push('--no-proxy-server', '--proxy-server=direct://', '--proxy-bypass-list=*');
       delete launchEnv.HTTP_PROXY;
@@ -1487,7 +1555,10 @@ async function ensureBrowser() {
       slowMo: parseInt(process.env.PLAYWRIGHT_SLOWMO_MS || '50', 10),
     };
 
-    if (USE_WARP_PROXY) {
+    if (USE_CUSTOM_PROXY) {
+      const { source: _source, ...proxy } = CUSTOM_PROXY_CONFIG;
+      launchOptions.proxy = proxy;
+    } else if (USE_WARP_PROXY) {
       launchOptions.proxy = {
         server: 'socks5://127.0.0.1:40000'
       };
@@ -1621,7 +1692,11 @@ async function ensureBrowser() {
       }
     }
 
-    if (USE_WARP_PROXY) {
+    if (USE_CUSTOM_PROXY) {
+      console.log(
+        `  🌐 Playwright tarayıcı başlatıldı (Custom Proxy Mode: ${CUSTOM_PROXY_CONFIG.source}, ${redactProxyServer(CUSTOM_PROXY_CONFIG.server)}).`,
+      );
+    } else if (USE_WARP_PROXY) {
       console.log('  🌐 Playwright tarayıcı başlatıldı (WARP Proxy Mode - 127.0.0.1:40000).');
     } else if (USE_SCRAPEDO_PROXY) {
       console.log('  🌐 Playwright tarayıcı başlatıldı (Scrape.do Proxy Mode).');
@@ -1696,7 +1771,9 @@ async function fetchPage(targetUrl, label = '') {
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const cost = 1;
-    const modeLabel = USE_WARP_PROXY ? 'Playwright + WARP Proxy' : (USE_SCRAPEDO_PROXY ? 'Playwright + Scrape.do Proxy' : 'Playwright Direct');
+    const modeLabel = USE_CUSTOM_PROXY
+      ? `Playwright + Custom Proxy (${CUSTOM_PROXY_CONFIG.source})`
+      : (USE_WARP_PROXY ? 'Playwright + WARP Proxy' : (USE_SCRAPEDO_PROXY ? 'Playwright + Scrape.do Proxy' : 'Playwright Direct'));
     console.log(`  🌐 -> ${modeLabel} [${cost}cr] (${label}) - Deneme ${attempt}`);
     stats.totalRequests++;
 
