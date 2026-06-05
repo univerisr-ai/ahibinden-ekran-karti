@@ -158,7 +158,8 @@ jobs:
           EXPECTED_TIMEZONE: 'Europe/Istanbul'
           EXPECTED_PLATFORM: 'win'
 
-          # ── Cookie bootstrap (GitHub Secret) ────────────────
+          # ── Session bootstrap (GitHub Secret) ───────────────
+          SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
           SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
 
           # ── Telegram ───────────────────────────────────────

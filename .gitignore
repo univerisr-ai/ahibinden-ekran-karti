@@ -7,13 +7,19 @@ cf_proof.png
 extra-links.json
 .env
 auth.json
+auth-*.json
+auth-*-report.json
 *.auth.json
 cookies.json
 state.json
 login-inspection-report.json
+warp-*.json
+warp-*.log
+warp-*.png
 .playwright/
 .chrome_profile/
 .chrome_profile_sahibinden/
 .chrome_profile_sahibinden_inspect/
+.chrome_profile_sahibinden_warp/
 eski sürümler/
 önceki konuşamalr.md
