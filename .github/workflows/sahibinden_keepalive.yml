@@ -3,7 +3,7 @@ name: Sahibinden Session Keepalive
 on:
   workflow_dispatch:
   schedule:
-    - cron: '17,37,57 * * * *' # 20 dakikada bir; __cf_bm 30 dk hareketsizlik limitine yakalanmadan profil tazeleme
+    - cron: '17 */6 * * *' # Best-effort profil tazeleme; challenge olursa ana scraper'i kirmiziya dusurmez.
 
 permissions:
   contents: read
@@ -95,11 +95,20 @@ jobs:
           fi
 
           if grep -Eq 'CHALLENGE_TIMEOUT|SOURCE_BLOCKED|Cloudflare|challenge' keepalive.log; then
-            echo "Keepalive dis erisim/challenge nedeniyle yenilenemedi; kanit artifact'i yuklenecek ve workflow fail olarak bitecek."
-            exit "${keepalive_code}"
+            echo "::warning::Keepalive dis erisim/challenge nedeniyle yenilenemedi. Ana scraper son WARP kosusunda ilan cekebildi; kanit artifact'i yuklenecek."
+            touch .keepalive-blocked
+            exit 0
           fi
 
           exit "${keepalive_code}"
+
+      - name: Challenge olduysa profil cache kaydini iptal et
+        if: always()
+        run: |
+          if [ -f .keepalive-blocked ]; then
+            echo "Challenge profili cache'e yazilmasin diye profil klasoru temizleniyor."
+            rm -rf .playwright/sahibinden-profile
+          fi
 
       - name: Eski profil cachelerini temizle
         if: always()
