@@ -172,8 +172,9 @@ jobs:
         env:
           SAHIBINDEN_PRODUCT_TYPE: 'cpu'
           USE_WARP_PROXY: ${{ steps.warp.outputs.enabled || 'false' }}
-          SAHIBINDEN_PROXY_SERVER: ${{ steps.warp.outputs.proxy_url || secrets.SAHIBINDEN_PROXY_SERVER || vars.SAHIBINDEN_PROXY_SERVER || secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
-          DOLAP_PROXY_SERVER: ${{ steps.warp.outputs.proxy_url || secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
+          SAHIBINDEN_PROXY_SERVER: ${{ secrets.SAHIBINDEN_PROXY_SERVER || vars.SAHIBINDEN_PROXY_SERVER || secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
+          DOLAP_PROXY_SERVER: ${{ secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
+          WARP_PROXY_SERVER: ${{ steps.warp.outputs.proxy_url || '' }}
           HEADLESS: 'false'
           CHALLENGE_WAIT_MS: '300000'
           REQUIRE_SAHIBINDEN_COOKIES: 'true'
