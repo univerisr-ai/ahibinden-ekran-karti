@@ -121,7 +121,7 @@ jobs:
         run: npx playwright install chromium --with-deps
 
       - name: Cloudflare WARP proxy kurulumu
-        if: steps.run_policy.outputs.should_run == 'true' && (vars.USE_WARP_PROXY == 'true' || vars.DOLAP_USE_WARP_PROXY == 'true')
+        if: steps.run_policy.outputs.should_run == 'true' && vars.CPU_DISABLE_WARP_PROXY != 'true'
         id: warp
         shell: bash
         run: |
@@ -163,7 +163,7 @@ jobs:
         env:
           SAHIBINDEN_PRODUCT_TYPE: 'cpu'
           USE_WARP_PROXY: ${{ steps.warp.outputs.enabled || 'false' }}
-          SAHIBINDEN_PROXY_SERVER: ${{ secrets.SAHIBINDEN_PROXY_SERVER || vars.SAHIBINDEN_PROXY_SERVER || secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
+          SAHIBINDEN_PROXY_SERVER: ${{ steps.warp.outputs.proxy_url || secrets.SAHIBINDEN_PROXY_SERVER || vars.SAHIBINDEN_PROXY_SERVER || secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
           DOLAP_PROXY_SERVER: ${{ steps.warp.outputs.proxy_url || secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
           HEADLESS: 'false'
           CHALLENGE_WAIT_MS: '300000'
@@ -205,6 +205,7 @@ jobs:
             pipeline-messages.json
             cf_proof.png
             scraper.log
+            warp-trace.txt
           retention-days: 7
 
       - name: Telegram failure alert
