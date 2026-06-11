@@ -7,6 +7,12 @@
 import * as cheerio from 'cheerio';
 
 const BASE_SITE = 'https://www.sahibinden.com';
+const TOTAL_COUNT_PATTERNS = [
+  /([\d.]+)\s*ilan/i,
+  /([\d.]+)\s*sonu[cç]\s*bulundu/i,
+  /toplam\s*([\d.]+)/i,
+];
+const PRICE_TEXT_REGEX = /(\d{1,3}(?:[.\s]\d{3})*(?:,\d+)?\s*TL)/i;
 let lastFilterStats = {
   missingId: 0,
   invalidPrice: 0,
@@ -47,6 +53,33 @@ function firstElement($root, selectors) {
     if (found.length) return found;
   }
   return null;
+}
+
+function cleanText(value = '') {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function extractTextBySelectors($root, selectors) {
+  const element = firstElement($root, selectors);
+  return element && element.length ? cleanText(element.text()) : '';
+}
+
+function extractTitleFromLink(linkEl) {
+  if (!linkEl || !linkEl.length) return '';
+
+  const candidates = [
+    linkEl.text(),
+    linkEl.attr('title'),
+    linkEl.attr('aria-label'),
+    linkEl.attr('data-title'),
+  ];
+
+  for (const candidate of candidates) {
+    const text = cleanText(candidate);
+    if (text) return text;
+  }
+
+  return '';
 }
 
 function normalizeImageUrl(value = '') {
@@ -130,105 +163,227 @@ function extractImageUrl($row) {
   return firstUsableImageUrl(htmlMatches);
 }
 
-// ─── Tek Sayfa Parse ─────────────────────────────────────────
-export function parseListingPage(html, segmentLabel = '') {
-  const $ = cheerio.load(html);
-  const listings = [];
+function extractPriceText($root) {
+  const priceEl = firstElement($root, [
+    'td.searchResultsPriceValue span',
+    'td.searchResultsPriceValue div',
+    'td.searchResultsPriceValue',
+    '[data-testid*="price"]',
+    '[data-test-id*="price"]',
+    '[itemprop="price"]',
+    '[class*="searchResultsPrice"]',
+    '[class*="price"]',
+    '[class*="Price"]',
+  ]);
+  if (priceEl && priceEl.length) {
+    const text = cleanText(priceEl.text());
+    if (text) return text;
+  }
 
-  // Toplam ilan sayısını bul
-  let totalCount = 0;
+  const rowText = cleanText($root.text());
+  const fallback = rowText.match(PRICE_TEXT_REGEX);
+  return fallback ? cleanText(fallback[1]) : '';
+}
+
+function extractDateText($root) {
+  return extractTextBySelectors($root, [
+    'td.searchResultsDateValue span',
+    'td.searchResultsDateValue',
+    'time',
+    '[data-testid*="date"]',
+    '[data-test-id*="date"]',
+    '[class*="date"]',
+    '[class*="Date"]',
+  ]);
+}
+
+function extractLocationText($root) {
+  return extractTextBySelectors($root, [
+    'td.searchResultsLocationValue',
+    '[data-testid*="location"]',
+    '[data-test-id*="location"]',
+    '[class*="location"]',
+    '[class*="Location"]',
+    '[class*="town"]',
+    '[class*="city"]',
+  ]);
+}
+
+function toAbsoluteUrl(href = '') {
+  const rawHref = String(href || '').trim();
+  if (!rawHref) return '';
+
+  try {
+    return new URL(rawHref, BASE_SITE).toString();
+  } catch {
+    return rawHref.startsWith('http') ? rawHref : `${BASE_SITE}${rawHref}`;
+  }
+}
+
+function extractListingFromContainer($root, segmentLabel = '') {
+  const titleEl = firstElement($root, [
+    'a.classifiedTitle',
+    'td.searchResultsTitleValue a',
+    'h2 a[href*="/ilan/"]',
+    'h3 a[href*="/ilan/"]',
+    'a[href*="/ilan/"]',
+    'a[data-href*="/ilan/"]',
+  ]);
+
+  if (!titleEl || !titleEl.length) return null;
+
+  const href = cleanText(titleEl.attr('href') || titleEl.attr('data-href') || '');
+  const baslik = extractTitleFromLink(titleEl);
+  const ilan_id = extractListingId(href);
+  const fiyat_str = extractPriceText($root);
+  const fiyat = normalizePrice(fiyat_str);
+  const konum = extractLocationText($root);
+  const tarih = extractDateText($root);
+  const resim = extractImageUrl($root);
+  const url = toAbsoluteUrl(href);
+
+  if (!href || !baslik) return null;
+
+  return {
+    ilan_id,
+    baslik,
+    fiyat,
+    fiyat_str,
+    konum,
+    tarih,
+    url,
+    resim,
+    segment: segmentLabel,
+  };
+}
+
+function addListingIfUnique(listings, seenKeys, listing) {
+  if (!listing) return;
+
+  const key = listing.ilan_id || listing.url;
+  if (!key || seenKeys.has(key)) return;
+
+  seenKeys.add(key);
+  listings.push(listing);
+}
+
+function extractGenericContainers($) {
+  const containers = [];
+  const seen = new Set();
+  const selectorChain = [
+    'tr.searchResultsItem',
+    'tr[class*="searchResultsItem"]',
+    'article',
+    'li',
+    '[data-id]',
+    '[data-listing-id]',
+    '[class*="searchResult"]',
+    '[class*="search-result"]',
+    '[class*="listing"]',
+    '[class*="Listing"]',
+    'div',
+    'section',
+  ];
+
+  $('a[href*="/ilan/"], a[data-href*="/ilan/"]').each((_, anchor) => {
+    const $anchor = $(anchor);
+    let $container = null;
+
+    for (const selector of selectorChain) {
+      const found = $anchor.closest(selector).first();
+      if (found.length) {
+        const textSize = cleanText(found.text()).length;
+        if (textSize > 0 && textSize < 2000) {
+          $container = found;
+          break;
+        }
+      }
+    }
+
+    if (!$container || !$container.length) {
+      $container = $anchor.parent();
+    }
+
+    const element = $container.get(0);
+    if (!element) return;
+
+    const html = $.html(element);
+    if (!html || seen.has(html)) return;
+
+    seen.add(html);
+    containers.push($container);
+  });
+
+  return containers;
+}
+
+export function extractTotalCountFromHtml(html = '') {
+  const $ = cheerio.load(html);
   const selectors = ['.result-text', '#searchResultsCount', '.searchResultCount', 'h1'];
-  for (const sel of selectors) {
-    const el = $(sel).first();
-    if (el.length) {
-      const match = el.text().match(/([\d.]+)\s*ilan/i);
+
+  for (const selector of selectors) {
+    const text = cleanText($(selector).first().text());
+    for (const pattern of TOTAL_COUNT_PATTERNS) {
+      const match = text.match(pattern);
       if (match) {
-        totalCount = parseInt(match[1].replace(/\./g, ''), 10);
-        break;
+        return parseInt(match[1].replace(/\./g, ''), 10);
       }
     }
   }
 
-  // Fallback: tüm body text'te ara
-  if (totalCount === 0) {
-    const bodyText = $('body').text();
-    const match = bodyText.match(/([\d.]{3,})\s*ilan/i);
+  const bodyText = cleanText($('body').text());
+  for (const pattern of TOTAL_COUNT_PATTERNS) {
+    const match = bodyText.match(pattern);
     if (match) {
-      totalCount = parseInt(match[1].replace(/\./g, ''), 10);
+      return parseInt(match[1].replace(/\./g, ''), 10);
     }
   }
 
+  return 0;
+}
+
+export function hasLikelyListingSignals(html = '') {
+  const lowered = String(html || '').toLowerCase();
+  if (!lowered) return false;
+
+  if (
+    lowered.includes('searchresultsitem') ||
+    lowered.includes('classifiedtitle') ||
+    lowered.includes('searchresultspricevalue')
+  ) {
+    return true;
+  }
+
+  if (extractTotalCountFromHtml(html) > 0) {
+    return true;
+  }
+
+  return parseListingPage(html).listings.length > 0;
+}
+
+// ─── Tek Sayfa Parse ─────────────────────────────────────────
+export function parseListingPage(html, segmentLabel = '') {
+  const $ = cheerio.load(html);
+  const listings = [];
+  const totalCount = extractTotalCountFromHtml(html);
+  const seenKeys = new Set();
+
   // İlan satırlarını parse et
   $('tr.searchResultsItem, tr[class*="searchResultsItem"]').each((_, row) => {
-    const $row = $(row);
-    const classes = ($row.attr('class') || '').split(/\s+/);
+    const $container = $(row);
+    const classes = ($container.attr('class') || '').split(/\s+/);
 
     // Reklam ve promosyon ilanlarını atla
     const skipClasses = ['nativeAd', 'searchResultsPromoSuper', 'searchResultsPromoHighlight'];
     if (skipClasses.some(c => classes.includes(c))) return;
 
-    // Başlık ve link
-    const titleEl = firstElement($row, [
-      'a.classifiedTitle',
-      'td.searchResultsTitleValue a',
-      'a[href*="/ilan/"]',
-    ]);
-
-    if (!titleEl || !titleEl.length) return;
-
-    const href = (titleEl.attr('href') || titleEl.attr('data-href') || '').trim();
-    const baslik = titleEl.text().trim();
-
-    // İlan ID — URL'den çıkar
-    const ilan_id = extractListingId(href);
-
-    // Fiyat
-    const priceEl = firstElement($row, [
-      'td.searchResultsPriceValue span',
-      'td.searchResultsPriceValue div',
-      'td.searchResultsPriceValue',
-      '[class*="searchResultsPrice"]',
-    ]);
-    let fiyatStr = priceEl && priceEl.length ? priceEl.text().trim() : '';
-    if (!fiyatStr) {
-      const rowText = $row.text().replace(/\s+/g, ' ');
-      const fallback = rowText.match(/(\d{1,3}(?:[.\s]\d{3})*(?:,\d+)?\s*TL)/i);
-      fiyatStr = fallback ? fallback[1] : '';
-    }
-    const fiyat = normalizePrice(fiyatStr);
-
-    // Konum
-    const locEl = $row.find('td.searchResultsLocationValue').first();
-    const konum = locEl.length ? locEl.text().trim().replace(/\s+/g, ' ') : '';
-
-    // Tarih
-    const dateEl = $row.find('td.searchResultsDateValue span').first().length
-      ? $row.find('td.searchResultsDateValue span').first()
-      : $row.find('td.searchResultsDateValue').first();
-    const tarih = dateEl.length ? dateEl.text().trim() : '';
-
-    // Resim
-    const resim = extractImageUrl($row);
-
-    let url = '';
-    try {
-      url = href ? new URL(href, BASE_SITE).toString() : '';
-    } catch {
-      url = href.startsWith('http') ? href : `${BASE_SITE}${href}`;
-    }
-
-    listings.push({
-      ilan_id,
-      baslik,
-      fiyat,
-      fiyat_str: fiyatStr,
-      konum,
-      tarih,
-      url,
-      resim,
-      segment: segmentLabel,
-    });
+    addListingIfUnique(listings, seenKeys, extractListingFromContainer($container, segmentLabel));
   });
+
+  // Yeni kart/list/grid DOM yapılarında klasik tablo satırı olmayabiliyor.
+  for (const $container of extractGenericContainers($)) {
+    addListingIfUnique(listings, seenKeys, extractListingFromContainer($container, segmentLabel));
+  }
 
   return { listings, totalCount };
 }

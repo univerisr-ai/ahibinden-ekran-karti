@@ -25,6 +25,10 @@ import {
   resolvePersistentProfileDir,
   shouldUsePersistentContext,
 } from './browser_profile.mjs';
+import {
+  extractTotalCountFromHtml,
+  hasLikelyListingSignals,
+} from './parser.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -516,12 +520,10 @@ function looksLikeListingsPage(html = '', currentUrl = '') {
     }
   })();
 
-  const hasListingRows =
-    h.includes('searchresultsitem') ||
-    h.includes('classifiedtitle') ||
-    h.includes('searchresultspricevalue');
-
-  const hasResultSummary = h.includes('aramanizda') && h.includes('sonuc bulundu');
+  const hasListingRows = hasLikelyListingSignals(html);
+  const hasResultSummary =
+    (h.includes('aramanizda') || h.includes('aramanızda')) &&
+    (h.includes('sonuc bulundu') || h.includes('sonuç bulundu') || extractTotalCountFromHtml(html) > 0);
   const onSearchRoute =
     (configuredPath && u.includes(configuredPath)) ||
     u.includes('/ekran-karti') ||
@@ -1167,6 +1169,7 @@ async function tryTextHintCheckboxInteraction() {
 function checkScrapeErrors(html) {
   const h = String(html || '');
   const hl = h.toLowerCase();
+  const hasListings = hasLikelyListingSignals(html);
 
   if (hl.includes('action required') && hl.includes('support@scrape.do')) {
     return 'ACTION_REQUIRED';
@@ -1197,7 +1200,7 @@ function checkScrapeErrors(html) {
     return 'BLOCK_SAHIBINDEN';
   }
 
-  if (!h.includes('searchResultsItem') && h.length < 5000) {
+  if (!hasListings && h.length < 5000) {
     return 'INVALID';
   }
 
@@ -1886,11 +1889,7 @@ export async function scrapeSegment(priceMin, priceMax) {
 
   const htmlPages = [firstHtml];
 
-  let totalCount = 0;
-  const totalMatch = firstHtml.match(/([\d.]+)\s*ilan/i);
-  if (totalMatch) {
-    totalCount = parseInt(totalMatch[1].replace(/\./g, ''), 10);
-  }
+  const totalCount = extractTotalCountFromHtml(firstHtml);
 
   const totalPages = Math.min(Math.ceil(totalCount / ITEMS_PER_PAGE), MAX_PAGES_PER_SEGMENT);
   console.log(`  📊 ${label}: Toplam ${totalCount.toLocaleString('tr')} ilan, ${totalPages} sayfa.`);
