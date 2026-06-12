@@ -29,20 +29,18 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: Haftalik run politikasi (2 rastgele gun)
+      - name: Run policy
         id: run_policy
         shell: bash
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manual tetikleme: policy bypass."
             echo "should_run=true" >> "$GITHUB_OUTPUT"
             echo "jitter_seconds=0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ "${{ vars.PIPELINE_PAUSED }}" = "true" ]; then
             echo "should_run=false" >> "$GITHUB_OUTPUT"
-            echo "jitter_seconds=0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           week="$(date -u +%G-%V)"
@@ -54,37 +52,34 @@ jobs:
           allowed_days="$((day1_seed % 7 + 1)) $((day2_seed % 7 + 1))"
           if echo " $allowed_days " | grep -q " $dow "; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
-            jitter=$((day1_seed % 3600))
-            echo "jitter_seconds=$jitter" >> "$GITHUB_OUTPUT"
+            echo "jitter_seconds=$((day1_seed % 3600))" >> "$GITHUB_OUTPUT"
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
-            echo "jitter_seconds=0" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout
         if: steps.run_policy.outputs.should_run == 'true'
         uses: actions/checkout@v4
 
-      - name: Node.js Kurulumu
+      - name: Node.js
         if: steps.run_policy.outputs.should_run == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: 'npm'
 
-      - name: Bagimliliklari Yukle
+      - name: Python
+        if: steps.run_policy.outputs.should_run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install npm deps
         if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
-        run: |
-          npm ci --no-optional --ignore-scripts 2>&1 | tail -5
+        run: npm ci --no-optional --ignore-scripts 2>&1 | tail -3
 
-      - name: Schedule jitter beklemesi
-        if: steps.run_policy.outputs.should_run == 'true' && github.event_name == 'schedule'
-        shell: bash
-        run: |
-          sleep "${{ steps.run_policy.outputs.jitter_seconds }}"
-
-      - name: WARP Proxy Kurulumu
+      - name: WARP Proxy
         if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
         run: |
@@ -92,7 +87,7 @@ jobs:
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
           echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
           sudo apt-get update
-          sudo apt-get install -y cloudflare-warp
+          sudo apt-get install -y cloudflare-warp xvfb
           warp-cli --accept-tos registration new || warp-cli --accept-tos register
           warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy
           warp-cli --accept-tos proxy port 40000 || warp-cli --accept-tos set-proxy-port 40000
@@ -101,33 +96,47 @@ jobs:
           warp-cli --accept-tos status
           curl -fsS -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | tee warp-trace.txt
 
-      - name: FlareSolverr Baslat (WARP uzerinden)
+      - name: Camoufox + Playwright
         if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
         run: |
-          docker run -d --name flaresolverr --network host \
-            -e LOG_LEVEL=info \
-            -e CAPTCHA_SOLVER=none \
-            -e PROXY=socks5://127.0.0.1:40000 \
-            ghcr.io/flaresolverr/flaresolverr:latest
-          echo "FlareSolverr WARP proxy ile baslatildi."
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8191/v1 >/dev/null 2>&1; then
-              echo "FlareSolverr hazir (deneme $i)"
-              break
-            fi
-            if curl -sS http://127.0.0.1:8191/v1 2>&1 | grep -q "Method not allowed"; then
-              echo "FlareSolverr hazir (deneme $i, 405 beklenen)"
+          pip install camoufox
+          python -m camoufox fetch
+          # Playwright Firefox for driver files
+          npx playwright install firefox 2>&1 | tail -5
+
+      - name: Start Camoufox Server
+        if: steps.run_policy.outputs.should_run == 'true'
+        id: camoufox_server
+        shell: bash
+        run: |
+          export CAMOUFOX_HEADLESS=true
+          export CAMOUFOX_PROXY=socks5://127.0.0.1:40000
+          # Start server in background with xvfb for headless virtual display
+          xvfb-run python scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
+          SERVER_PID=$!
+          echo "server_pid=$SERVER_PID" >> "$GITHUB_OUTPUT"
+          # Wait for WebSocket endpoint
+          for i in $(seq 1 60); do
+            if grep -q "Websocket endpoint" /tmp/camoufox-server.log 2>/dev/null; then
+              WS=$(grep -oP 'ws://[^\s]+' /tmp/camoufox-server.log | head -1)
+              echo "camoufox_ws=$WS" >> "$GITHUB_OUTPUT"
+              echo "Camoufox server ready: $WS"
               break
             fi
             sleep 2
           done
+          if [ -z "$WS" ]; then
+            echo "Camoufox server failed to start"
+            cat /tmp/camoufox-server.log
+            exit 1
+          fi
 
-      - name: GPU Firsat Avcisini Calistir
-        id: runner
+      - name: Scraper
         if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
         env:
+          CAMOUFOX_WS_ENDPOINT: ${{ steps.camoufox_server.outputs.camoufox_ws }}
           HEADLESS: 'true'
           REQUIRE_SAHIBINDEN_COOKIES: 'false'
 
@@ -135,53 +144,46 @@ jobs:
           SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
 
           TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
-          TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           ENABLE_TELEGRAM: 'false'
 
           ANALYZER_DISPATCH_TOKEN: ${{ secrets.ANALYZER_DISPATCH_TOKEN }}
-          ANALYZER_REPO_OWNER: ${{ vars.ANALYZER_REPO_OWNER || '' }}
-          ANALYZER_REPO_NAME: ${{ vars.ANALYZER_REPO_NAME || '' }}
-          ANALYZER_DISPATCH_EVENT: ${{ vars.ANALYZER_DISPATCH_EVENT || '' }}
           AI_PROVIDER: ${{ vars.AI_PROVIDER || '' }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL || '' }}
           CUSTOM_MIN_PRICE: ${{ inputs.min_fiyat || '' }}
           CUSTOM_MAX_PRICE: ${{ inputs.max_fiyat || '' }}
           BYPASS_AI: ${{ inputs.bypass_ai || vars.BYPASS_AI || 'true' }}
         run: |
           node src/main.mjs 2>&1 | tee scraper.log
 
-      - name: Sonuclari Kaydet (Artifact)
+      - name: Kill Camoufox
+        if: always() && steps.run_policy.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          kill ${{ steps.camoufox_server.outputs.server_pid }} 2>/dev/null || true
+
+      - name: Upload artifact
         if: always() && steps.run_policy.outputs.should_run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: scraper-results-${{ github.run_id }}
           path: |
             output.json
-            pipeline-messages.json
             scraper.log
-            cf_proof.png*
+            warp-trace.txt
+            cf_proof.png
             screenshots/
           if-no-files-found: ignore
 
-      - name: Hata bildirimi
+      - name: Error alert
         if: failure() && steps.run_policy.outputs.should_run == 'true'
         shell: bash
         run: |
-          set -euo pipefail
-          summary="$(grep -m 1 -E 'Error:|ERR!|Traceback|Exception|FATAL|KRITIK|CRITICAL|❌' scraper.log || true)"
-          if [ -z "$summary" ]; then
-            summary="$(grep -m 1 -E 'Error:|ERR!|Traceback|Exception|FATAL|KRITIK|CRITICAL|❌' failed.log || true)"
-          fi
-          if [ -z "$summary" ]; then
-            summary="Bilinmeyen hata (scraper.log ve failed.log kontrol edin)"
-          fi
-          echo "Hata ozeti: $summary"
+          summary="$(grep -m 1 -E 'Error:|ERR!|❌' scraper.log 2>/dev/null || echo 'unknown')"
           echo "summary=$summary" >> "$GITHUB_OUTPUT"
 
-      - name: Telegram failure alert
+      - name: Telegram alert
         uses: appleboy/telegram-action@master
         if: failure() && steps.run_policy.outputs.should_run == 'true'
         with:
@@ -189,13 +191,6 @@ jobs:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
           format: markdown
           message: |
-            ❌ *GPU Scraper Failed* ❌
+            GPU Scraper Failed
             Repo: ${{ github.repository }}
             Run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-            Error: ${{ steps.runner.outputs.summary || 'unknown' }}
-
-      - name: Eski profil cachelerini temizle
-        if: always() && steps.run_policy.outputs.should_run == 'true'
-        shell: bash
-        run: |
-          rm -rf ~/.cache/ms-playwright ~/.cache/camoufox ~/.local/share/camoufox

@@ -7,6 +7,7 @@ import {
   MAX_PAGES_PER_SEGMENT,
   WARMUP_PRICE_MAX,
 } from './config.mjs';
+import { chromium, firefox } from 'playwright';
 import {
   extractTotalCountFromHtml,
   hasLikelyListingSignals,
@@ -14,7 +15,11 @@ import {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const DEFAULT_NAV_TIMEOUT_MS = parseInt(process.env.NAV_TIMEOUT_MS || '120000', 10);
+const DEFAULT_NAV_TIMEOUT_MS = parseInt(process.env.NAV_TIMEOUT_MS || '90000', 10);
+
+let browser = null;
+let context = null;
+let page = null;
 
 let stats = {
   totalRequests: 0,
@@ -22,103 +27,97 @@ let stats = {
   failedRequests: 0,
   pagesLoaded: 0,
   creditsUsed: 0,
-  flareSolverrConnected: false,
 };
 
 export function getStats() {
   return { ...stats };
 }
 
-const FLARESOLVERR_URL = 'http://localhost:8191/v1';
-let flareSolverrSession = null;
+const CAMOUFOX_WS_ENDPOINT = String(process.env.CAMOUFOX_WS_ENDPOINT || '').trim();
+const USE_CAMOUFOX = CAMOUFOX_WS_ENDPOINT.length > 0;
 
-function hasNonPrintableControlChars(value) {
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    if (code < 32 && code !== 9 && code !== 10 && code !== 13) return true;
-  }
-  return false;
-}
-
-function loadEnvCookies() {
-  const raw = process.env.SAHIBINDEN_COOKIES || process.env.SAHIBINDEN_STORAGE_STATE_B64 || '';
-  if (!raw) return [];
+async function ensureBrowser() {
+  if (browser && context && page) return true;
   try {
-    const decoded = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8'));
-    let cookies = [];
-    if (Array.isArray(decoded)) cookies = decoded;
-    else if (decoded.cookies && Array.isArray(decoded.cookies)) cookies = decoded.cookies;
-    return cookies.filter(c => {
-      const v = String(c.value || '');
-      return !v.startsWith('b\u0027') && !v.startsWith('b"') && !hasNonPrintableControlChars(v);
+    if (USE_CAMOUFOX) {
+      console.log('  Camoufox server mode baslatiliyor...');
+      browser = await firefox.connect(CAMOUFOX_WS_ENDPOINT);
+    } else {
+      console.log('  Chromium baslatiliyor...');
+      browser = await chromium.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-blink-features=AutomationControlled',
+          '--disable-infobars',
+        ],
+      });
+    }
+    context = await browser.newContext({
+      ignoreHTTPSErrors: true,
+      viewport: { width: 1366, height: 900 },
+      locale: 'tr-TR',
+      timezoneId: 'Europe/Istanbul',
     });
-  } catch {
-    return [];
+    page = await context.newPage();
+    console.log('  Tarayici hazir.');
+    return true;
+  } catch (err) {
+    console.log(`  Tarayici baslatilamadi: ${err.message}`);
+    return false;
   }
 }
 
-const envCookies = loadEnvCookies();
-
-async function callFlareSolverr(cmd, url, maxTimeout = DEFAULT_NAV_TIMEOUT_MS) {
-  const body = {
-    cmd,
-    url,
-    maxTimeout,
-    session: flareSolverrSession || undefined,
-    cookies: envCookies.length > 0 ? envCookies.map(c => ({
-      name: c.name,
-      value: c.value,
-      domain: c.domain || '.sahibinden.com',
-      path: c.path || '/',
-      secure: c.secure !== false,
-      httpOnly: c.httpOnly === true,
-    })) : undefined,
-  };
-  const response = await fetch(FLARESOLVERR_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    throw new Error(`FlareSolverr HTTP ${response.status}`);
+async function maybeHandleChallenge(url) {
+  if (!page) return false;
+  try {
+    const currentUrl = page.url();
+    const html = await page.content();
+    if (currentUrl.includes('secure.sahibinden.com/login') || html.includes('giris yap') || html.includes('login')) {
+      console.log('  Login sayfasi algilandi, cookie olmadan devam edilemiyor.');
+      console.log('  Login sayfasi URL:', currentUrl);
+      return false;
+    }
+    return true;
+  } catch {
+    return true;
   }
-  const data = await response.json();
-  if (data.status !== 'ok') {
-    throw new Error(`FlareSolverr: ${data.message || 'unknown error'}`);
-  }
-  return data;
 }
 
 async function fetchPage(targetUrl, label = '') {
   if (stats.creditsUsed >= MAX_CREDITS_PER_RUN) {
-    console.log(`  BÜTÇE LİMİTİ AŞILDI (${stats.creditsUsed}/${MAX_CREDITS_PER_RUN} kredi) — Koşu durduruluyor.`);
+    console.log(`  BÜTÇE LİMİTİ AŞILDI (${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
     return { html: null, status: 'BUDGET_EXHAUSTED' };
   }
 
+  if (!(await ensureBrowser())) {
+    stats.failedRequests++;
+    return { html: null, status: 'FAILED' };
+  }
+
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    console.log(`  FlareSolverr -> ${label} (Deneme ${attempt})`);
+    console.log(`  Camoufox -> ${label} (Deneme ${attempt})`);
     stats.totalRequests++;
 
     try {
-      const data = await callFlareSolverr('request.get', targetUrl);
-      const solution = data.solution;
-      if (!solution || !solution.response) {
-        throw new Error('Empty response from FlareSolverr');
-      }
-      const html = solution.response;
-      const respStatus = solution.status || 200;
-      const resolvedUrl = solution.url || targetUrl;
-      console.log(`    Status: ${respStatus}, URL: ${resolvedUrl.substring(0, 80)}`);
+      const response = await page.goto(targetUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: DEFAULT_NAV_TIMEOUT_MS,
+      });
+      await sleep(1500);
 
-      if (respStatus !== 200 && respStatus !== 404) {
-        console.log(`  HTTP ${respStatus} (deneme ${attempt})`);
+      const urlOk = await maybeHandleChallenge(targetUrl);
+      if (!urlOk) {
+        console.log(`  Login sayfasi (deneme ${attempt})`);
         await sleep(2000);
         continue;
       }
 
+      const html = await page.content();
+      const respStatus = response ? response.status() : 200;
+
       if (!hasLikelyListingSignals(html)) {
-        const snippet = String(html).replace(/\s+/g, ' ').substring(0, 500);
-        console.log(`  İlan sinyali yok (deneme ${attempt}). Snippet: ${snippet}`);
+        console.log(`  İlan sinyali yok (deneme ${attempt})`);
         await sleep(2000);
         continue;
       }
@@ -128,7 +127,7 @@ async function fetchPage(targetUrl, label = '') {
       stats.creditsUsed++;
       return { html, status: 'OK' };
     } catch (err) {
-      console.log(`  FlareSolverr hatasi (deneme ${attempt}): ${err.message}`);
+      console.log(`  Hata (deneme ${attempt}): ${err.message}`);
       await sleep(2000);
     }
   }
@@ -182,77 +181,74 @@ export async function scrapeSegment(priceMin, priceMax) {
 
 export async function scrapeDetailUrl(detailUrl) {
   const targetUrl = String(detailUrl || '').trim();
-  if (!targetUrl) {
-    return { html: null, status: 'INVALID_URL' };
-  }
+  if (!targetUrl) return { html: null, status: 'INVALID_URL' };
   return fetchPage(targetUrl, `detail: ${targetUrl}`);
 }
 
-async function testFlareSolverr() {
-  for (let i = 0; i < 60; i++) {
-    try {
-      const res = await fetch(`${FLARESOLVERR_URL}`, { method: 'GET' });
-      if (res.ok || res.status === 405) {
-        console.log('  FlareSolverr hazir.');
-        stats.flareSolverrConnected = true;
-        return true;
-      }
-    } catch (_) {
-    }
-    if (i % 10 === 9) console.log(`  FlareSolverr bekleniyor... (${i + 1}s)`);
-    await sleep(2000);
-  }
-  stats.flareSolverrConnected = false;
-  return false;
-}
-
 export async function initSession() {
-  const ready = await testFlareSolverr();
-  if (!ready) {
-    console.log('  FlareSolverr ulasilamadi!');
-    return { ok: false, code: 'FLARESOLVERR_UNAVAILABLE' };
-  }
+  const ok = await ensureBrowser();
+  if (!ok) return { ok: false, code: 'BROWSER_INIT_FAILED' };
 
   const warmupUrl = buildSahibindenUrl(0, 0, WARMUP_PRICE_MAX);
-  console.log('  FlareSolverr ile warmup sayfasi aciliyor...');
-  const { html, status } = await fetchPage(warmupUrl, 'warmup');
+  console.log('  Warmup sayfasi aciliyor...');
 
-  if (!html || status !== 'OK') {
-    console.log('  Warmup basarisiz.');
-    return { ok: false, code: 'WARMUP_FAILED' };
+  try {
+    await page.goto(warmupUrl, {
+      waitUntil: 'domcontentloaded',
+      timeout: DEFAULT_NAV_TIMEOUT_MS,
+    });
+    await sleep(2000);
+
+    const html = await page.content();
+    if (hasLikelyListingSignals(html)) {
+      console.log('  Warmup basarili, ilanlar gorunuyor.');
+      return { ok: true, code: 'OK' };
+    }
+
+    const url = page.url();
+    if (url.includes('secure.sahibinden.com/login') || url.includes('giris') || html.includes('giris yap')) {
+      console.log('  Login sayfasi — cookie gerekli.');
+      return { ok: false, code: 'LOGIN_REQUIRED' };
+    }
+
+    console.log('  Ilan gorunmuyor, Cloudflare engeli olabilir.');
+    return { ok: false, code: 'NO_LISTINGS' };
+  } catch (err) {
+    console.log(`  Session init hatasi: ${err.message}`);
+    return { ok: false, code: 'INIT_SESSION_ERROR' };
   }
-
-  if (!hasLikelyListingSignals(html)) {
-    console.log('  Sayfada ilan bulunamadi — muhtemelen Cloudflare engeli.');
-    return { ok: false, code: 'NO_LISTINGS_SIGNALS' };
-  }
-
-  console.log('  Warmup basarili, Cloudflare gecildi.');
-  return { ok: true, code: 'OK', cookieSource: 'flare-solverr', cookieCount: 0 };
 }
 
 export async function saveChallengeProofScreenshot(label) {
   try {
-    const fs = await import('fs');
-    const content = `Challenge screenshot not available (FlareSolverr mode). Label: ${label}\nTime: ${new Date().toISOString()}`;
-    fs.writeFileSync('cf_proof.png.txt', content, 'utf-8');
+    if (page && !page.isClosed()) {
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      await page.screenshot({ path: `cf_proof.png`, fullPage: false });
+    }
   } catch (_) {}
 }
 
 export async function takeScreenshot(label) {
-  // no-op, browser-based screenshots not available in FlareSolverr mode
+  try {
+    if (page && !page.isClosed()) {
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const dir = process.env.SCREENSHOT_DIR || 'screenshots';
+      const fs = await import('fs');
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      await page.screenshot({ path: `${dir}/step-${label}-${ts}.png`, fullPage: false });
+    }
+  } catch (_) {}
 }
 
 export async function closeBrowser() {
-  // no-op, no browser in FlareSolverr mode
+  try {
+    if (page) { await page.close().catch(() => {}); page = null; }
+    if (context) { await context.close().catch(() => {}); context = null; }
+    if (browser) { await browser.close().catch(() => {}); browser = null; }
+  } catch (_) {}
 }
 
 export default {
-  initSession,
-  scrapeSegment,
-  scrapeDetailUrl,
-  getStats,
-  saveChallengeProofScreenshot,
-  takeScreenshot,
-  closeBrowser,
+  initSession, scrapeSegment, scrapeDetailUrl, getStats,
+  saveChallengeProofScreenshot, takeScreenshot, closeBrowser,
 };
