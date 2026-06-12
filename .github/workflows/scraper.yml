@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 120
     container:
       image: ghcr.io/univerisr-ai/ahibinden-ekran-karti/scraper:latest
-      options: --privileged --user root -e HOME=/root
+      options: --privileged --user root
 
     steps:
       - name: Run policy
@@ -83,7 +83,10 @@ jobs:
         if: steps.run_policy.outputs.should_run == 'true'
         id: camoufox_server
         shell: bash
+        env:
+          HOME: /root
         run: |
+          export HOME=/root
           export CAMOUFOX_HEADLESS=true
           export CAMOUFOX_PROXY=socks5://127.0.0.1:40000
           xvfb-run python3 scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
