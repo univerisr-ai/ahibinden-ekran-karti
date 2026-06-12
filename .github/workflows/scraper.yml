@@ -122,7 +122,7 @@ jobs:
           pip install camoufox
           python -m camoufox fetch
           CAMOUFOX_PATH="$(python -m camoufox path | tr -d '[:space:]')"
-          chmod +x "$CAMOUFOX_PATH" 2>/dev/null || true
+          chmod +x "$CAMOUFOX_PATH"
           echo "Camoufox binary: $CAMOUFOX_PATH"
           echo "camoufox_path=$CAMOUFOX_PATH" >> "$GITHUB_OUTPUT"
 
