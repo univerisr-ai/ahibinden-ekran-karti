@@ -17,7 +17,7 @@ const LOGIN_WAIT_MS = parseInt(process.env.SAHIBINDEN_LOGIN_WAIT_MS || '300000',
 const POLL_MS = 2000;
 const AUTO_SUBMIT = String(process.env.SAHIBINDEN_AUTO_SUBMIT || 'false').toLowerCase() === 'true';
 const SUBMIT_DELAY_MS = parseInt(process.env.SAHIBINDEN_SUBMIT_DELAY_MS || '5000', 10);
-const BROWSER_MODE = String(process.env.SAHIBINDEN_BROWSER_MODE || 'playwright').toLowerCase();
+const BROWSER_MODE = String(process.env.SAHIBINDEN_BROWSER_MODE || 'cdp').toLowerCase();
 const MANUAL_LOGIN = String(process.env.SAHIBINDEN_MANUAL_LOGIN || 'false').toLowerCase() === 'true';
 const KEEP_BROWSER_OPEN =
   String(process.env.SAHIBINDEN_KEEP_BROWSER_OPEN || 'false').toLowerCase() === 'true';
@@ -386,11 +386,16 @@ function detectBlockingMessage(html = '') {
 
   if (
     h.includes('doğrulama başarısız') ||
-    h.includes('dogrulama basarisiz') ||
+    h.includes('dogrulama basarisiz')
+  ) {
+    return 'Dogrulama basarisiz.';
+  }
+
+  if (
     h.includes('doğrulama tamamlanamadı') ||
     h.includes('dogrulama tamamlanamadi')
   ) {
-    return 'Dogrulama basarisiz.';
+    return 'Dogrulama tamamlanamadi-gecici';
   }
 
   if (
@@ -429,7 +434,18 @@ async function waitForUsableSession(page, context) {
       }
 
       if (blockingMessage === 'Dogrulama basarisiz.' || blockingMessage === 'Sifre hatali gorunuyor.') {
-        throw new Error(blockingMessage);
+        console.log(`\n*** HATA: ${blockingMessage} Login sayfasina donuluyor. ***`);
+        console.log('Tarayicida giris bilgilerini kontrol edip tekrar deneyin.');
+        await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+        continue;
+      }
+
+      if (blockingMessage === 'Dogrulama tamamlanamadi-gecici' || blockingMessage === 'Manuel guvenlik dogrulamasi gerekiyor.') {
+        if (now - lastLogAt > 8000) {
+          console.log('\n*** Dogrulama gerekiyor. Tarayicida captcha/challenge cozun. ***');
+          console.log('Giris tamamlandiginda script otomatik devam edecek.\n');
+        }
+        continue;
       }
 
       if (isLoginLikePage(currentHtml, page.url())) {
@@ -461,7 +477,6 @@ async function waitForUsableSession(page, context) {
       }
     } catch (err) {
       if (
-        err.message === 'Dogrulama basarisiz.' ||
         err.message === 'Sifre hatali gorunuyor.'
       ) {
         throw err;
