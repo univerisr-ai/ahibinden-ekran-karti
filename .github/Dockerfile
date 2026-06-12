@@ -13,10 +13,11 @@ RUN apt-get update && apt-get install -y \
 # Python deps (with geoip for Camoufox)
 RUN python3 -m pip install "playwright<=1.59.0" "camoufox[geoip]" --prefer-binary
 
-# Playwright Firefox binary
+# Playwright Firefox binary + detect path
 RUN npx playwright install firefox \
-    && FF_PATH=$(node -e "const p = require('playwright'); console.log(p.firefox.executablePath())") \
-    && echo "Firefox binary: $FF_PATH"
+    && FF_PATH=$(node -e "const p = require('playwright'); console.log(p.firefox.executablePath())" 2>/dev/null || node -e "const p = require('playwright-core'); console.log(p.firefox.executablePath())") \
+    && echo "FF_PATH=$FF_PATH" \
+    && echo "CAMOUFOX_BROWSER_PATH=$FF_PATH" >> /etc/environment
 
 WORKDIR /app
 COPY scripts/camoufox-server.py /app/
@@ -26,4 +27,3 @@ RUN npm ci --no-optional --ignore-scripts 2>&1 | tail -3
 
 ENV CAMOUFOX_HEADLESS=true
 ENV CAMOUFOX_PROXY=socks5://127.0.0.1:40000
-ENV CAMOUFOX_BROWSER_PATH=/root/.cache/ms-playwright/firefox-1410/firefox/firefox
