@@ -13,10 +13,11 @@ RUN apt-get update && apt-get install -y \
 # Python deps
 RUN python3 -m pip install "playwright<=1.59.0" "camoufox[geoip]" --prefer-binary
 
-# Pre-download Camoufox binary + copy to stable path
+# Pre-download Camoufox binary with its properties.json
 RUN python3 -m camoufox fetch 2>&1 \
-    && cp /root/.cache/camoufox/camoufox-bin /usr/local/bin/camoufox-bin \
-    && chmod +x /usr/local/bin/camoufox-bin
+    && mkdir -p /opt/camoufox \
+    && cp -r /root/.cache/camoufox/* /opt/camoufox/ \
+    && chmod +x /opt/camoufox/camoufox-bin
 
 WORKDIR /app
 COPY scripts/camoufox-server.py /app/
@@ -26,4 +27,4 @@ RUN npm ci --no-optional --ignore-scripts 2>&1 | tail -3
 
 ENV CAMOUFOX_HEADLESS=true
 ENV CAMOUFOX_PROXY=socks5://127.0.0.1:40000
-ENV CAMOUFOX_BROWSER_PATH=/usr/local/bin/camoufox-bin
+ENV CAMOUFOX_BROWSER_PATH=/opt/camoufox/camoufox-bin
