@@ -13,16 +13,9 @@ RUN apt-get update && apt-get install -y \
 # Python deps
 RUN python3 -m pip install "playwright<=1.59.0" "camoufox[geoip]" --prefer-binary
 
-# Install Playwright Firefox binary (need npm package first)
-WORKDIR /tmp
-COPY package*.json /tmp/
-RUN npm ci --no-optional --ignore-scripts 2>&1 | tail -3 \
-    && npx playwright install firefox \
-    && FF_PATH=$(NODE_PATH=/tmp/node_modules node -e "const p = require('playwright'); console.log(p.firefox.executablePath())") \
-    && echo "Firefox: $FF_PATH" \
-    && ln -sf "$FF_PATH" /usr/local/bin/firefox-camoufox
+# Pre-download Camoufox binary (avoids runtime download)
+RUN python3 -m camoufox fetch 2>&1
 
-# App setup
 WORKDIR /app
 COPY scripts/camoufox-server.py /app/
 COPY src/ /app/src/
@@ -31,4 +24,3 @@ RUN npm ci --no-optional --ignore-scripts 2>&1 | tail -3
 
 ENV CAMOUFOX_HEADLESS=true
 ENV CAMOUFOX_PROXY=socks5://127.0.0.1:40000
-ENV CAMOUFOX_BROWSER_PATH=/usr/local/bin/firefox-camoufox
