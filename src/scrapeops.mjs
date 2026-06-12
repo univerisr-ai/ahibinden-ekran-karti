@@ -72,6 +72,8 @@ async function fetchPage(targetUrl, label = '') {
       }
       const html = solution.response;
       const respStatus = solution.status || 200;
+      const resolvedUrl = solution.url || targetUrl;
+      console.log(`    Status: ${respStatus}, URL: ${resolvedUrl.substring(0, 80)}`);
 
       if (respStatus !== 200 && respStatus !== 404) {
         console.log(`  HTTP ${respStatus} (deneme ${attempt})`);
@@ -80,7 +82,8 @@ async function fetchPage(targetUrl, label = '') {
       }
 
       if (!hasLikelyListingSignals(html)) {
-        console.log(`  Görünür ilan yok (deneme ${attempt})`);
+        const snippet = String(html).replace(/\s+/g, ' ').substring(0, 500);
+        console.log(`  İlan sinyali yok (deneme ${attempt}). Snippet: ${snippet}`);
         await sleep(2000);
         continue;
       }
