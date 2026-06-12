@@ -151,7 +151,7 @@ export async function scrapeDetailUrl(detailUrl) {
 }
 
 async function testFlareSolverr() {
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 60; i++) {
     try {
       const res = await fetch(`${FLARESOLVERR_URL}`, { method: 'GET' });
       if (res.ok) {
@@ -160,8 +160,8 @@ async function testFlareSolverr() {
         return true;
       }
     } catch (_) {
-      // not ready yet
     }
+    if (i % 10 === 9) console.log(`  FlareSolverr bekleniyor... (${i + 1}s)`);
     await sleep(2000);
   }
   stats.flareSolverrConnected = false;
