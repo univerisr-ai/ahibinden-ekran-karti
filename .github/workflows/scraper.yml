@@ -79,21 +79,16 @@ jobs:
           warp-cli --accept-tos status
           curl -fsS -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | tee warp-trace.txt
 
-      - name: Detect Firefox path
-        if: steps.run_policy.outputs.should_run == 'true'
-        shell: bash
-        run: |
-          FF_PATH=$(NODE_PATH=/app/node_modules node -e "const p = require('playwright'); console.log(p.firefox.executablePath())" 2>/dev/null || NODE_PATH=/app/node_modules node -e "const p = require('playwright-core'); console.log(p.firefox.executablePath())")
-          echo "CAMOUFOX_BROWSER_PATH=$FF_PATH" >> "$GITHUB_ENV"
-          echo "Firefox binary: $FF_PATH"
-
       - name: Start Camoufox Server
         if: steps.run_policy.outputs.should_run == 'true'
         id: camoufox_server
         shell: bash
         run: |
+          FF_PATH=$(NODE_PATH=/app/node_modules node -e "const p = require('playwright'); console.log(p.firefox.executablePath())" 2>/dev/null || NODE_PATH=/app/node_modules node -e "const p = require('playwright-core'); console.log(p.firefox.executablePath())")
+          echo "Firefox binary: $FF_PATH"
           export CAMOUFOX_HEADLESS=true
           export CAMOUFOX_PROXY=socks5://127.0.0.1:40000
+          export CAMOUFOX_BROWSER_PATH=$FF_PATH
           xvfb-run python3 scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
           SERVER_PID=$!
           echo "server_pid=$SERVER_PID" >> "$GITHUB_OUTPUT"
