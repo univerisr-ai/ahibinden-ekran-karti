@@ -487,6 +487,8 @@ async function main() {
       msg = '❌ Cookie tarayiciya eklenemedi.';
     } else if (initCode === 'AUTH_REQUIRED') {
       msg = '❌ Login gerekli sayfaya dusuldu. Cookie gecersiz veya eksik olabilir.';
+    } else if (initCode === 'AUTH_REQUIRED_BUT_CONTINUE') {
+      msg = '⚠️ Login gerekli ama Cloudflare gecildi. Giris zorunlu degil, devam ediliyor.';
     } else if (initCode === 'CHALLENGE_TIMEOUT') {
       msg = '❌ Challenge zaman asimina ugradi. Otomatik dogrulama tamamlanmadi (cf_proof.png artifactini kontrol edin).';
     } else if (initCode === 'PROXY_INIT_FAILED') {

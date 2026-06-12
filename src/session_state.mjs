@@ -74,7 +74,19 @@ function assertCookieShape(cookie, index) {
   }
 }
 
-export function filterSahibindenStorageState(rawState, options = {}) {
+export function fixPythonByteValue(val) {
+  if (typeof val !== 'string') return val;
+  const s = val.trim();
+  if (s.startsWith("b'") && s.endsWith("'")) {
+    return s.slice(2, -1);
+  }
+  if (s.startsWith('b"') && s.endsWith('"')) {
+    return s.slice(2, -1);
+  }
+  return val;
+}
+
+function filterSahibindenStorageState(rawState, options = {}) {
   assertStorageStateShape(rawState);
 
   const nowSec =
@@ -102,10 +114,23 @@ export function filterSahibindenStorageState(rawState, options = {}) {
     // Playwright addCookies only accepts specific fields
     const normalized = {
       name: cookie.name,
-      value: cookie.value,
+      value: fixPythonByteValue(cookie.value),
       domain: cookie.domain,
       path: cookie.path || '/',
     };
+
+    // Skip cookies whose values are still Python byte-literal format or contain non-printable chars
+    if (typeof normalized.value !== 'string' || normalized.value.length === 0) {
+      droppedExpired += 1;
+      return;
+    }
+
+    const startsWithBytePrefix = normalized.value.startsWith("b'") || normalized.value.startsWith('b"');
+    const hasNonPrintableControlChars = /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(normalized.value);
+    if (startsWithBytePrefix || hasNonPrintableControlChars) {
+      droppedExpired += 1;
+      return;
+    }
 
     if (cookie.expires !== undefined && cookie.expires !== null && cookie.expires !== '') {
       const expiresNum = Number(cookie.expires);

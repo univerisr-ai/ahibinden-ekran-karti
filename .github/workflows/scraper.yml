@@ -114,6 +114,17 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: 🦊 Camoufox Browser Kurulumu
+        if: steps.run_policy.outputs.should_run == 'true'
+        id: camoufox
+        shell: bash
+        run: |
+          pip install camoufox
+          CAMOUFOX_PATH="$(python -c 'import camoufox; print(camoufox.get_path())')"
+          echo "camoufox_path=$CAMOUFOX_PATH" >> "$GITHUB_OUTPUT"
+          echo "Camoufox binary: $CAMOUFOX_PATH"
+          chmod +x "$CAMOUFOX_PATH" 2>/dev/null || true
+
       - name: 📦 Python Bağımlılıklarını Kur (Xvfb & DrissionPage)
         if: steps.run_policy.outputs.should_run == 'true'
         run: |
@@ -125,9 +136,9 @@ jobs:
         if: steps.run_policy.outputs.should_run == 'true'
         run: npm install
 
-      - name: 🚀 Browser Kurulumu (Playwright için)
+      - name: 🚀 Browser Kurulumu (Playwright Firefox + Camoufox)
         if: steps.run_policy.outputs.should_run == 'true'
-        run: npx playwright install chromium --with-deps
+        run: npx playwright install firefox --with-deps
 
       - name: 🗂️ Sahibinden Playwright profil cache
         if: steps.run_policy.outputs.should_run == 'true'
@@ -139,7 +150,7 @@ jobs:
             sahibinden-playwright-profile-v2-${{ runner.os }}-
 
       - name: 🌀 Cloudflare WARP Proxy Kurulumu
-        if: steps.run_policy.outputs.should_run == 'true' && (vars.USE_WARP_PROXY == 'true' || vars.DOLAP_USE_WARP_PROXY == 'true')
+        if: steps.run_policy.outputs.should_run == 'true'
         id: warp
         shell: bash
         run: |
@@ -182,9 +193,10 @@ jobs:
           USE_WARP_PROXY: ${{ steps.warp.outputs.enabled || 'false' }}
           SAHIBINDEN_PROXY_SERVER: ${{ secrets.SAHIBINDEN_PROXY_SERVER || vars.SAHIBINDEN_PROXY_SERVER || secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
           DOLAP_PROXY_SERVER: ${{ steps.warp.outputs.proxy_url || secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
+          CAMOUFOX_PATH: ${{ steps.camoufox.outputs.camoufox_path }}
           HEADLESS: 'false'
           CHALLENGE_WAIT_MS: '300000'
-          REQUIRE_SAHIBINDEN_COOKIES: 'true'
+          REQUIRE_SAHIBINDEN_COOKIES: 'false'
           SAHIBINDEN_PERSISTENT_CONTEXT: 'true'
           SAHIBINDEN_USER_DATA_DIR: .playwright/sahibinden-profile
           BROWSER_LOCALE: 'tr-TR'
@@ -193,6 +205,7 @@ jobs:
           EXPECTED_LOCALE: 'tr-TR'
           EXPECTED_TIMEZONE: 'Europe/Istanbul'
           EXPECTED_PLATFORM: 'win'
+          FORCE_USE_WARP: 'true'
 
           # ── Session bootstrap (GitHub Secret) ───────────────
           SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
@@ -233,6 +246,7 @@ jobs:
             output.json
             pipeline-messages.json
             cf_proof.png
+            screenshots/
           retention-days: 7
 
       - name: 🧹 Eski profil cachelerini temizle

@@ -13,7 +13,7 @@ import {
   MAX_PAGES_PER_SEGMENT,
   WARMUP_PRICE_MAX,
 } from './config.mjs';
-import { chromium } from 'playwright';
+import { chromium, firefox } from 'playwright';
 import fs from 'fs';
 import crypto from 'crypto';
 import {
@@ -39,6 +39,8 @@ const REQUIRE_SAHIBINDEN_COOKIES =
 const HEADLESS_MODE = (process.env.HEADLESS || 'false').toLowerCase() === 'true';
 const NON_INTERACTIVE_MODE =
   HEADLESS_MODE || (process.env.CI || 'false').toLowerCase() === 'true';
+const CAMOUFOX_PATH = String(process.env.CAMOUFOX_PATH || '').trim();
+const USE_CAMOUFOX = CAMOUFOX_PATH.length > 0;
 
 const FINGERPRINT_DIAGNOSTIC =
   (process.env.FINGERPRINT_DIAGNOSTIC || 'true').toLowerCase() === 'true';
@@ -59,7 +61,7 @@ const BROWSER_USER_AGENT =
   ).trim();
 const BROWSER_PLATFORM = String(process.env.BROWSER_PLATFORM || 'Win32').trim() || 'Win32';
 
-const USE_WARP_PROXY = (process.env.USE_WARP_PROXY || 'false').toLowerCase() === 'true';
+const USE_WARP_PROXY = (process.env.USE_WARP_PROXY || 'false').toLowerCase() === 'true' || (process.env.FORCE_USE_WARP || 'false').toLowerCase() === 'true';
 
 const USE_SCRAPEDO_PROXY = (process.env.USE_SCRAPEDO_PROXY || 'false').toLowerCase() === 'true';
 const CUSTOM_PROXY_ENV_KEYS = [
@@ -175,6 +177,40 @@ let sessionInitFailureCode = null;
 let sessionCookieSource = 'none';
 let sessionCookieCount = 0;
 const CF_PROOF_PATH = process.env.CF_PROOF_PATH || 'cf_proof.png';
+const SCREENSHOT_DIR = process.env.SCREENSHOT_DIR || 'screenshots';
+
+let screenshotCounter = 0;
+
+try {
+  if (!fs.existsSync(SCREENSHOT_DIR)) {
+    fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+  }
+} catch (_) {
+  // CI ortaminda hata vermemeli
+}
+
+async function takeScreenshot(label = '') {
+  if (!page || page.isClosed()) return null;
+
+  screenshotCounter++;
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const tag = label ? `-${label}` : '';
+  const filename = `step${String(screenshotCounter).padStart(3, '0')}${tag}-${ts}.png`;
+  const filepath = `${SCREENSHOT_DIR}/${filename}`;
+
+  try {
+    await page.screenshot({
+      path: filepath,
+      fullPage: false,
+      animations: 'disabled',
+    });
+    console.log(`  📸 Ekran görüntüsü: ${filepath}`);
+    return filepath;
+  } catch (err) {
+    console.log(`  ⚠️ Ekran görüntüsü alınamadı (${label}): ${err.message}`);
+    return null;
+  }
+}
 
 let stats = {
   totalRequests: 0,
@@ -1248,6 +1284,9 @@ async function waitForChallengeSolve(maxWaitMs = CHALLENGE_WAIT_MS) {
     }
 
     const now = Date.now();
+    if (screenshotCounter === 0 || now - lastProgressTs > 30000) {
+      await takeScreenshot('challenge-waiting');
+    }
 
     const stateSig = [
       currentUrl,
@@ -1526,22 +1565,38 @@ async function ensureBrowser() {
   sessionInitFailureCode = null;
   sessionCookieSource = 'none';
   sessionCookieCount = 0;
+  screenshotCounter = 0;
 
   try {
     const isHeadless = HEADLESS_MODE;
-
-    const launchArgs = [
-      '--ignore-certificate-errors',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-infobars',
-      '--no-sandbox',
-      `--lang=${BROWSER_LOCALE}`,
-    ];
     const launchEnv = { ...process.env };
 
-    if (!USE_ANY_PROXY) {
-      // Sistem proxy'sini tamamen devre dışı bırak.
-      launchArgs.push('--no-proxy-server', '--proxy-server=direct://', '--proxy-bypass-list=*');
+    const browserType = USE_CAMOUFOX ? firefox : chromium;
+    const browserLabel = USE_CAMOUFOX ? 'Camoufox (Firefox)' : 'Chromium';
+
+    const firefoxLaunchOptions = {
+      headless: isHeadless,
+      executablePath: USE_CAMOUFOX ? CAMOUFOX_PATH : undefined,
+      env: launchEnv,
+      slowMo: parseInt(process.env.PLAYWRIGHT_SLOWMO_MS || '50', 10),
+    };
+
+    const chromiumLaunchOptions = {
+      headless: isHeadless,
+      channel: 'chrome',
+      args: [
+        '--ignore-certificate-errors',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-infobars',
+        '--no-sandbox',
+        `--lang=${BROWSER_LOCALE}`,
+      ],
+      env: launchEnv,
+      slowMo: parseInt(process.env.PLAYWRIGHT_SLOWMO_MS || '50', 10),
+    };
+
+    if (!USE_CAMOUFOX && !USE_ANY_PROXY) {
+      chromiumLaunchOptions.args.push('--no-proxy-server', '--proxy-server=direct://', '--proxy-bypass-list=*');
       delete launchEnv.HTTP_PROXY;
       delete launchEnv.HTTPS_PROXY;
       delete launchEnv.ALL_PROXY;
@@ -1550,13 +1605,7 @@ async function ensureBrowser() {
       delete launchEnv.all_proxy;
     }
 
-    const launchOptions = {
-      headless: isHeadless,
-      channel: 'chrome',
-      args: launchArgs,
-      env: launchEnv,
-      slowMo: parseInt(process.env.PLAYWRIGHT_SLOWMO_MS || '50', 10),
-    };
+    const launchOptions = USE_CAMOUFOX ? firefoxLaunchOptions : chromiumLaunchOptions;
 
     if (USE_CUSTOM_PROXY) {
       const { source: _source, ...proxy } = CUSTOM_PROXY_CONFIG;
@@ -1579,8 +1628,11 @@ async function ensureBrowser() {
       viewport: { width: 1366, height: 900 },
       locale: BROWSER_LOCALE,
       timezoneId: BROWSER_TIMEZONE,
-      userAgent: BROWSER_USER_AGENT,
     };
+
+    if (!USE_CAMOUFOX) {
+      contextOptions.userAgent = BROWSER_USER_AGENT;
+    }
 
     const usePersistentContext = shouldUsePersistentContext();
     const persistentProfileDir = resolvePersistentProfileDir();
@@ -1590,14 +1642,14 @@ async function ensureBrowser() {
     }
 
     if (usePersistentContext) {
-      context = await chromium.launchPersistentContext(persistentProfileDir, {
+      context = await browserType.launchPersistentContext(persistentProfileDir, {
         ...launchOptions,
         ...contextOptions,
       });
       browser = typeof context.browser === 'function' ? context.browser() : null;
       console.log(`  🗂️ Persistent profile: ${persistentProfileDir}`);
     } else {
-      browser = await chromium.launch(launchOptions);
+      browser = await browserType.launch(launchOptions);
       context = await browser.newContext(contextOptions);
       console.log('  🗂️ Persistent profile devre disi; gecici browser context kullaniliyor.');
     }
@@ -1662,20 +1714,35 @@ async function ensureBrowser() {
       }
     }
 
-    await context.addInitScript(({ browserLocale, browserPlatform }) => {
-      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-      window.chrome = { runtime: {} };
-      Object.defineProperty(navigator, 'language', { get: () => browserLocale });
-      Object.defineProperty(navigator, 'languages', {
-        get: () => [browserLocale, 'tr', 'en-US', 'en'],
+    if (!USE_CAMOUFOX) {
+      await context.addInitScript(({ browserLocale, browserPlatform }) => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        window.chrome = { runtime: {} };
+        Object.defineProperty(navigator, 'language', { get: () => browserLocale });
+        Object.defineProperty(navigator, 'languages', {
+          get: () => [browserLocale, 'tr', 'en-US', 'en'],
+        });
+        Object.defineProperty(navigator, 'platform', { get: () => browserPlatform });
+      }, {
+        browserLocale: BROWSER_LOCALE,
+        browserPlatform: BROWSER_PLATFORM,
       });
-      Object.defineProperty(navigator, 'platform', { get: () => browserPlatform });
-    }, {
-      browserLocale: BROWSER_LOCALE,
-      browserPlatform: BROWSER_PLATFORM,
-    });
+    } else {
+      await context.addInitScript(({ browserLocale, browserPlatform }) => {
+        Object.defineProperty(navigator, 'language', { get: () => browserLocale });
+        Object.defineProperty(navigator, 'languages', {
+          get: () => [browserLocale, 'tr', 'en-US', 'en'],
+        });
+        Object.defineProperty(navigator, 'platform', { get: () => browserPlatform });
+      }, {
+        browserLocale: BROWSER_LOCALE,
+        browserPlatform: BROWSER_PLATFORM,
+      });
+    }
 
     page = await context.newPage();
+
+    await takeScreenshot('browser-init');
 
     if (FINGERPRINT_DIAGNOSTIC) {
       const runtimeProfile = await collectRuntimeProfile(page);
@@ -1695,17 +1762,10 @@ async function ensureBrowser() {
       }
     }
 
-    if (USE_CUSTOM_PROXY) {
-      console.log(
-        `  🌐 Playwright tarayıcı başlatıldı (Custom Proxy Mode: ${CUSTOM_PROXY_CONFIG.source}, ${redactProxyServer(CUSTOM_PROXY_CONFIG.server)}).`,
-      );
-    } else if (USE_WARP_PROXY) {
-      console.log('  🌐 Playwright tarayıcı başlatıldı (WARP Proxy Mode - 127.0.0.1:40000).');
-    } else if (USE_SCRAPEDO_PROXY) {
-      console.log('  🌐 Playwright tarayıcı başlatıldı (Scrape.do Proxy Mode).');
-    } else {
-      console.log('  🌐 Playwright tarayıcı başlatıldı (Proxy kapalı, doğrudan bağlantı).');
-    }
+    const proxyLabel = USE_CUSTOM_PROXY
+      ? `Custom Proxy Mode: ${CUSTOM_PROXY_CONFIG.source}, ${redactProxyServer(CUSTOM_PROXY_CONFIG.server)}`
+      : (USE_WARP_PROXY ? 'WARP Proxy Mode - 127.0.0.1:40000' : (USE_SCRAPEDO_PROXY ? 'Scrape.do Proxy Mode' : 'Proxy kapalı, doğrudan bağlantı'));
+    console.log(`  🌐 ${browserLabel} başlatıldı (${proxyLabel}).`);
     console.log('  🧭 Canlı pencere açık olacak. Gerekirse challenge ekranında manuel doğrulayın.');
     return true;
   } catch (err) {
@@ -1752,6 +1812,7 @@ async function maybeHandleChallenge() {
   }
 
   console.log('  ✅ Challenge geçildi.');
+  await takeScreenshot('challenge-passed');
   return true;
 }
 
@@ -1831,6 +1892,7 @@ async function fetchPage(targetUrl, label = '') {
       const challengeOk = await maybeHandleChallenge();
       if (!challengeOk) {
         await saveChallengeProofScreenshot(`fetch-attempt-${attempt}`);
+        await takeScreenshot('challenge-failed');
         await sleep(2000);
         continue;
       }
@@ -1981,6 +2043,8 @@ export async function initSession() {
         timeout: DEFAULT_NAV_TIMEOUT_MS,
       });
 
+      await takeScreenshot('warmup-loaded');
+
       const initHtml = await page.content();
       if (initHtml.toLowerCase().includes('failed to get successful response from website')) {
         console.log('  ❌ Start aşamasında ScrapeOps Proxy Hatası! Sunucu engellendi.');
@@ -2041,15 +2105,19 @@ export async function initSession() {
       const postChallengeHtml = await page.content();
       if (isAuthRequiredPage(postChallengeHtml, page.url())) {
         await saveChallengeProofScreenshot('auth-required');
-        console.log(`  ❌ Login gerekli sayfa tespit edildi (retry ${authRetry}/${AUTH_REQUIRED_MAX_RETRIES}). Cookie gecersiz veya eksik olabilir.`);
+        await takeScreenshot('auth-required');
+        console.log(`  ⚠️ Login gerekli sayfa tespit edildi (retry ${authRetry}/${AUTH_REQUIRED_MAX_RETRIES}). Giris yapmadan devam ediliyor.`);
 
         if (authRetry < AUTH_REQUIRED_MAX_RETRIES) {
           continue;
         }
 
+        console.log('  ℹ️ Login gerekiyor ama Cloudflare gecildi. Giris zorunlu degil, devam ediliyor.');
         return {
-          ok: false,
-          code: 'AUTH_REQUIRED',
+          ok: true,
+          code: 'AUTH_REQUIRED_BUT_CONTINUE',
+          cookieSource: sessionCookieSource,
+          cookieCount: sessionCookieCount,
         };
       }
 
@@ -2062,6 +2130,7 @@ export async function initSession() {
     } catch (err) {
       console.log(`  ❌ Session init hatası: ${err.message}`);
       await saveChallengeProofScreenshot('init-session-error');
+      await takeScreenshot('init-session-error');
       return {
         ok: false,
         code: 'INIT_SESSION_ERROR',
@@ -2070,8 +2139,10 @@ export async function initSession() {
   }
 
   return {
-    ok: false,
-    code: 'AUTH_REQUIRED',
+    ok: true,
+    code: 'AUTH_REQUIRED_BUT_CONTINUE',
+    cookieSource: sessionCookieSource,
+    cookieCount: sessionCookieCount,
   };
 }
 
@@ -2100,5 +2171,6 @@ export default {
   scrapeDetailUrl,
   getStats,
   saveChallengeProofScreenshot,
+  takeScreenshot,
   closeBrowser,
 };
