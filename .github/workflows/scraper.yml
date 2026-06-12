@@ -27,6 +27,9 @@ jobs:
     name: Scrape & Analyze
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    container:
+      image: ghcr.io/univerisr-ai/ahibinden-ekran-karti/scraper:latest
+      options: --network host --privileged
 
     steps:
       - name: Run policy
@@ -61,73 +64,20 @@ jobs:
         if: steps.run_policy.outputs.should_run == 'true'
         uses: actions/checkout@v4
 
-      - name: Node.js
-        if: steps.run_policy.outputs.should_run == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-
-      - name: Python
-        if: steps.run_policy.outputs.should_run == 'true'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install npm deps
-        if: steps.run_policy.outputs.should_run == 'true'
-        shell: bash
-        run: npm ci --no-optional --ignore-scripts 2>&1 | tail -3 && npm install playwright@1.59.0 --no-save 2>&1 | tail -3
-
       - name: WARP Proxy
         if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-          sudo apt-get update
-          sudo apt-get install -y cloudflare-warp xvfb
-          warp-cli --accept-tos registration new || warp-cli --accept-tos register
-          warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy
-          warp-cli --accept-tos proxy port 40000 || warp-cli --accept-tos set-proxy-port 40000
+          warp-svc > /tmp/warp-svc.log 2>&1 &
+          sleep 4
+          warp-cli --accept-tos registration new 2>/dev/null || warp-cli --accept-tos register
+          warp-cli --accept-tos mode proxy 2>/dev/null || warp-cli --accept-tos set-mode proxy
+          warp-cli --accept-tos proxy port 40000 2>/dev/null || warp-cli --accept-tos set-proxy-port 40000
           warp-cli --accept-tos connect
           sleep 8
           warp-cli --accept-tos status
           curl -fsS -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | tee warp-trace.txt
-
-      - name: Cache pip
-        if: steps.run_policy.outputs.should_run == 'true'
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/requirements*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-
-      - name: Cache Playwright browsers
-        if: steps.run_policy.outputs.should_run == 'true'
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-firefox-v1
-          restore-keys: |
-            ${{ runner.os }}-playwright-
-
-      - name: Camoufox + Playwright
-        if: steps.run_policy.outputs.should_run == 'true'
-        shell: bash
-        run: |
-          # Install playwright first (pinned), then camoufox (deps already satisfied)
-          pip install "playwright<=1.59.0" --prefer-binary
-          pip install camoufox --prefer-binary
-          # Install Playwright Firefox browser binary (cached)
-          npx playwright install firefox 2>&1 | tail -5
-          # Get Firefox binary path for Camoufox
-          FF_PATH=$(node -e "const p = require('playwright'); console.log(p.firefox.executablePath())" 2>/dev/null || node -e "const p = require('playwright-core'); console.log(p.firefox.executablePath())")
-          echo "FIREFOX_BIN=$FF_PATH" >> "$GITHUB_ENV"
-          echo "Firefox binary: $FF_PATH"
 
       - name: Start Camoufox Server
         if: steps.run_policy.outputs.should_run == 'true'
@@ -136,12 +86,10 @@ jobs:
         run: |
           export CAMOUFOX_HEADLESS=true
           export CAMOUFOX_PROXY=socks5://127.0.0.1:40000
-          export CAMOUFOX_BROWSER_PATH="$FIREFOX_BIN"
-          # Start server in background with xvfb for headless virtual display
+          # Start server in background
           xvfb-run python scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
           SERVER_PID=$!
           echo "server_pid=$SERVER_PID" >> "$GITHUB_OUTPUT"
-          # Wait for WebSocket endpoint
           for i in $(seq 1 60); do
             if grep -q "Websocket endpoint" /tmp/camoufox-server.log 2>/dev/null; then
               WS=$(grep -oP 'ws://[^\s]+' /tmp/camoufox-server.log | head -1)
