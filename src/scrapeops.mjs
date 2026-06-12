@@ -1755,6 +1755,43 @@ async function maybeHandleChallenge() {
   return true;
 }
 
+async function fetchFlareSolverrCookies(targetUrl = 'https://www.sahibinden.com') {
+  const flaresolverrUrl = 'http://localhost:8191/v1';
+  try {
+    const response = await fetch(flaresolverrUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cmd: 'request.get',
+        url: targetUrl,
+        maxTimeout: 120000,
+      }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.status !== 'ok') {
+      return null;
+    }
+
+    const cookies = data.solution?.cookies || [];
+    const cfClearance = cookies.find((c) => c.name === 'cf_clearance');
+
+    if (cfClearance) {
+      console.log(`  🔥 FlareSolverr cf_clearance cookie alindi: ${cfClearance.value.slice(0, 30)}...`);
+      return cookies;
+    }
+
+    return null;
+  } catch (err) {
+    console.log(`  ⚠️ FlareSolverr hatasi: ${err.message}`);
+    return null;
+  }
+}
+
 async function fetchPage(targetUrl, label = '') {
   if (hardStopStatus === 'ACTION_REQUIRED') {
     return { html: null, status: 'ACTION_REQUIRED' };
@@ -1955,6 +1992,46 @@ export async function initSession() {
 
       const challengeOk = await maybeHandleChallenge();
       if (!challengeOk) {
+        console.log('  🔄 Challenge timeout - FlareSolverr deneniyor...');
+        const fsCookies = await fetchFlareSolverrCookies();
+        if (fsCookies && fsCookies.length > 0) {
+          const normalized = fsCookies.map((c) => ({
+            name: c.name,
+            value: c.value,
+            domain: c.domain || '.sahibinden.com',
+            path: c.path || '/',
+            expires: -1,
+            httpOnly: false,
+            secure: true,
+            sameSite: 'Lax',
+          }));
+          try {
+            await context.addCookies(normalized);
+            console.log(`  🔥 FlareSolverr cookie'leri eklendi (${normalized.length}). Sayfa yenileniyor...`);
+
+            await page.goto(warmupUrl, {
+              waitUntil: 'domcontentloaded',
+              timeout: DEFAULT_NAV_TIMEOUT_MS,
+            });
+            await sleep(2000);
+
+            const newHtml = await page.content();
+            const newUrl = page.url();
+            if (!isChallengePage(newHtml, newUrl) && !isAuthRequiredPage(newHtml, newUrl)) {
+              console.log('  ✅ FlareSolverr ile challenge geçildi!');
+              return {
+                ok: true,
+                code: 'OK',
+                cookieSource: 'flare-solverr',
+                cookieCount: normalized.length,
+              };
+            }
+            console.log('  ⚠️ FlareSolverr cookie eklenmesine ragmen hala challenge/auth sayfasi.');
+          } catch (err) {
+            console.log(`  ⚠️ FlareSolverr cookie ekleme hatasi: ${err.message}`);
+          }
+        }
+
         return {
           ok: false,
           code: 'CHALLENGE_TIMEOUT',

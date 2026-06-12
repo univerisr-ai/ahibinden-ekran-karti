@@ -32,6 +32,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
+    services:
+      flaresolverr:
+        image: ghcr.io/flaresolverr/flaresolverr:latest
+        env:
+          LOG_LEVEL: info
+          CAPTCHA_SOLVER: none
+        ports:
+          - 8191:8191
+
     steps:
       - name: 🧭 Haftalik run politikasi (2 rastgele gun)
         id: run_policy
