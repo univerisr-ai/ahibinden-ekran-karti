@@ -86,7 +86,7 @@ jobs:
         run: |
           export CAMOUFOX_HEADLESS=true
           export CAMOUFOX_PROXY=socks5://127.0.0.1:40000
-          xvfb-run python scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
+          xvfb-run python3 scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
           SERVER_PID=$!
           echo "server_pid=$SERVER_PID" >> "$GITHUB_OUTPUT"
           for i in $(seq 1 60); do
