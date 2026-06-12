@@ -32,12 +32,47 @@ export function getStats() {
 const FLARESOLVERR_URL = 'http://localhost:8191/v1';
 let flareSolverrSession = null;
 
+function hasNonPrintableControlChars(value) {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code < 32 && code !== 9 && code !== 10 && code !== 13) return true;
+  }
+  return false;
+}
+
+function loadEnvCookies() {
+  const raw = process.env.SAHIBINDEN_COOKIES || process.env.SAHIBINDEN_STORAGE_STATE_B64 || '';
+  if (!raw) return [];
+  try {
+    const decoded = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8'));
+    let cookies = [];
+    if (Array.isArray(decoded)) cookies = decoded;
+    else if (decoded.cookies && Array.isArray(decoded.cookies)) cookies = decoded.cookies;
+    return cookies.filter(c => {
+      const v = String(c.value || '');
+      return !v.startsWith('b\u0027') && !v.startsWith('b"') && !hasNonPrintableControlChars(v);
+    });
+  } catch {
+    return [];
+  }
+}
+
+const envCookies = loadEnvCookies();
+
 async function callFlareSolverr(cmd, url, maxTimeout = DEFAULT_NAV_TIMEOUT_MS) {
   const body = {
     cmd,
     url,
     maxTimeout,
     session: flareSolverrSession || undefined,
+    cookies: envCookies.length > 0 ? envCookies.map(c => ({
+      name: c.name,
+      value: c.value,
+      domain: c.domain || '.sahibinden.com',
+      path: c.path || '/',
+      secure: c.secure !== false,
+      httpOnly: c.httpOnly === true,
+    })) : undefined,
   };
   const response = await fetch(FLARESOLVERR_URL, {
     method: 'POST',
