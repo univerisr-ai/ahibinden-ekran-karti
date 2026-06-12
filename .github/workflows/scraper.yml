@@ -32,15 +32,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
-    services:
-      flaresolverr:
-        image: ghcr.io/flaresolverr/flaresolverr:latest
-        env:
-          LOG_LEVEL: info
-          CAPTCHA_SOLVER: none
-        ports:
-          - 8191:8191
-
     steps:
       - name: 🧭 Haftalik run politikasi (2 rastgele gun)
         id: run_policy
@@ -177,6 +168,25 @@ jobs:
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "proxy_url=" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: 🔥 FlareSolverr Baslat (WARP uzerinden)
+        if: steps.run_policy.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          docker run -d --name flaresolverr --network host \
+            -e LOG_LEVEL=info \
+            -e CAPTCHA_SOLVER=none \
+            -e PROXY=socks5://127.0.0.1:40000 \
+            ghcr.io/flaresolverr/flaresolverr:latest
+          echo "FlareSolverr WARP proxy ile baslatildi."
+          # FlareSolverr'in hazir olmasini bekle
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8191/v1 >/dev/null 2>&1; then
+              echo "FlareSolverr hazir (deneme $i)"
+              break
+            fi
+            sleep 2
+          done
 
       - name: ⏱️ Schedule jitter beklemesi
         if: steps.run_policy.outputs.should_run == 'true' && github.event_name == 'schedule'
