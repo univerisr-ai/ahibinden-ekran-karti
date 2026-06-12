@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 120
     container:
       image: ghcr.io/univerisr-ai/ahibinden-ekran-karti/scraper:latest
-      options: --privileged --user root
+      options: --privileged --user root -e HOME=/root
 
     steps:
       - name: Run policy
