@@ -1263,6 +1263,7 @@ async function waitForChallengeSolve(maxWaitMs = CHALLENGE_WAIT_MS) {
   let lastManualWindowLogTs = 0;
   let continueOpenSince = 0;
   let lastPostLockContinueTs = 0;
+  let lastScreenshotTs = 0;
 
   while (Date.now() - started < maxWaitMs) {
     await sleep(1500);
@@ -1284,8 +1285,9 @@ async function waitForChallengeSolve(maxWaitMs = CHALLENGE_WAIT_MS) {
     }
 
     const now = Date.now();
-    if (screenshotCounter === 0 || now - lastProgressTs > 30000) {
+    if (screenshotCounter === 0 || now - lastScreenshotTs > 30000) {
       await takeScreenshot('challenge-waiting');
+      lastScreenshotTs = Date.now();
     }
 
     const stateSig = [

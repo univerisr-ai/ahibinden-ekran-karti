@@ -121,38 +121,10 @@ jobs:
         run: |
           pip install camoufox
           python -m camoufox fetch
-          echo "Searching for camoufox binary..."
-          # camoufox stores the binary in its package directory
-          CAMOUFOX_PATH="$(python -c "
-          import os, glob
-          try:
-            from camoufox.utils import get_path
-            p = get_path()
-            if p and os.path.isfile(p):
-              print(p)
-              exit()
-          except: pass
-          try:
-            import camoufox
-            pkg_dir = os.path.dirname(camoufox.__file__)
-            for pattern in [os.path.join(pkg_dir, 'Cache', 'camoufox*'), os.path.join(pkg_dir, '..', 'Cache', 'camoufox*')]:
-              for f in glob.glob(pattern):
-                if os.path.isfile(f) and not f.endswith('.py'):
-                  print(f)
-                  exit()
-          except: pass
-          print('')
-          " 2>/dev/null || echo '')"
-          
-          if [ -z "$CAMOUFOX_PATH" ]; then
-            echo "::warning::Camoufox binary not found, will use Playwright Firefox as fallback"
-            echo "Use Camoufox: false"
-            echo "camoufox_path=" >> "$GITHUB_OUTPUT"
-          else
-            chmod +x "$CAMOUFOX_PATH" 2>/dev/null || true
-            echo "Camoufox binary: $CAMOUFOX_PATH"
-            echo "camoufox_path=$CAMOUFOX_PATH" >> "$GITHUB_OUTPUT"
-          fi
+          CAMOUFOX_PATH="$(python -m camoufox path | tr -d '[:space:]')"
+          chmod +x "$CAMOUFOX_PATH" 2>/dev/null || true
+          echo "Camoufox binary: $CAMOUFOX_PATH"
+          echo "camoufox_path=$CAMOUFOX_PATH" >> "$GITHUB_OUTPUT"
 
       - name: 📦 Python Bağımlılıklarını Kur (Xvfb & DrissionPage)
         if: steps.run_policy.outputs.should_run == 'true'
