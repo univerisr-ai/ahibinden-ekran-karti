@@ -32,21 +32,6 @@ export function getStats() {
 const FLARESOLVERR_URL = 'http://localhost:8191/v1';
 let flareSolverrSession = null;
 
-function loadEnvCookies() {
-  const raw = process.env.SAHIBINDEN_COOKIES || process.env.SAHIBINDEN_STORAGE_STATE_B64 || '';
-  if (!raw) return [];
-  try {
-    const decoded = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8'));
-    if (Array.isArray(decoded)) return decoded;
-    if (decoded.cookies && Array.isArray(decoded.cookies)) return decoded.cookies;
-    return [];
-  } catch {
-    return [];
-  }
-}
-
-const envCookies = loadEnvCookies();
-
 async function callFlareSolverr(cmd, url, maxTimeout = DEFAULT_NAV_TIMEOUT_MS) {
   const body = {
     cmd,
@@ -54,13 +39,6 @@ async function callFlareSolverr(cmd, url, maxTimeout = DEFAULT_NAV_TIMEOUT_MS) {
     maxTimeout,
     session: flareSolverrSession || undefined,
   };
-  if (cmd === 'request.get' && envCookies.length > 0) {
-    body.cookies = envCookies.map(c => ({
-      name: c.name,
-      value: c.value,
-      domain: c.domain || '.sahibinden.com',
-    }));
-  }
   const response = await fetch(FLARESOLVERR_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

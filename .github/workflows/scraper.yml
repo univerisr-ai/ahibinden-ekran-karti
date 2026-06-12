@@ -28,15 +28,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
-    services:
-      flaresolverr:
-        image: ghcr.io/flaresolverr/flaresolverr:latest
-        env:
-          LOG_LEVEL: info
-          CAPTCHA_SOLVER: none
-        ports:
-          - 8191:8191
-
     steps:
       - name: Haftalik run politikasi (2 rastgele gun)
         id: run_policy
@@ -92,6 +83,45 @@ jobs:
         shell: bash
         run: |
           sleep "${{ steps.run_policy.outputs.jitter_seconds }}"
+
+      - name: WARP Proxy Kurulumu
+        if: steps.run_policy.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update
+          sudo apt-get install -y cloudflare-warp
+          warp-cli --accept-tos registration new || warp-cli --accept-tos register
+          warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy
+          warp-cli --accept-tos proxy port 40000 || warp-cli --accept-tos set-proxy-port 40000
+          warp-cli --accept-tos connect
+          sleep 8
+          warp-cli --accept-tos status
+          curl -fsS -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | tee warp-trace.txt
+
+      - name: FlareSolverr Baslat (WARP uzerinden)
+        if: steps.run_policy.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          docker run -d --name flaresolverr --network host \
+            -e LOG_LEVEL=info \
+            -e CAPTCHA_SOLVER=none \
+            -e PROXY=socks5://127.0.0.1:40000 \
+            ghcr.io/flaresolverr/flaresolverr:latest
+          echo "FlareSolverr WARP proxy ile baslatildi."
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8191/v1 >/dev/null 2>&1; then
+              echo "FlareSolverr hazir (deneme $i)"
+              break
+            fi
+            if curl -sS http://127.0.0.1:8191/v1 2>&1 | grep -q "Method not allowed"; then
+              echo "FlareSolverr hazir (deneme $i, 405 beklenen)"
+              break
+            fi
+            sleep 2
+          done
 
       - name: GPU Firsat Avcisini Calistir
         id: runner
@@ -168,4 +198,4 @@ jobs:
         if: always() && steps.run_policy.outputs.should_run == 'true'
         shell: bash
         run: |
-          rm -rf .playwright ~/.cache/ms-playwright ~/.cache/camoufox ~/.local/share/camoufox
+          rm -rf ~/.cache/ms-playwright ~/.cache/camoufox ~/.local/share/camoufox
