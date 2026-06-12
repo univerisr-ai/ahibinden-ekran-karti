@@ -10,9 +10,11 @@ kwargs = {
     'locale': 'tr-TR',
     'humanize': True,
     'disable_coop': True,
+    'i_know_what_im_doing': True,
 }
 
 if proxy_url:
     kwargs['proxy'] = {'server': proxy_url}
+    kwargs['geoip'] = True
 
 launch_server(**kwargs)
