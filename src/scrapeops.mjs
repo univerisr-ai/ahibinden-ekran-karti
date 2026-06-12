@@ -154,7 +154,7 @@ async function testFlareSolverr() {
   for (let i = 0; i < 60; i++) {
     try {
       const res = await fetch(`${FLARESOLVERR_URL}`, { method: 'GET' });
-      if (res.ok) {
+      if (res.ok || res.status === 405) {
         console.log('  FlareSolverr hazir.');
         stats.flareSolverrConnected = true;
         return true;
