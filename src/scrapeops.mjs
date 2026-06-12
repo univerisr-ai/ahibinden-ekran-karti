@@ -2036,7 +2036,7 @@ export async function initSession() {
       console.log(`  ⚠️ FlareSolverr cookie ekleme hatasi: ${fsErr.message}`);
     }
   } else {
-    console.log('  ⚠️ FlareSolverr'dan cookie alinamadi.');
+    console.log("  ⚠️ FlareSolverr'dan cookie alinamadi.");
   }
 
   for (let authRetry = 0; authRetry <= AUTH_REQUIRED_MAX_RETRIES; authRetry++) {
