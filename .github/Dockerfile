@@ -10,15 +10,19 @@ RUN apt-get update && apt-get install -y \
     && apt-get update && apt-get install -y cloudflare-warp \
     && rm -rf /var/lib/apt/lists/*
 
-# Python deps (with geoip for Camoufox)
+# Python deps
 RUN python3 -m pip install "playwright<=1.59.0" "camoufox[geoip]" --prefer-binary
 
-# Playwright Firefox binary + create symlink for Camoufox
-RUN npx playwright install firefox \
-    && FF_PATH=$(node -e "const p = require('playwright'); console.log(p.firefox.executablePath())" 2>/dev/null || node -e "const p = require('playwright-core'); console.log(p.firefox.executablePath())") \
-    && echo "Firefox binary: $FF_PATH" \
+# Install Playwright Firefox binary (need npm package first)
+WORKDIR /tmp
+COPY package*.json /tmp/
+RUN npm ci --no-optional --ignore-scripts 2>&1 | tail -3 \
+    && npx playwright install firefox \
+    && FF_PATH=$(NODE_PATH=/tmp/node_modules node -e "const p = require('playwright'); console.log(p.firefox.executablePath())") \
+    && echo "Firefox: $FF_PATH" \
     && ln -sf "$FF_PATH" /usr/local/bin/firefox-camoufox
 
+# App setup
 WORKDIR /app
 COPY scripts/camoufox-server.py /app/
 COPY src/ /app/src/
