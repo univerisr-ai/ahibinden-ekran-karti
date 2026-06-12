@@ -105,14 +105,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Cache Camoufox
-        if: steps.run_policy.outputs.should_run == 'true'
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/camoufox
-          key: ${{ runner.os }}-camoufox-v1
-          restore-keys: |
-            ${{ runner.os }}-camoufox-
 
       - name: Cache Playwright browsers
         if: steps.run_policy.outputs.should_run == 'true'
@@ -139,6 +131,7 @@ jobs:
         run: |
           export CAMOUFOX_HEADLESS=true
           export CAMOUFOX_PROXY=socks5://127.0.0.1:40000
+          export CAMOUFOX_BROWSER_PATH="$FIREFOX_BIN"
           # Start server in background with xvfb for headless virtual display
           xvfb-run python scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
           SERVER_PID=$!
