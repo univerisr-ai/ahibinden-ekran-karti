@@ -93,6 +93,21 @@ jobs:
         run: |
           sleep "${{ steps.run_policy.outputs.jitter_seconds }}"
 
+      - name: FlareSolverr debug check
+        if: steps.run_policy.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          echo "=== Docker ps ==="
+          docker ps -a --filter name=flaresolverr 2>&1 || true
+          echo "=== Docker logs ==="
+          docker logs flaresolverr 2>&1 | tail -20 || true
+          echo "=== curl localhost:8191 ==="
+          curl -sS http://localhost:8191/v1 2>&1 || echo "Failed to connect to localhost:8191"
+          echo "=== curl 127.0.0.1:8191 ==="
+          curl -sS http://127.0.0.1:8191/v1 2>&1 || echo "Failed to connect to 127.0.0.1:8191"
+          echo "=== check with nc ==="
+          timeout 3 bash -c 'echo > /dev/tcp/localhost/8191' 2>&1 && echo "Port open" || echo "Port closed"
+
       - name: GPU Firsat Avcisini Calistir
         id: runner
         if: steps.run_policy.outputs.should_run == 'true'
