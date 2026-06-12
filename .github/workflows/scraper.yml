@@ -119,10 +119,15 @@ jobs:
         if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
         run: |
-          pip install "playwright==1.59.0" camoufox
-          timeout 120 python -m camoufox fetch
-          # Playwright Firefox for browser binary
+          # Install playwright first (pinned), then camoufox (deps already satisfied)
+          pip install "playwright<=1.59.0" --prefer-binary
+          pip install camoufox --prefer-binary
+          # Install Playwright Firefox browser binary (cached)
           npx playwright install firefox 2>&1 | tail -5
+          # Get Firefox binary path for Camoufox
+          FF_PATH=$(node -e "const p = require('playwright'); console.log(p.firefox.executablePath())" 2>/dev/null || node -e "const p = require('playwright-core'); console.log(p.firefox.executablePath())")
+          echo "FIREFOX_BIN=$FF_PATH" >> "$GITHUB_ENV"
+          echo "Firefox binary: $FF_PATH"
 
       - name: Start Camoufox Server
         if: steps.run_policy.outputs.should_run == 'true'
