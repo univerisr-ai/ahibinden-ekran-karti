@@ -120,6 +120,15 @@ jobs:
         if: steps.run_policy.outputs.should_run == 'true'
         run: npx playwright install chromium --with-deps
 
+      - name: 🗂️ Sahibinden Playwright profil cache
+        if: steps.run_policy.outputs.should_run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: .playwright/sahibinden-profile
+          key: sahibinden-playwright-profile-v2-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            sahibinden-playwright-profile-v2-${{ runner.os }}-
+
       - name: 🌀 Cloudflare WARP Proxy Kurulumu
         if: steps.run_policy.outputs.should_run == 'true' && (vars.USE_WARP_PROXY == 'true' || vars.DOLAP_USE_WARP_PROXY == 'true')
         id: warp
@@ -167,6 +176,8 @@ jobs:
           HEADLESS: 'false'
           CHALLENGE_WAIT_MS: '300000'
           REQUIRE_SAHIBINDEN_COOKIES: 'true'
+          SAHIBINDEN_PERSISTENT_CONTEXT: 'true'
+          SAHIBINDEN_USER_DATA_DIR: .playwright/sahibinden-profile
           BROWSER_LOCALE: 'tr-TR'
           BROWSER_TIMEZONE: 'Europe/Istanbul'
           BROWSER_PLATFORM: 'Win32'
@@ -214,6 +225,19 @@ jobs:
             pipeline-messages.json
             cf_proof.png
           retention-days: 7
+
+      - name: 🧹 Eski profil cachelerini temizle
+        if: always() && steps.run_policy.outputs.should_run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CACHE_PREFIX: sahibinden-playwright-profile-v2-${{ runner.os }}-
+        run: |
+          set +e
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_PREFIX}&per_page=100" \
+            --jq '.actions_caches | sort_by(.last_accessed_at) | reverse | .[6:] | .[].id' |
+          while read -r cache_id; do
+            [ -n "$cache_id" ] && gh api -X DELETE "/repos/${GITHUB_REPOSITORY}/actions/caches/${cache_id}" || true
+          done
 
       - name: 📣 Telegram failure alert
         if: failure() && steps.run_policy.outputs.should_run == 'true'

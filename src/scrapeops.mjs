@@ -1784,40 +1784,22 @@ async function fetchPage(targetUrl, label = '') {
       let html = '';
       let respStatus = 200;
 
-      // 1. Önce Hızlı Arkaplan İsteği (XHR Fetch) - Sayfaya girmeden
-      try {
-        const result = await page.evaluate(async (url) => {
-          const res = await fetch(url);
-          return { status: res.status, html: await res.text() };
-        }, targetUrl);
+      const response = await page.goto(targetUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: DEFAULT_NAV_TIMEOUT_MS,
+      });
 
-        respStatus = result.status;
-        html = result.html;
-      } catch (e) {
-        html = '';
-        respStatus = 0;
+      await sleep(1200);
+
+      const challengeOk = await maybeHandleChallenge();
+      if (!challengeOk) {
+        await saveChallengeProofScreenshot(`fetch-attempt-${attempt}`);
+        await sleep(2000);
+        continue;
       }
 
-      // 2. Eğer engellendiyse veya challenge geldiyse, GUI ile görerek gir (Fallback)
-      if (respStatus === 403 || isChallengePage(html, targetUrl) || !html) {
-        console.log(`  🔄 Hızlı istek engellendi (HTTP ${respStatus}). Tarayıcı üzerinden giriliyor...`);
-        const response = await page.goto(targetUrl, {
-          waitUntil: 'domcontentloaded',
-          timeout: DEFAULT_NAV_TIMEOUT_MS,
-        });
-
-        await sleep(1200);
-
-        const challengeOk = await maybeHandleChallenge();
-        if (!challengeOk) {
-          await saveChallengeProofScreenshot(`fetch-attempt-${attempt}`);
-          await sleep(2000);
-          continue;
-        }
-
-        html = await page.content();
-        respStatus = response ? response.status() : 200;
-      }
+      html = await page.content();
+      respStatus = response ? response.status() : 200;
 
       const status = checkScrapeErrors(html);
 
@@ -1929,54 +1911,91 @@ export async function initSession() {
     };
   }
 
-  try {
-    const warmupUrl = buildSahibindenUrl(0, 0, WARMUP_PRICE_MAX);
-    await page.goto(warmupUrl, {
-      waitUntil: 'domcontentloaded',
-      timeout: DEFAULT_NAV_TIMEOUT_MS,
-    });
+  const AUTH_REQUIRED_MAX_RETRIES = 3;
+  const AUTH_REQUIRED_RETRY_DELAY_MS = 5000;
 
-    const initHtml = await page.content();
-    if (initHtml.toLowerCase().includes('failed to get successful response from website')) {
-      console.log('  ❌ Start aşamasında ScrapeOps Proxy Hatası! Sunucu engellendi.');
+  for (let authRetry = 0; authRetry <= AUTH_REQUIRED_MAX_RETRIES; authRetry++) {
+    try {
+      const warmupUrl = buildSahibindenUrl(0, 0, WARMUP_PRICE_MAX);
+
+      if (authRetry > 0) {
+        console.log(`  🔄 AUTH_REQUIRED retry ${authRetry}/${AUTH_REQUIRED_MAX_RETRIES}: sayfa yenileniyor...`);
+        await sleep(AUTH_REQUIRED_RETRY_DELAY_MS);
+
+        try {
+          await page.goto('https://www.sahibinden.com', {
+            waitUntil: 'domcontentloaded',
+            timeout: DEFAULT_NAV_TIMEOUT_MS,
+          });
+          await sleep(2000);
+
+          const homeHtml = await page.content();
+          if (isAuthRequiredPage(homeHtml, page.url())) {
+            console.log(`  ⚠️ Ana sayfa da AUTH_REQUIRED (retry ${authRetry}).`);
+            if (authRetry < AUTH_REQUIRED_MAX_RETRIES) continue;
+          }
+        } catch (homeErr) {
+          console.log(`  ⚠️ Ana sayfa navigasyon hatasi: ${homeErr.message}`);
+        }
+      }
+
+      await page.goto(warmupUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: DEFAULT_NAV_TIMEOUT_MS,
+      });
+
+      const initHtml = await page.content();
+      if (initHtml.toLowerCase().includes('failed to get successful response from website')) {
+        console.log('  ❌ Start aşamasında ScrapeOps Proxy Hatası! Sunucu engellendi.');
+        return {
+          ok: false,
+          code: 'PROXY_INIT_FAILED',
+        };
+      }
+
+      const challengeOk = await maybeHandleChallenge();
+      if (!challengeOk) {
+        return {
+          ok: false,
+          code: 'CHALLENGE_TIMEOUT',
+        };
+      }
+
+      const postChallengeHtml = await page.content();
+      if (isAuthRequiredPage(postChallengeHtml, page.url())) {
+        await saveChallengeProofScreenshot('auth-required');
+        console.log(`  ❌ Login gerekli sayfa tespit edildi (retry ${authRetry}/${AUTH_REQUIRED_MAX_RETRIES}). Cookie gecersiz veya eksik olabilir.`);
+
+        if (authRetry < AUTH_REQUIRED_MAX_RETRIES) {
+          continue;
+        }
+
+        return {
+          ok: false,
+          code: 'AUTH_REQUIRED',
+        };
+      }
+
+      return {
+        ok: true,
+        code: 'OK',
+        cookieSource: sessionCookieSource,
+        cookieCount: sessionCookieCount,
+      };
+    } catch (err) {
+      console.log(`  ❌ Session init hatası: ${err.message}`);
+      await saveChallengeProofScreenshot('init-session-error');
       return {
         ok: false,
-        code: 'PROXY_INIT_FAILED',
+        code: 'INIT_SESSION_ERROR',
       };
     }
-
-    const challengeOk = await maybeHandleChallenge();
-    if (!challengeOk) {
-      return {
-        ok: false,
-        code: 'CHALLENGE_TIMEOUT',
-      };
-    }
-
-    const postChallengeHtml = await page.content();
-    if (isAuthRequiredPage(postChallengeHtml, page.url())) {
-      await saveChallengeProofScreenshot('auth-required');
-      console.log('  ❌ Login gerekli sayfa tespit edildi. Cookie gecersiz veya eksik olabilir.');
-      return {
-        ok: false,
-        code: 'AUTH_REQUIRED',
-      };
-    }
-
-    return {
-      ok: true,
-      code: 'OK',
-      cookieSource: sessionCookieSource,
-      cookieCount: sessionCookieCount,
-    };
-  } catch (err) {
-    console.log(`  ❌ Session init hatası: ${err.message}`);
-    await saveChallengeProofScreenshot('init-session-error');
-    return {
-      ok: false,
-      code: 'INIT_SESSION_ERROR',
-    };
   }
+
+  return {
+    ok: false,
+    code: 'AUTH_REQUIRED',
+  };
 }
 
 export async function closeBrowser() {
