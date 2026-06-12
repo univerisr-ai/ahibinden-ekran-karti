@@ -77,7 +77,7 @@ jobs:
       - name: Install npm deps
         if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
-        run: npm ci --no-optional --ignore-scripts 2>&1 | tail -3
+        run: npm ci --no-optional --ignore-scripts 2>&1 | tail -3 && npm install playwright@1.59.0 --no-save 2>&1 | tail -3
 
       - name: WARP Proxy
         if: steps.run_policy.outputs.should_run == 'true'
