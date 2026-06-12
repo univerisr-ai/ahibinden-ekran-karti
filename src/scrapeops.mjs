@@ -2015,6 +2015,30 @@ export async function initSession() {
   const AUTH_REQUIRED_MAX_RETRIES = 3;
   const AUTH_REQUIRED_RETRY_DELAY_MS = 5000;
 
+  // Önce FlareSolverr ile cf_clearance al (Cloudflare'i önceden geç)
+  console.log('  🔥 FlareSolverr ile cf_clearance aliniyor...');
+  const preFSCookies = await fetchFlareSolverrCookies('https://www.sahibinden.com');
+  if (preFSCookies && preFSCookies.length > 0) {
+    try {
+      const normalized = preFSCookies.map((c) => ({
+        name: c.name,
+        value: c.value,
+        domain: c.domain || '.sahibinden.com',
+        path: c.path || '/',
+        expires: -1,
+        httpOnly: false,
+        secure: true,
+        sameSite: 'Lax',
+      }));
+      await context.addCookies(normalized);
+      console.log(`  🔥 FlareSolverr cf_clearance eklendi (${normalized.length} cookie).`);
+    } catch (fsErr) {
+      console.log(`  ⚠️ FlareSolverr cookie ekleme hatasi: ${fsErr.message}`);
+    }
+  } else {
+    console.log('  ⚠️ FlareSolverr'dan cookie alinamadi.');
+  }
+
   for (let authRetry = 0; authRetry <= AUTH_REQUIRED_MAX_RETRIES; authRetry++) {
     try {
       const warmupUrl = buildSahibindenUrl(0, 0, WARMUP_PRICE_MAX);
