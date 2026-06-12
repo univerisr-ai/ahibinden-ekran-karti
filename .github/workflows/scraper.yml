@@ -1,24 +1,20 @@
-name: 🎮 GPU Fırsat Avcısı — Sahibinden AI Scraper
+name: GPU Firsat Avcisi — Sahibinden Scraper
 
 on:
-  # ── Zamanlı çalıştırma ────────────────────────────────────
   schedule:
-    # Her gun 08:00 UTC tetiklenir; workflow icinde "haftada 2 rastgele gun" politikasi uygulanir.
     - cron: '0 8 * * *'
-
-  # ── Manuel çalıştırma ────────
   workflow_dispatch:
     inputs:
       min_fiyat:
-        description: 'Minimum fiyat filtresi (TL, opsiyonel)'
+        description: 'Minimum fiyat (TL)'
         required: false
         default: ''
       max_fiyat:
-        description: 'Maximum fiyat filtresi (TL, opsiyonel)'
+        description: 'Maximum fiyat (TL)'
         required: false
         default: ''
       bypass_ai:
-        description: 'AI analizini atla (sadece scrape)?'
+        description: 'AI analizini atla'
         required: false
         type: boolean
         default: true
@@ -28,227 +24,106 @@ env:
 
 jobs:
   scrape:
-    name: 🔍 Scrape & Analyze
+    name: Scrape & Analyze
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
+    services:
+      flaresolverr:
+        image: ghcr.io/flaresolverr/flaresolverr:latest
+        env:
+          LOG_LEVEL: info
+          CAPTCHA_SOLVER: none
+        ports:
+          - 8191:8191
+
     steps:
-      - name: 🧭 Haftalik run politikasi (2 rastgele gun)
+      - name: Haftalik run politikasi (2 rastgele gun)
         id: run_policy
         shell: bash
         run: |
           set -euo pipefail
-
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manual tetikleme: policy bypass, kosu basliyor."
+            echo "Manual tetikleme: policy bypass."
             echo "should_run=true" >> "$GITHUB_OUTPUT"
             echo "jitter_seconds=0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
           if [ "${{ vars.PIPELINE_PAUSED }}" = "true" ]; then
-            echo "Run policy: PIPELINE_PAUSED=true oldugu icin schedule kosusu atlanacak."
             echo "should_run=false" >> "$GITHUB_OUTPUT"
             echo "jitter_seconds=0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
           week="$(date -u +%G-%V)"
-          dow="$(date -u +%u)" # 1=Mon ... 7=Sun
+          dow="$(date -u +%u)"
           seed_input="${GITHUB_REPOSITORY}|${week}|sahibinden-weekly-two-days"
           seed_hash="$(printf "%s" "$seed_input" | sha256sum | cut -d' ' -f1)"
           day1_seed=$((16#${seed_hash:0:6}))
           day2_seed=$((16#${seed_hash:6:6}))
-          jitter_seed=$((16#${seed_hash:12:6}))
-
-          day1=$(( (day1_seed % 7) + 1 ))
-          day2=$(( (day2_seed % 7) + 1 ))
-
-          if [ "$day2" -eq "$day1" ]; then
-            day2=$(( (day1 % 7) + 1 ))
-          fi
-
-          if [ "$day1" -gt "$day2" ]; then
-            tmp="$day1"
-            day1="$day2"
-            day2="$tmp"
-          fi
-
-          jitter_seconds=$(( jitter_seed % 5400 ))
-
-          echo "Week: $week | UTC day: $dow | Picked days: $day1,$day2 | Jitter: ${jitter_seconds}s"
-
-          if [ "$dow" -eq "$day1" ] || [ "$dow" -eq "$day2" ]; then
+          allowed_days="$((day1_seed % 7 + 1)) $((day2_seed % 7 + 1))"
+          if echo " $allowed_days " | grep -q " $dow "; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "Run policy: Bugun secili gunlerden biri, kosu devam edecek."
+            jitter=$((day1_seed % 3600))
+            echo "jitter_seconds=$jitter" >> "$GITHUB_OUTPUT"
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
-            jitter_seconds=0
-            echo "Run policy: Bugun secili gun degil, schedule kosusu atlanacak."
+            echo "jitter_seconds=0" >> "$GITHUB_OUTPUT"
           fi
 
-          echo "jitter_seconds=${jitter_seconds}" >> "$GITHUB_OUTPUT"
-
-      - name: 📥 Checkout
+      - name: Checkout
         if: steps.run_policy.outputs.should_run == 'true'
         uses: actions/checkout@v4
 
-      - name: 🟢 Node.js Kurulumu
+      - name: Node.js Kurulumu
         if: steps.run_policy.outputs.should_run == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
+          cache: 'npm'
 
-      - name: 🐍 Python Kurulumu
-        if: steps.run_policy.outputs.should_run == 'true'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: 🦊 Camoufox Browser Kurulumu
-        if: steps.run_policy.outputs.should_run == 'true'
-        id: camoufox
-        shell: bash
-        run: |
-          pip install camoufox
-          python -m camoufox fetch
-          CAMOUFOX_PATH="$(python -c 'from camoufox.pkgman import launch_path; print(launch_path())' | tr -d '[:space:]')"
-          chmod +x "$CAMOUFOX_PATH"
-          echo "Camoufox binary: $CAMOUFOX_PATH"
-          echo "camoufox_path=$CAMOUFOX_PATH" >> "$GITHUB_OUTPUT"
-
-      - name: 📦 Python Bağımlılıklarını Kur (Xvfb & DrissionPage)
-        if: steps.run_policy.outputs.should_run == 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64
-          pip install DrissionPage pyvirtualdisplay xvfbwrapper requests
-
-      - name: 📦 Bağımlılıkları Yükle
-        if: steps.run_policy.outputs.should_run == 'true'
-        run: npm install
-
-      - name: 🚀 Browser Kurulumu (Playwright Firefox + Camoufox)
-        if: steps.run_policy.outputs.should_run == 'true'
-        run: npx playwright install firefox --with-deps
-
-      - name: 🗂️ Sahibinden Playwright profil cache
-        if: steps.run_policy.outputs.should_run == 'true'
-        uses: actions/cache@v4
-        with:
-          path: .playwright/sahibinden-profile
-          key: sahibinden-playwright-profile-v2-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            sahibinden-playwright-profile-v2-${{ runner.os }}-
-
-      - name: 🌀 Cloudflare WARP Proxy Kurulumu
-        if: steps.run_policy.outputs.should_run == 'true'
-        id: warp
-        shell: bash
-        run: |
-          set -u
-          if (
-            set -euo pipefail
-            curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-            sudo apt-get update
-            sudo apt-get install -y cloudflare-warp xvfb
-            warp-cli --accept-tos registration new || warp-cli --accept-tos register
-            warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy
-            warp-cli --accept-tos proxy port 40000 || warp-cli --accept-tos set-proxy-port 40000
-            warp-cli --accept-tos connect
-            sleep 8
-            warp-cli --accept-tos status
-            curl -fsS -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | tee warp-trace.txt
-          ); then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "proxy_url=socks5://127.0.0.1:40000" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::Cloudflare WARP proxy setup failed; continuing without WARP proxy."
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "proxy_url=" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: 🔥 FlareSolverr Baslat (WARP uzerinden)
+      - name: Bagimliliklari Yukle
         if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
         run: |
-          docker run -d --name flaresolverr --network host \
-            -e LOG_LEVEL=info \
-            -e CAPTCHA_SOLVER=none \
-            -e PROXY=socks5://127.0.0.1:40000 \
-            ghcr.io/flaresolverr/flaresolverr:latest
-          echo "FlareSolverr WARP proxy ile baslatildi."
-          # FlareSolverr'in hazir olmasini bekle
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8191/v1 >/dev/null 2>&1; then
-              echo "FlareSolverr hazir (deneme $i)"
-              break
-            fi
-            sleep 2
-          done
+          npm ci --no-optional --ignore-scripts 2>&1 | tail -5
 
-      - name: ⏱️ Schedule jitter beklemesi
+      - name: Schedule jitter beklemesi
         if: steps.run_policy.outputs.should_run == 'true' && github.event_name == 'schedule'
         shell: bash
         run: |
-          set -euo pipefail
-          JITTER="${{ steps.run_policy.outputs.jitter_seconds }}"
-          echo "Jitter uygulaniyor: ${JITTER}s"
-          sleep "$JITTER"
+          sleep "${{ steps.run_policy.outputs.jitter_seconds }}"
 
-      - name: 🚀 GPU Fırsat Avcısını Çalıştır
+      - name: GPU Firsat Avcisini Calistir
+        id: runner
         if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
         env:
-          USE_WARP_PROXY: ${{ steps.warp.outputs.enabled || 'false' }}
-          SAHIBINDEN_PROXY_SERVER: ${{ secrets.SAHIBINDEN_PROXY_SERVER || vars.SAHIBINDEN_PROXY_SERVER || secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
-          DOLAP_PROXY_SERVER: ${{ steps.warp.outputs.proxy_url || secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
-          CAMOUFOX_PATH: ${{ steps.camoufox.outputs.camoufox_path }}
-          HEADLESS: 'false'
-          CHALLENGE_WAIT_MS: '300000'
+          HEADLESS: 'true'
           REQUIRE_SAHIBINDEN_COOKIES: 'false'
-          SAHIBINDEN_PERSISTENT_CONTEXT: 'true'
-          SAHIBINDEN_USER_DATA_DIR: .playwright/sahibinden-profile
-          BROWSER_LOCALE: 'tr-TR'
-          BROWSER_TIMEZONE: 'Europe/Istanbul'
-          BROWSER_PLATFORM: 'Win32'
-          EXPECTED_LOCALE: 'tr-TR'
-          EXPECTED_TIMEZONE: 'Europe/Istanbul'
-          EXPECTED_PLATFORM: 'win'
-          FORCE_USE_WARP: 'true'
 
-          # ── Session bootstrap (GitHub Secret) ───────────────
           SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
           SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
 
-          # ── Telegram ───────────────────────────────────────
           TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
           TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           ENABLE_TELEGRAM: 'false'
 
-          # ── Analyzer relay (bot-only tetikleme) ────────────
           ANALYZER_DISPATCH_TOKEN: ${{ secrets.ANALYZER_DISPATCH_TOKEN }}
-          ANALYZER_REPO_OWNER: ${{ vars.ANALYZER_REPO_OWNER }}
-          ANALYZER_REPO_NAME: ${{ vars.ANALYZER_REPO_NAME }}
-          ANALYZER_DISPATCH_EVENT: ${{ vars.ANALYZER_DISPATCH_EVENT }}
-
-          # ── AI (Gemini / OpenRouter) ────────────────────────
-          AI_PROVIDER: ${{ vars.AI_PROVIDER }}
-          OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
+          ANALYZER_REPO_OWNER: ${{ vars.ANALYZER_REPO_OWNER || '' }}
+          ANALYZER_REPO_NAME: ${{ vars.ANALYZER_REPO_NAME || '' }}
+          ANALYZER_DISPATCH_EVENT: ${{ vars.ANALYZER_DISPATCH_EVENT || '' }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || '' }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-
-          # ── Workflow Dispatch parametreleri ──────────────────
-          CUSTOM_MIN_PRICE: ${{ github.event.inputs.min_fiyat }}
-          CUSTOM_MAX_PRICE: ${{ github.event.inputs.max_fiyat }}
-          BYPASS_AI: ${{ github.event.inputs.bypass_ai }}
+          OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL || '' }}
+          CUSTOM_MIN_PRICE: ${{ inputs.min_fiyat || '' }}
+          CUSTOM_MAX_PRICE: ${{ inputs.max_fiyat || '' }}
+          BYPASS_AI: ${{ inputs.bypass_ai || vars.BYPASS_AI || 'true' }}
         run: |
-          set -o pipefail
-          xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs 2>&1 | tee scraper.log
+          node src/main.mjs 2>&1 | tee scraper.log
 
-      - name: 💾 Sonuçları Kaydet (Artifact)
+      - name: Sonuclari Kaydet (Artifact)
         if: always() && steps.run_policy.outputs.should_run == 'true'
         uses: actions/upload-artifact@v4
         with:
@@ -256,61 +131,41 @@ jobs:
           path: |
             output.json
             pipeline-messages.json
-            cf_proof.png
+            scraper.log
+            cf_proof.png*
             screenshots/
-          retention-days: 7
+          if-no-files-found: ignore
 
-      - name: 🧹 Eski profil cachelerini temizle
-        if: always() && steps.run_policy.outputs.should_run == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CACHE_PREFIX: sahibinden-playwright-profile-v2-${{ runner.os }}-
-        run: |
-          set +e
-          gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_PREFIX}&per_page=100" \
-            --jq '.actions_caches | sort_by(.last_accessed_at) | reverse | .[6:] | .[].id' |
-          while read -r cache_id; do
-            [ -n "$cache_id" ] && gh api -X DELETE "/repos/${GITHUB_REPOSITORY}/actions/caches/${cache_id}" || true
-          done
-
-      - name: 📣 Telegram failure alert
+      - name: Hata bildirimi
         if: failure() && steps.run_policy.outputs.should_run == 'true'
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
-          TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          set +e
-
-          TOKEN="${TELEGRAM_BOT_TOKEN_1:-${TELEGRAM_BOT_TOKEN_2:-}}"
-          CHAT_ID="${TELEGRAM_CHAT_ID:-}"
-
-          if [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ]; then
-            echo "Telegram alert skipped: token/chat id missing."
-            exit 0
-          fi
-
-          gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed > failed.log 2>/dev/null || true
-
-          summary="$(grep -m 1 -E 'Error:|ERR!|Traceback|Exception|FATAL|KRITIK|CRITICAL|❌' failed.log || true)"
-          if [ -z "$summary" ] && [ -f scraper.log ]; then
-            summary="$(grep -m 1 -E 'Error:|ERR!|Traceback|Exception|FATAL|KRITIK|CRITICAL|❌' scraper.log || true)"
+          set -euo pipefail
+          summary="$(grep -m 1 -E 'Error:|ERR!|Traceback|Exception|FATAL|KRITIK|CRITICAL|❌' scraper.log || true)"
+          if [ -z "$summary" ]; then
+            summary="$(grep -m 1 -E 'Error:|ERR!|Traceback|Exception|FATAL|KRITIK|CRITICAL|❌' failed.log || true)"
           fi
           if [ -z "$summary" ]; then
-            summary="Ilk hata ozeti otomatik cikarilamadi; run logunu kontrol et."
+            summary="Bilinmeyen hata (scraper.log ve failed.log kontrol edin)"
           fi
+          echo "Hata ozeti: $summary"
+          echo "summary=$summary" >> "$GITHUB_OUTPUT"
 
-          summary="${summary//$'\r'/ }"
-          summary="${summary//$'\n'/ }"
+      - name: Telegram failure alert
+        uses: appleboy/telegram-action@master
+        if: failure() && steps.run_policy.outputs.should_run == 'true'
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
+          format: markdown
+          message: |
+            ❌ *GPU Scraper Failed* ❌
+            Repo: ${{ github.repository }}
+            Run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            Error: ${{ steps.runner.outputs.summary || 'unknown' }}
 
-          message="GPU pipeline alarmi
-          Repo: $GITHUB_REPOSITORY
-          Workflow: $GITHUB_WORKFLOW
-          Run URL: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
-          Ozet: ${summary:0:700}"
-
-          curl -fsS -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-            --data-urlencode "chat_id=$CHAT_ID" \
-            --data-urlencode "text=$message" >/dev/null || true
+      - name: Eski profil cachelerini temizle
+        if: always() && steps.run_policy.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          rm -rf .playwright ~/.cache/ms-playwright ~/.cache/camoufox ~/.local/share/camoufox
