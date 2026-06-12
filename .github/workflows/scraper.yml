@@ -111,6 +111,7 @@ jobs:
         if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
         env:
+          HOME: /root
           CAMOUFOX_WS_ENDPOINT: ${{ steps.camoufox_server.outputs.camoufox_ws }}
           HEADLESS: 'true'
           REQUIRE_SAHIBINDEN_COOKIES: 'false'
@@ -130,6 +131,7 @@ jobs:
           CUSTOM_MAX_PRICE: ${{ inputs.max_fiyat || '' }}
           BYPASS_AI: ${{ inputs.bypass_ai || vars.BYPASS_AI || 'true' }}
         run: |
+          npm ci --no-optional --ignore-scripts
           node src/main.mjs 2>&1 | tee scraper.log
 
       - name: Kill Camoufox
