@@ -121,7 +121,7 @@ jobs:
         run: |
           pip install camoufox
           python -m camoufox fetch
-          CAMOUFOX_PATH="$(python -m camoufox path | tr -d '[:space:]')"
+          CAMOUFOX_PATH="$(python -c 'from camoufox.pkgman import launch_path; print(launch_path())' | tr -d '[:space:]')"
           chmod +x "$CAMOUFOX_PATH"
           echo "Camoufox binary: $CAMOUFOX_PATH"
           echo "camoufox_path=$CAMOUFOX_PATH" >> "$GITHUB_OUTPUT"
