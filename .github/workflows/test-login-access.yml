@@ -14,8 +14,10 @@ jobs:
           node-version: '20'
       - run: npm install
 
-      - name: Install Camoufox
-        run: pip install camoufox orjson
+      - name: Install Camoufox & Playwright drivers
+        run: |
+          pip install "playwright<1.60" camoufox orjson
+          python3 -m playwright install chromium 2>&1 | tail -5
 
       - name: Start Camoufox & test
         shell: bash
