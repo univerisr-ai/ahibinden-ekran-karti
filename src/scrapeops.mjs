@@ -414,14 +414,41 @@ export async function scrapeSegment(priceMin, priceMax) {
 }
 
 export async function scrapePageSections(sectionCount) {
-  if (page && !page.isClosed()) {
-    await page.close().catch(() => {});
-  }
-  page = await context.newPage();
-  await sleep(1000);
-
   const firstUrl = buildSahibindenUrl(0, 0, 999000);
-  const { html: firstHtml, status } = await fetchPage(firstUrl, 'Toplam hesaplama');
+
+  console.log(`  İlk sayfa yükleniyor: ${firstUrl}`);
+  let firstHtml = '';
+  let firstStatus = 'OK';
+  try {
+    const resp = await page.goto(firstUrl, { waitUntil: 'load', timeout: DEFAULT_NAV_TIMEOUT_MS });
+    await sleep(5000);
+    const curUrl = page.url();
+    const httpStatus = resp ? resp.status() : 'unknown';
+    const htmlSnippet = (await page.content().catch(() => '')).substring(0, 300);
+    console.log(`  Sayfa: ${curUrl}, HTTP: ${httpStatus}`);
+    console.log(`  HTML başı: ${htmlSnippet.replace(/\n/g, ' ').substring(0, 250)}`);
+
+    if (!hasLikelyListingSignals(htmlSnippet)) {
+      console.log('  Listing sinyali yok, Turnstile deneniyor...');
+      const solved = await solveTurnstileIfPresent(25000);
+      if (solved) {
+        await sleep(3000);
+        firstHtml = await page.content().catch(() => '');
+        console.log(`  Turnstile sonrasi HTML uzunluk: ${firstHtml.length}`);
+      }
+    } else {
+      firstHtml = await page.content().catch(() => '');
+    }
+  } catch (err) {
+    console.log(`  İlk sayfa hatası: ${err.message}`);
+    const fb = await fetchPage(firstUrl, 'Toplam hesaplama');
+    firstHtml = fb.html || '';
+    firstStatus = fb.status;
+  }
+
+  if (!firstHtml || firstStatus === 'BANNED' || firstStatus === 'BUDGET_EXHAUSTED') {
+    return [];
+  }
 
   if (!firstHtml || status === 'BANNED' || status === 'BUDGET_EXHAUSTED') {
     return [];
