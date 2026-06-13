@@ -15,10 +15,14 @@ RUN apt-get update && apt-get install -y \
 RUN GH_TOKEN=${GITHUB_TOKEN} python3 -m pip install "playwright<=1.59.0" "camoufox[geoip]" --prefer-binary
 
 # Pre-download Camoufox binary with its properties.json
-RUN GH_TOKEN=${GITHUB_TOKEN} python3 -m camoufox fetch 2>&1 \
-    && mkdir -p /opt/camoufox \
-    && cp -r /root/.cache/camoufox/* /opt/camoufox/ \
-    && chmod +x /opt/camoufox/camoufox-bin
+RUN GH_TOKEN=${GITHUB_TOKEN} python3 -m camoufox fetch 2>&1 || echo "camoufox fetch failed (will download at runtime)" ; \
+    if [ -d /root/.cache/camoufox ]; then \
+      mkdir -p /opt/camoufox && \
+      cp -r /root/.cache/camoufox/* /opt/camoufox/ && \
+      chmod +x /opt/camoufox/camoufox-bin; \
+    else \
+      echo "Camoufox browser not pre-downloaded, will fetch at runtime"; \
+    fi
 
 WORKDIR /app
 COPY scripts/camoufox-server.py /app/
