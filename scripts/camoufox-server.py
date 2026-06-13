@@ -6,4 +6,5 @@ from camoufox.server import launch_server
 
 headless = os.environ.get('CAMOUFOX_HEADLESS', 'true').lower() == 'true'
 
-launch_server(headless=headless)
+# "per-context" = proxy'yi context'e devret, browser seviyesinde proxy yok
+launch_server(headless=headless, proxy={"server": "per-context"})
