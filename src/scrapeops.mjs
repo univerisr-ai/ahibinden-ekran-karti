@@ -414,6 +414,12 @@ export async function scrapeSegment(priceMin, priceMax) {
 }
 
 export async function scrapePageSections(sectionCount) {
+  if (page && !page.isClosed()) {
+    await page.close().catch(() => {});
+  }
+  page = await context.newPage();
+  await sleep(1000);
+
   const firstUrl = buildSahibindenUrl(0, 0, 999000);
   const { html: firstHtml, status } = await fetchPage(firstUrl, 'Toplam hesaplama');
 
