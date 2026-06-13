@@ -26,5 +26,8 @@ if browser_path:
 if use_proxy:
     kwargs['proxy'] = {'server': proxy_url}
     kwargs['geoip'] = True
+else:
+    # Bos dict = "proxy yok" - None gecersek Camoufox patliyor
+    kwargs['proxy'] = {}
 
 launch_server(**kwargs)
