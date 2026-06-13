@@ -415,22 +415,36 @@ export async function initSession() {
   const ok = await ensureBrowser();
   if (!ok) return { ok: false, code: 'BROWSER_INIT_FAILED' };
 
-  const warmupUrl = buildSahibindenUrl(0, 0, WARMUP_PRICE_MAX);
-  console.log('  Warmup sayfasi aciliyor...');
-
+  console.log('  Session dogrulaniyor (banaozel.sahibinden.com)...');
   try {
-    await page.goto(warmupUrl, {
+
+    // 1. Once ana sayfaya git (Cloudflare challenge varsa cozulsun)
+    await page.goto('https://www.sahibinden.com/', {
+      waitUntil: 'domcontentloaded',
+      timeout: DEFAULT_NAV_TIMEOUT_MS,
+    });
+    await sleep(3000);
+    await solveTurnstileIfPresent(30000);
+
+    // 2. Session dogrulamasi icin login gerektiren sayfaya git
+    await page.goto('https://banaozel.sahibinden.com/', {
       waitUntil: 'domcontentloaded',
       timeout: DEFAULT_NAV_TIMEOUT_MS,
     });
     await sleep(5000);
 
-    // Cloudflare Turnstile challenge varsa coz (yoksa otomatik dogrulama bekle)
-    await solveTurnstileIfPresent(45000);
+    const url = page.url();
+    const html = await page.content().catch(() => '');
 
-    let html = await page.content();
-    if (hasLikelyListingSignals(html)) {
-      console.log('  Warmup basarili, ilanlar gorunuyor.');
+    // Login sayfasina yonlendirildik → session gecersiz
+    if (url.includes('giris') || html.toLowerCase().includes('giris yap')) {
+      console.log('  Login sayfasi — cookie gerekli.');
+      return { ok: false, code: 'LOGIN_REQUIRED' };
+    }
+
+    // Bana Ozel sayfasi acildi → session gecerli
+    if (url.includes('banaozel')) {
+      console.log('  Session dogrulandi, login kalindi.');
       const saved = loadSahibindenStorageState();
       return {
         ok: true,
@@ -440,34 +454,25 @@ export async function initSession() {
       };
     }
 
-    const url = page.url();
-    if (url.includes('secure.sahibinden.com/login') || url.includes('giris') || html.includes('giris yap')) {
-      console.log('  Login sayfasi — cookie gerekli.');
-      return { ok: false, code: 'LOGIN_REQUIRED' };
-    }
-
-    // FlareSolverr fallback
+    // Cloudflare challenge sayfasi
     if (isChallengePage(html)) {
-      const ok = await applyFlareSolverrCookies(warmupUrl);
-      if (ok) {
+      const fsOk = await applyFlareSolverrCookies(url);
+      if (fsOk) {
         await page.reload({ waitUntil: 'domcontentloaded', timeout: DEFAULT_NAV_TIMEOUT_MS });
-        await sleep(3000);
-        html = await page.content();
-        if (hasLikelyListingSignals(html)) {
-          console.log('  Warmup basarili (FlareSolverr ile), ilanlar gorunuyor.');
+        await sleep(5000);
+        const url2 = page.url();
+        if (url2.includes('banaozel')) {
+          console.log('  Session dogrulandi (FlareSolverr ile).');
           const saved = loadSahibindenStorageState();
-          return {
-            ok: true,
-            code: 'OK',
-            cookieSource: saved.source,
-            cookieCount: saved.cookieCount,
-          };
+          return { ok: true, code: 'OK', cookieSource: saved.source, cookieCount: saved.cookieCount };
         }
       }
+      console.log('  Cloudflare engeli asilamadi.');
+      return { ok: false, code: 'CF_BLOCKED' };
     }
 
-    console.log('  Ilan gorunmuyor, Cloudflare engeli olabilir.');
-    return { ok: false, code: 'NO_LISTINGS' };
+    console.log('  Bilinmeyen yonlendirme.');
+    return { ok: false, code: 'UNKNOWN_REDIRECT' };
   } catch (err) {
     console.log(`  Session init hatasi: ${err.message}`);
     return { ok: false, code: 'INIT_SESSION_ERROR' };

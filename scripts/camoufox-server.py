@@ -29,6 +29,7 @@ def get_nodejs() -> str:
 
 headless = os.environ.get('CAMOUFOX_HEADLESS', 'false').lower() == 'true'
 proxy_url = os.environ.get('CAMOUFOX_PROXY', '').strip()
+fingerprint_json = os.environ.get('CAMOUFOX_FINGERPRINT', '').strip()
 
 kwargs = {
     'headless': headless,
@@ -38,6 +39,10 @@ kwargs = {
     'disable_coop': True,
     'i_know_what_im_doing': True,
 }
+
+if fingerprint_json:
+    import json
+    kwargs['fingerprint'] = json.loads(fingerprint_json)
 
 if proxy_url:
     kwargs['proxy'] = {'server': proxy_url}
