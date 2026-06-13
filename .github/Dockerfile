@@ -1,5 +1,6 @@
 # .github/Dockerfile
-FROM mcr.microsoft.com/playwright:v1.59.1-jammy
+FROM mcr.microsoft.com/playwright:v1.59.0-jammy
+ARG GITHUB_TOKEN
 
 # Install Python and WARP
 RUN apt-get update && apt-get install -y \
@@ -11,10 +12,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Python deps
-RUN python3 -m pip install "playwright<=1.59.0" "camoufox[geoip]" --prefer-binary
+RUN GH_TOKEN=${GITHUB_TOKEN} python3 -m pip install "playwright<=1.59.0" "camoufox[geoip]" --prefer-binary
 
 # Pre-download Camoufox binary with its properties.json
-RUN python3 -m camoufox fetch 2>&1 \
+RUN GH_TOKEN=${GITHUB_TOKEN} python3 -m camoufox fetch 2>&1 \
     && mkdir -p /opt/camoufox \
     && cp -r /root/.cache/camoufox/* /opt/camoufox/ \
     && chmod +x /opt/camoufox/camoufox-bin

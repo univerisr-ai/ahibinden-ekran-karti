@@ -35,5 +35,6 @@ jobs:
           file: .github/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository }}/scraper:latest
+          build-args: GITHUB_TOKEN=${{ github.token }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
