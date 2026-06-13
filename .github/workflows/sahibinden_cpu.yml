@@ -99,64 +99,63 @@ jobs:
         with:
           node-version: '20'
 
-      # --- ZenRows modu: Python/browser/WARP adimlari devre disi ---
-      # - name: Python kurulumu
-      #   if: steps.run_policy.outputs.should_run == 'true'
-      #   uses: actions/setup-python@v5
-      #   with:
-      #     python-version: '3.11'
+      - name: Python kurulumu
+        if: steps.run_policy.outputs.should_run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      # - name: Python bagimliliklari
-      #   if: steps.run_policy.outputs.should_run == 'true'
-      #   run: |
-      #     sudo apt-get update
-      #     sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64
-      #     pip install DrissionPage pyvirtualdisplay xvfbwrapper requests
+      - name: Python bagimliliklari
+        if: steps.run_policy.outputs.should_run == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64
+          pip install DrissionPage pyvirtualdisplay xvfbwrapper requests
 
       - name: Node bagimliliklari
         if: steps.run_policy.outputs.should_run == 'true'
         run: npm ci
 
-      # - name: Browser kurulumu
-      #   if: steps.run_policy.outputs.should_run == 'true'
-      #   run: npx playwright install chromium --with-deps
+      - name: Browser kurulumu
+        if: steps.run_policy.outputs.should_run == 'true'
+        run: npx playwright install chromium --with-deps
 
-      # - name: Sahibinden Playwright profil cache
-      #   if: steps.run_policy.outputs.should_run == 'true'
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: .playwright/sahibinden-profile
-      #     key: sahibinden-playwright-profile-v2-${{ runner.os }}-cpu-${{ github.run_id }}
-      #     restore-keys: |
-      #       sahibinden-playwright-profile-v2-${{ runner.os }}-
+      - name: Sahibinden Playwright profil cache
+        if: steps.run_policy.outputs.should_run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: .playwright/sahibinden-profile
+          key: sahibinden-playwright-profile-v2-${{ runner.os }}-cpu-${{ github.run_id }}
+          restore-keys: |
+            sahibinden-playwright-profile-v2-${{ runner.os }}-
 
-      # - name: Cloudflare WARP proxy kurulumu
-      #   if: steps.run_policy.outputs.should_run == 'true' && vars.CPU_DISABLE_WARP_PROXY != 'true'
-      #   id: warp
-      #   shell: bash
-      #   run: |
-      #     set -u
-      #     if (
-      #       set -euo pipefail
-      #       curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-      #       echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-      #       sudo apt-get update
-      #       sudo apt-get install -y cloudflare-warp xvfb
-      #       warp-cli --accept-tos registration new || warp-cli --accept-tos register
-      #       warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy
-      #       warp-cli --accept-tos proxy port 40000 || warp-cli --accept-tos set-proxy-port 40000
-      #       warp-cli --accept-tos connect
-      #       sleep 8
-      #       warp-cli --accept-tos status
-      #       curl -fsS -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | tee warp-trace.txt
-      #     ); then
-      #       echo "enabled=true" >> "$GITHUB_OUTPUT"
-      #       echo "proxy_url=socks5://127.0.0.1:40000" >> "$GITHUB_OUTPUT"
-      #     else
-      #       echo "::warning::Cloudflare WARP proxy setup failed; continuing without WARP proxy."
-      #       echo "enabled=false" >> "$GITHUB_OUTPUT"
-      #       echo "proxy_url=" >> "$GITHUB_OUTPUT"
-      #     fi
+      - name: Cloudflare WARP proxy kurulumu
+        if: steps.run_policy.outputs.should_run == 'true' && vars.CPU_DISABLE_WARP_PROXY != 'true'
+        id: warp
+        shell: bash
+        run: |
+          set -u
+          if (
+            set -euo pipefail
+            curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+            sudo apt-get update
+            sudo apt-get install -y cloudflare-warp xvfb
+            warp-cli --accept-tos registration new || warp-cli --accept-tos register
+            warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy
+            warp-cli --accept-tos proxy port 40000 || warp-cli --accept-tos set-proxy-port 40000
+            warp-cli --accept-tos connect
+            sleep 8
+            warp-cli --accept-tos status
+            curl -fsS -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | tee warp-trace.txt
+          ); then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "proxy_url=socks5://127.0.0.1:40000" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Cloudflare WARP proxy setup failed; continuing without WARP proxy."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "proxy_url=" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Schedule jitter beklemesi
         if: steps.run_policy.outputs.should_run == 'true' && github.event_name == 'schedule'
@@ -172,10 +171,21 @@ jobs:
         shell: bash
         env:
           SAHIBINDEN_PRODUCT_TYPE: 'cpu'
-          USE_ZENROWS: 'true'
-          ZENROWS_API_KEY: ${{ secrets.ZENROWS_API_KEY }}
+          USE_WARP_PROXY: ${{ steps.warp.outputs.enabled || 'false' }}
+          SAHIBINDEN_PROXY_SERVER: ${{ secrets.SAHIBINDEN_PROXY_SERVER || vars.SAHIBINDEN_PROXY_SERVER || secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
+          DOLAP_PROXY_SERVER: ${{ secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
+          WARP_PROXY_SERVER: ${{ steps.warp.outputs.proxy_url || '' }}
           HEADLESS: 'false'
-          REQUIRE_SAHIBINDEN_COOKIES: 'false'
+          CHALLENGE_WAIT_MS: '300000'
+          REQUIRE_SAHIBINDEN_COOKIES: 'true'
+          SAHIBINDEN_PERSISTENT_CONTEXT: 'true'
+          SAHIBINDEN_USER_DATA_DIR: .playwright/sahibinden-profile
+          BROWSER_LOCALE: 'tr-TR'
+          BROWSER_TIMEZONE: 'Europe/Istanbul'
+          BROWSER_PLATFORM: 'Win32'
+          EXPECTED_LOCALE: 'tr-TR'
+          EXPECTED_TIMEZONE: 'Europe/Istanbul'
+          EXPECTED_PLATFORM: 'win'
           MAX_PAGES_PER_SEGMENT: ${{ github.event.inputs.max_pages_per_segment || '60' }}
 
           SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
@@ -195,7 +205,7 @@ jobs:
           BYPASS_AI: 'true'
         run: |
           set -o pipefail
-          node src/main.mjs 2>&1 | tee scraper.log
+          xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs 2>&1 | tee scraper.log
 
       - name: Sonuclari artifact olarak al
         if: always() && steps.run_policy.outputs.should_run == 'true'
@@ -207,6 +217,7 @@ jobs:
             pipeline-messages.json
             cf_proof.png
             scraper.log
+            warp-trace.txt
           retention-days: 7
 
       - name: Telegram failure alert

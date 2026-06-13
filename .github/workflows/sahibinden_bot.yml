@@ -41,52 +41,53 @@ jobs:
     - name: Gerekli Paketleri Yükle
       run: npm install
 
-    # --- ZenRows modu: Playwright/WARP adimlari devre disi ---
-    # - name: Google Chrome'u Kur (Playwright için)
-    #   run: |
-    #     npx playwright install chrome
-    #     npx playwright install-deps chrome
+    - name: Google Chrome'u Kur (Playwright için)
+      run: |
+        npx playwright install chrome
+        npx playwright install-deps chrome
 
-    # - name: Cloudflare WARP Proxy Kurulumu
-    #   if: vars.USE_WARP_PROXY == 'true' || vars.DOLAP_USE_WARP_PROXY == 'true'
-    #   id: warp
-    #   shell: bash
-    #   run: |
-    #     set -u
-    #     if (
-    #       set -euo pipefail
-    #       curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-    #       echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-    #       sudo apt-get update
-    #       sudo apt-get install -y cloudflare-warp xvfb
-    #       warp-cli --accept-tos registration new || warp-cli --accept-tos register
-    #       warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy
-    #       warp-cli --accept-tos proxy port 40000 || warp-cli --accept-tos set-proxy-port 40000
-    #       warp-cli --accept-tos connect
-    #       sleep 8
-    #       warp-cli --accept-tos status
-    #       curl -fsS -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | tee warp-trace.txt
-    #     ); then
-    #       echo "enabled=true" >> "$GITHUB_OUTPUT"
-    #       echo "proxy_url=socks5://127.0.0.1:40000" >> "$GITHUB_OUTPUT"
-    #     else
-    #       echo "::warning::Cloudflare WARP proxy setup failed; continuing without WARP proxy."
-    #       echo "enabled=false" >> "$GITHUB_OUTPUT"
-    #       echo "proxy_url=" >> "$GITHUB_OUTPUT"
-    #     fi
+    - name: Cloudflare WARP Proxy Kurulumu
+      if: vars.USE_WARP_PROXY == 'true' || vars.DOLAP_USE_WARP_PROXY == 'true'
+      id: warp
+      shell: bash
+      run: |
+        set -u
+        if (
+          set -euo pipefail
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update
+          sudo apt-get install -y cloudflare-warp xvfb
+          warp-cli --accept-tos registration new || warp-cli --accept-tos register
+          warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy
+          warp-cli --accept-tos proxy port 40000 || warp-cli --accept-tos set-proxy-port 40000
+          warp-cli --accept-tos connect
+          sleep 8
+          warp-cli --accept-tos status
+          curl -fsS -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | tee warp-trace.txt
+        ); then
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "proxy_url=socks5://127.0.0.1:40000" >> "$GITHUB_OUTPUT"
+        else
+          echo "::warning::Cloudflare WARP proxy setup failed; continuing without WARP proxy."
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+          echo "proxy_url=" >> "$GITHUB_OUTPUT"
+        fi
 
-    # - name: Sahibinden Playwright Profil Cache
-    #   uses: actions/cache@v4
-    #   with:
-    #     path: .playwright/sahibinden-profile
-    #     key: sahibinden-playwright-profile-v2-${{ runner.os }}-${{ github.run_id }}
-    #     restore-keys: |
-    #       sahibinden-playwright-profile-v2-${{ runner.os }}-
+    - name: Sahibinden Playwright Profil Cache
+      uses: actions/cache@v4
+      with:
+        path: .playwright/sahibinden-profile
+        key: sahibinden-playwright-profile-v2-${{ runner.os }}-${{ github.run_id }}
+        restore-keys: |
+          sahibinden-playwright-profile-v2-${{ runner.os }}-
 
     - name: Botu Başlat
       env:
-        USE_ZENROWS: 'true'
-        ZENROWS_API_KEY: ${{ secrets.ZENROWS_API_KEY }}
+        USE_WARP_PROXY: ${{ steps.warp.outputs.enabled || 'false' }}
+        SAHIBINDEN_PROXY_SERVER: ${{ secrets.SAHIBINDEN_PROXY_SERVER || vars.SAHIBINDEN_PROXY_SERVER || secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
+        DOLAP_PROXY_SERVER: ${{ steps.warp.outputs.proxy_url || secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
+        USE_SCRAPEDO_PROXY: 'false'
         HEADLESS: ${{ inputs.headless || 'false' }}
         MAX_PAGES_PER_SEGMENT: ${{ github.event_name == 'schedule' && '30' || inputs.max_pages_per_segment || '40' }}
         MAX_CREDITS_PER_RUN: '1000'
@@ -96,8 +97,13 @@ jobs:
         SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
       run: |
         set +e
-        node src/main.mjs 2>&1 | tee scraper.log
-        scraper_code=${PIPESTATUS[0]}
+        if [ "$HEADLESS" = "true" ]; then
+          node src/main.mjs 2>&1 | tee scraper.log
+          scraper_code=${PIPESTATUS[0]}
+        else
+          xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs 2>&1 | tee scraper.log
+          scraper_code=${PIPESTATUS[0]}
+        fi
 
         echo "SCRAPER_EXIT_CODE=$scraper_code" >> "$GITHUB_ENV"
 

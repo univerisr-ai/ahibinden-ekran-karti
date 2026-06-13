@@ -6,8 +6,6 @@ import {
   BASE_URL,
   MAX_PAGES_PER_SEGMENT,
   WARMUP_PRICE_MAX,
-  USE_ZENROWS,
-  ZENROWS_API_KEY,
 } from './config.mjs';
 import { chromium, firefox } from 'playwright';
 import {
@@ -90,11 +88,6 @@ async function fetchPage(targetUrl, label = '') {
   if (stats.creditsUsed >= MAX_CREDITS_PER_RUN) {
     console.log(`  BÜTÇE LİMİTİ AŞILDI (${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
     return { html: null, status: 'BUDGET_EXHAUSTED' };
-  }
-
-  if (USE_ZENROWS) {
-    console.log(`  ZenRows -> ${label}`);
-    return fetchViaZenrows(targetUrl);
   }
 
   if (!(await ensureBrowser())) {
@@ -193,18 +186,6 @@ export async function scrapeDetailUrl(detailUrl) {
 }
 
 export async function initSession() {
-  if (USE_ZENROWS) {
-    console.log('  ZenRows modu aktif, browser baslatilmadan calisilacak.');
-    const testUrl = buildSahibindenUrl(0, 0, WARMUP_PRICE_MAX);
-    const { html, status } = await fetchViaZenrows(testUrl);
-    if (status === 'OK' && html && hasLikelyListingSignals(html)) {
-      console.log('  ZenRows warmup basarili, ilanlar gorunuyor.');
-      return { ok: true, code: 'OK' };
-    }
-    console.log('  ZenRows warmup basarisiz.');
-    return { ok: false, code: 'ZENROWS_WARMUP_FAILED' };
-  }
-
   const ok = await ensureBrowser();
   if (!ok) return { ok: false, code: 'BROWSER_INIT_FAILED' };
 
@@ -267,47 +248,7 @@ export async function closeBrowser() {
   } catch (_) {}
 }
 
-// ─── ZenRows Destegi ──────────────────────────────────────────
-const ZENROWS_BASE = 'https://api.zenrows.com/v1/';
-
-async function fetchViaZenrows(url) {
-  const params = new URLSearchParams({
-    apikey: ZENROWS_API_KEY,
-    url: url,
-    antibot: 'true',
-    premium_proxy: 'true',
-  });
-  const apiUrl = `${ZENROWS_BASE}?${params}`;
-
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    stats.totalRequests++;
-    try {
-      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(60000) });
-      if (!response.ok) {
-        const body = await response.text().catch(() => '');
-        console.log(`  ZenRows HTTP ${response.status} (deneme ${attempt}): ${body.slice(0, 200)}`);
-        if (response.status === 403) {
-          return { html: null, status: 'BANNED' };
-        }
-        await sleep(2000);
-        continue;
-      }
-      const html = await response.text();
-      stats.successfulRequests++;
-      stats.pagesLoaded++;
-      stats.creditsUsed++;
-      return { html, status: 'OK' };
-    } catch (err) {
-      console.log(`  ZenRows hata (deneme ${attempt}): ${err.message}`);
-      await sleep(2000);
-    }
-  }
-  stats.failedRequests++;
-  return { html: null, status: 'FAILED' };
-}
-
 export default {
   initSession, scrapeSegment, scrapeDetailUrl, getStats,
   saveChallengeProofScreenshot, takeScreenshot, closeBrowser,
-  fetchViaZenrows,
 };

@@ -495,8 +495,6 @@ async function main() {
       msg = '❌ Baslangic asamasinda proxy/hedef erisim hatasi alindi.';
     } else if (initCode === 'FINGERPRINT_POLICY_FAILED') {
       msg = '❌ Runtime profil policy kontrolu strict modda basarisiz oldu.';
-    } else if (initCode === 'ZENROWS_WARMUP_FAILED') {
-      msg = '❌ ZenRows warmup basarisiz. API anahtari gecersiz veya kotalar asilmis olabilir.';
     }
 
     const safeCode = String(initCode).replace(/_/g, '-');
