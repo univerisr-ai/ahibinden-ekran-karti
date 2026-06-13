@@ -37,11 +37,8 @@ jobs:
         id: camoufox_server
         shell: bash
         env:
-          HOME: /root
-          CAMOUFOX_PROXY: false
+          CAMOUFOX_HEADLESS: true
         run: |
-          export HOME=/root
-          export CAMOUFOX_HEADLESS=true
           xvfb-run python3 scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
           SERVER_PID=$!
           echo "server_pid=$SERVER_PID" >> "$GITHUB_OUTPUT"
@@ -63,7 +60,6 @@ jobs:
       - name: Session keepalive calistir
         shell: bash
         env:
-          HOME: /root
           CAMOUFOX_WS_ENDPOINT: ${{ steps.camoufox_server.outputs.camoufox_ws }}
           HEADLESS: 'true'
           SAHIBINDEN_STORAGE_STATE_FILE: .playwright/storage-state.json
