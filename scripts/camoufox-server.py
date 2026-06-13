@@ -13,7 +13,7 @@ config = launch_options(headless=headless)
 config.pop('proxy', None)
 
 # Use our custom launchServer.js (ships in the repo)
-launch_script = Path(__file__).parent / 'custom-launchServer.js'
+launch_script = Path(__file__).parent / 'custom-launchServer.cjs'
 
 nodejs = get_nodejs()
 data = orjson.dumps(to_camel_case_dict(config))
