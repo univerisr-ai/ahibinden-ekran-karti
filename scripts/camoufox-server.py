@@ -1,10 +1,18 @@
 """Camoufox Playwright WebSocket server.
-Launches a remote browser server that Node.js/Playwright connects to.
+Monkey-patches launch_server to add bypass:* when no proxy is needed.
 """
 import os
-from camoufox.server import launch_server
+import camoufox.server
 
 headless = os.environ.get('CAMOUFOX_HEADLESS', 'true').lower() == 'true'
 
-# Bos sozluk = gecerli obje (Playwright validation gecer), proxy yok
-launch_server(headless=headless, proxy={})
+_original_launch_server = camoufox.server.launch_server
+
+def _patched_launch_server(headless=False, proxy=None, **kwargs):
+    if proxy is None or proxy == {}:
+        proxy = {"server": "http://127.0.0.1:0", "bypass": "*"}
+    return _original_launch_server(headless=headless, proxy=proxy, **kwargs)
+
+camoufox.server.launch_server = _patched_launch_server
+
+camoufox.server.launch_server(headless=headless)
