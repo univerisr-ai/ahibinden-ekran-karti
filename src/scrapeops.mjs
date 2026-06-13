@@ -127,12 +127,28 @@ async function solveTurnstileIfPresent(maxWait = 20000) {
 
     let clicked = false;
 
-    // 2. Wait up to 8s for a Turnstile iframe/widget to appear
+    // 2. Wait up to 10s for a Turnstile iframe/widget to appear
     const searchStart = Date.now();
-    while (Date.now() - searchStart < 8000) {
+    while (Date.now() - searchStart < 10000) {
+      // 2a. Try frameLocator approach: checkbox inside any iframe
+      const frames = page.frames();
+      for (let i = 0; i < frames.length; i++) {
+        const frame = frames[i];
+        try {
+          const checkbox = frame.locator('input[type="checkbox"]').first();
+          if (await checkbox.isVisible().catch(() => false)) {
+            console.log(`  Iframe ${i} icinde checkbox bulundu, tiklaniyor.`);
+            await checkbox.click({ force: true });
+            clicked = true;
+            break;
+          }
+        } catch {}
+      }
+      if (clicked) break;
+
+      // 2b. Find Turnstile iframes by src / bounding box
       const iframes = page.locator('iframe');
       const count = await iframes.count().catch(() => 0);
-
       for (let i = 0; i < count; i++) {
         const iframe = iframes.nth(i);
         const src = await iframe.getAttribute('src').catch(() => '') || '';
@@ -141,7 +157,7 @@ async function solveTurnstileIfPresent(maxWait = 20000) {
 
         if (src.includes('turnstile') || src.includes('cloudflare') || src.includes('challenge')) {
           if (box) {
-            const clickX = box.x + 30;
+            const clickX = box.x + 25;
             const clickY = box.y + (box.height / 2);
             console.log(`  Turnstile iframe bulundu, tiklaniyor: ${clickX}, ${clickY}`);
             await page.mouse.move(clickX, clickY, { steps: 5 });
@@ -151,17 +167,23 @@ async function solveTurnstileIfPresent(maxWait = 20000) {
             await page.mouse.up();
             clicked = true;
           }
+        } else if (box && box.width > 250 && box.width < 350 && box.height > 50 && box.height < 90) {
+          // Turnstile-like dimensions even if src doesn't match
+          const clickX = box.x + 25;
+          const clickY = box.y + (box.height / 2);
+          console.log(`  Turnstile-benzeri iframe bulundu, tiklaniyor: ${clickX}, ${clickY}`);
+          await page.mouse.click(clickX, clickY);
+          clicked = true;
         }
       }
-
       if (clicked) break;
 
-      // Fallback: visible Turnstile widget container
-      const tw = page.locator('#turnStileWidget, [id*="turnstile" i], [class*="turnstile" i], #challenge-stage, .cf-turnstile');
+      // 2c. Fallback: visible Turnstile widget container
+      const tw = page.locator('#turnStileWidget, [id*="turnstile" i], [class*="turnstile" i], #challenge-stage, .cf-turnstile, .challenge-stage');
       if (await tw.isVisible().catch(() => false)) {
         const tbox = await tw.boundingBox().catch(() => null);
         if (tbox) {
-          const clickX = tbox.x + 30;
+          const clickX = tbox.x + 25;
           const clickY = tbox.y + (tbox.height / 2);
           console.log(`  Turnstile widget bulundu, tiklaniyor: ${clickX}, ${clickY}`);
           await page.mouse.click(clickX, clickY);
