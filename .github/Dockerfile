@@ -1,5 +1,5 @@
 # .github/Dockerfile
-FROM mcr.microsoft.com/playwright:v1.59.0-jammy
+FROM mcr.microsoft.com/playwright:v1.59.1-jammy
 
 # Install Python and WARP
 RUN apt-get update && apt-get install -y \
