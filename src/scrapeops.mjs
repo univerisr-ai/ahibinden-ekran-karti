@@ -81,6 +81,14 @@ async function ensureBrowser() {
     // Daha once kaydedilmis cookie varsa yukle
     const saved = loadSahibindenStorageState();
     if (saved.storageState && saved.cookieCount > 0) {
+      // Log cookie expiry diagnostics
+      const now = Math.floor(Date.now() / 1000);
+      for (const c of saved.storageState.cookies) {
+        if (['csid', 'cwt', 'st'].includes(c.name) && c.expires) {
+          const days = Math.round((c.expires - now) / 86400);
+          console.log(`  Cookie ${c.name}: expires in ${days} day(s) (${new Date(c.expires * 1000).toISOString()})`);
+        }
+      }
       await context.addCookies(saved.storageState.cookies);
       console.log(`  ${saved.cookieCount} adet kayitli cookie yuklendi (kaynak: ${saved.source}).`);
     }

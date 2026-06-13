@@ -21,5 +21,8 @@ warp-*.png
 .chrome_profile_sahibinden/
 .chrome_profile_sahibinden_inspect/
 .chrome_profile_sahibinden_warp/
+login-capture/
+camoufox-server-*.log
+*.ws
 eski sürümler/
 önceki konuşamalr.md

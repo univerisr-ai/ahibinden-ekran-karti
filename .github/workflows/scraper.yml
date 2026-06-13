@@ -130,6 +130,14 @@ jobs:
             exit 1
           fi
 
+      - name: Restore cached storage state
+        if: steps.run_policy.outputs.should_run == 'true'
+        id: cache_restore
+        uses: actions/cache/restore@v4
+        with:
+          path: .playwright/storage-state.json
+          key: sahibinden-storage-latest
+
       - name: Scraper
         if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
@@ -164,13 +172,12 @@ jobs:
         run: |
           kill ${{ steps.camoufox_server.outputs.server_pid }} 2>/dev/null || true
 
-      - name: Save storage state to cache
+      - name: Save refreshed storage state to cache
         if: always() && steps.run_policy.outputs.should_run == 'true'
-        shell: bash
-        run: |
-          if [ -f .playwright/storage-state.json ]; then
-            echo "Storage state cache'e kaydedilecek."
-          fi
+        uses: actions/cache/save@v4
+        with:
+          path: .playwright/storage-state.json
+          key: sahibinden-storage-latest
 
       - name: Upload artifact
         if: always() && steps.run_policy.outputs.should_run == 'true'
