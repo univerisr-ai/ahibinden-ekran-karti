@@ -29,7 +29,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .playwright/storage-state.json
-          key: sahibinden-storage-state-${{ runner.os }}
+          key: sahibinden-storage-state-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             sahibinden-storage-state-${{ runner.os }}-
 
@@ -88,3 +88,16 @@ jobs:
             cf_proof.png
             keepalive.log
           if-no-files-found: warn
+
+      - name: Telegram failure alert
+        uses: appleboy/telegram-action@master
+        if: failure()
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
+          format: markdown
+          message: |
+            Keepalive Basarisiz!
+            Repo: ${{ github.repository }}
+            Run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            Oturum yenileme basarisiz. Cookie'ler guncellenemedi.

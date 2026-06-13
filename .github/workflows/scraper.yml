@@ -70,7 +70,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .playwright/storage-state.json
-          key: sahibinden-storage-state-${{ runner.os }}
+          key: sahibinden-storage-state-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             sahibinden-storage-state-${{ runner.os }}-
 
