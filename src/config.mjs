@@ -4,6 +4,15 @@
  */
 import 'dotenv/config';
 
+// ─── ZenRows Ayarlari ────────────────────────────────────────
+export const ZENROWS_API_KEY = process.env.ZENROWS_API_KEY || '';
+export const USE_ZENROWS = (process.env.USE_ZENROWS || 'false').toLowerCase() === 'true';
+
+if (USE_ZENROWS && !ZENROWS_API_KEY) {
+  console.log('❌ ZENROWS_API_KEY EKSİK!');
+  process.exit(1);
+}
+
 // ─── ScrapeOps Ayarlari (opsiyonel) ──────────────────────────
 export const SCRAPEOPS_API_KEY =
   process.env.SCRAPEOPS_API_KEY ||

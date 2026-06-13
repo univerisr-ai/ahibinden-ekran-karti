@@ -27,9 +27,9 @@ jobs:
     name: Scrape & Analyze
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    container:
-      image: ghcr.io/univerisr-ai/ahibinden-ekran-karti/scraper:latest
-      options: --privileged --user root
+    # container: (ZenRows modu container gerektirmiyor; eski Camoufox imaji icin yorumda)
+    #   image: ghcr.io/univerisr-ai/ahibinden-ekran-karti/scraper:latest
+    #   options: --privileged --user root
 
     steps:
       - name: Run policy
@@ -64,49 +64,56 @@ jobs:
         if: steps.run_policy.outputs.should_run == 'true'
         uses: actions/checkout@v4
 
-      - name: Proxy Check
+      - name: Node.js kurulumu
         if: steps.run_policy.outputs.should_run == 'true'
-        shell: bash
-        env:
-          CAMOUFOX_PROXY: ${{ secrets.CAMOUFOX_PROXY }}
-        run: |
-          echo "Testing proxy..."
-          curl -fsS -x "$CAMOUFOX_PROXY" https://www.cloudflare.com/cdn-cgi/trace | tee proxy-trace.txt
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Start Camoufox Server
-        if: steps.run_policy.outputs.should_run == 'true'
-        id: camoufox_server
-        shell: bash
-        env:
-          HOME: /root
-          CAMOUFOX_PROXY: ${{ secrets.CAMOUFOX_PROXY }}
-        run: |
-          export HOME=/root
-          export CAMOUFOX_HEADLESS=true
-          xvfb-run python3 scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
-          SERVER_PID=$!
-          echo "server_pid=$SERVER_PID" >> "$GITHUB_OUTPUT"
-          for i in $(seq 1 60); do
-            if grep -q "Websocket endpoint" /tmp/camoufox-server.log 2>/dev/null; then
-              WS=$(grep -oP 'ws://[^\s]+' /tmp/camoufox-server.log | head -1)
-              echo "camoufox_ws=$WS" >> "$GITHUB_OUTPUT"
-              echo "Camoufox server ready: $WS"
-              break
-            fi
-            sleep 2
-          done
-          if [ -z "$WS" ]; then
-            echo "Camoufox server failed to start"
-            cat /tmp/camoufox-server.log
-            exit 1
-          fi
+      # --- ZenRows modu aktif: Camoufox/Playwright adimlari devre disi ---
+      # - name: Proxy Check
+      #   if: steps.run_policy.outputs.should_run == 'true'
+      #   shell: bash
+      #   env:
+      #     CAMOUFOX_PROXY: ${{ secrets.CAMOUFOX_PROXY }}
+      #   run: |
+      #     echo "Testing proxy..."
+      #     curl -fsS -x "$CAMOUFOX_PROXY" https://www.cloudflare.com/cdn-cgi/trace | tee proxy-trace.txt
+
+      # - name: Start Camoufox Server
+      #   if: steps.run_policy.outputs.should_run == 'true'
+      #   id: camoufox_server
+      #   shell: bash
+      #   env:
+      #     HOME: /root
+      #     CAMOUFOX_PROXY: ${{ secrets.CAMOUFOX_PROXY }}
+      #   run: |
+      #     export HOME=/root
+      #     export CAMOUFOX_HEADLESS=true
+      #     xvfb-run python3 scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
+      #     SERVER_PID=$!
+      #     echo "server_pid=$SERVER_PID" >> "$GITHUB_OUTPUT"
+      #     for i in $(seq 1 60); do
+      #       if grep -q "Websocket endpoint" /tmp/camoufox-server.log 2>/dev/null; then
+      #         WS=$(grep -oP 'ws://[^\s]+' /tmp/camoufox-server.log | head -1)
+      #         echo "camoufox_ws=$WS" >> "$GITHUB_OUTPUT"
+      #         echo "Camoufox server ready: $WS"
+      #         break
+      #       fi
+      #       sleep 2
+      #     done
+      #     if [ -z "$WS" ]; then
+      #       echo "Camoufox server failed to start"
+      #       cat /tmp/camoufox-server.log
+      #       exit 1
+      #     fi
 
       - name: Scraper
         if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
         env:
-          HOME: /root
-          CAMOUFOX_WS_ENDPOINT: ${{ steps.camoufox_server.outputs.camoufox_ws }}
+          USE_ZENROWS: 'true'
+          ZENROWS_API_KEY: ${{ secrets.ZENROWS_API_KEY }}
           HEADLESS: 'true'
           REQUIRE_SAHIBINDEN_COOKIES: 'false'
 
@@ -128,11 +135,11 @@ jobs:
           npm ci --no-optional --ignore-scripts
           node src/main.mjs 2>&1 | tee scraper.log
 
-      - name: Kill Camoufox
-        if: always() && steps.run_policy.outputs.should_run == 'true'
-        shell: bash
-        run: |
-          kill ${{ steps.camoufox_server.outputs.server_pid }} 2>/dev/null || true
+      # - name: Kill Camoufox
+      #   if: always() && steps.run_policy.outputs.should_run == 'true'
+      #   shell: bash
+      #   run: |
+      #     kill ${{ steps.camoufox_server.outputs.server_pid }} 2>/dev/null || true
 
       - name: Upload artifact
         if: always() && steps.run_policy.outputs.should_run == 'true'
@@ -142,7 +149,6 @@ jobs:
           path: |
             output.json
             scraper.log
-            proxy-trace.txt
             cf_proof.png
             screenshots/
           if-no-files-found: ignore
