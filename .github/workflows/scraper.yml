@@ -64,6 +64,16 @@ jobs:
         if: steps.run_policy.outputs.should_run == 'true'
         uses: actions/checkout@v4
 
+      - name: Cache Playwright storage state
+        if: steps.run_policy.outputs.should_run == 'true'
+        id: cache_state
+        uses: actions/cache@v4
+        with:
+          path: .playwright/storage-state.json
+          key: sahibinden-storage-state-${{ runner.os }}
+          restore-keys: |
+            sahibinden-storage-state-${{ runner.os }}-
+
       - name: Proxy Check
         if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
@@ -109,6 +119,7 @@ jobs:
           CAMOUFOX_WS_ENDPOINT: ${{ steps.camoufox_server.outputs.camoufox_ws }}
           HEADLESS: 'true'
           REQUIRE_SAHIBINDEN_COOKIES: 'false'
+          SAHIBINDEN_STORAGE_STATE_FILE: .playwright/storage-state.json
 
           SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
           SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
@@ -133,6 +144,14 @@ jobs:
         shell: bash
         run: |
           kill ${{ steps.camoufox_server.outputs.server_pid }} 2>/dev/null || true
+
+      - name: Save storage state to cache
+        if: always() && steps.run_policy.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          if [ -f .playwright/storage-state.json ]; then
+            echo "Storage state cache'e kaydedilecek."
+          fi
 
       - name: Upload artifact
         if: always() && steps.run_policy.outputs.should_run == 'true'

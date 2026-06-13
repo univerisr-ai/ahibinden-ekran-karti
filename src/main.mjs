@@ -24,7 +24,7 @@ import {
   PRODUCT_TYPE,
   getActiveSegments,
 } from './config.mjs';
-import { initSession, scrapeSegment, getStats, saveChallengeProofScreenshot, closeBrowser } from './scrapeops.mjs';
+import { initSession, scrapeSegment, getStats, saveChallengeProofScreenshot, closeBrowser, saveStorageState } from './scrapeops.mjs';
 import { parseAllPages, deduplicateListings, filterInvalidListings } from './parser.mjs';
 import { evaluateAllListings, selectTopOpportunities, fallbackSelection } from './ai_evaluator.mjs';
 import { buildAnalyzerDispatchPayload } from './analyzer_dispatch_payload.mjs';
@@ -704,6 +704,8 @@ async function main() {
     outputPath,
     `📎 ${PRODUCT_LABEL} detayli tarama dosyasi\nSession: #${SESSION_NUMBER}\nToplam: ${totalClean.toLocaleString('tr')} ilan\nAI Analiz: ${aiStatusLabel}`,
   );
+
+  await saveStorageState();
 
   if (totalClean === 0) {
     await saveChallengeProofScreenshot('zero-listings');

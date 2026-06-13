@@ -12,6 +12,7 @@ import {
   extractTotalCountFromHtml,
   hasLikelyListingSignals,
 } from './parser.mjs';
+import { loadSahibindenStorageState } from './session_state.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -60,6 +61,14 @@ async function ensureBrowser() {
       timezoneId: 'Europe/Istanbul',
     });
     page = await context.newPage();
+
+    // Daha once kaydedilmis cookie varsa yukle
+    const saved = loadSahibindenStorageState();
+    if (saved.storageState && saved.cookieCount > 0) {
+      await context.addCookies(saved.storageState.cookies);
+      console.log(`  ${saved.cookieCount} adet kayitli cookie yuklendi (kaynak: ${saved.source}).`);
+    }
+
     console.log('  Tarayici hazir.');
     return true;
   } catch (err) {
@@ -202,7 +211,13 @@ export async function initSession() {
     const html = await page.content();
     if (hasLikelyListingSignals(html)) {
       console.log('  Warmup basarili, ilanlar gorunuyor.');
-      return { ok: true, code: 'OK' };
+      const saved = loadSahibindenStorageState();
+      return {
+        ok: true,
+        code: 'OK',
+        cookieSource: saved.source,
+        cookieCount: saved.cookieCount,
+      };
     }
 
     const url = page.url();
@@ -248,7 +263,25 @@ export async function closeBrowser() {
   } catch (_) {}
 }
 
+export async function saveStorageState() {
+  if (!context) return;
+  try {
+    const fs = await import('fs');
+    const stateFile = process.env.SAHIBINDEN_STORAGE_STATE_FILE || '.playwright/storage-state.json';
+    const rawState = await context.storageState();
+    const dir = await import('path').then(p => p.dirname(stateFile));
+    if (dir && dir !== '.') {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(stateFile, JSON.stringify(rawState, null, 2), 'utf-8');
+    console.log(`  Storage state kaydedildi: ${stateFile} (${rawState.cookies.length} cookie)`);
+  } catch (err) {
+    console.log(`  Storage state kaydedilemedi: ${err.message}`);
+  }
+}
+
 export default {
   initSession, scrapeSegment, scrapeDetailUrl, getStats,
   saveChallengeProofScreenshot, takeScreenshot, closeBrowser,
+  saveStorageState,
 };

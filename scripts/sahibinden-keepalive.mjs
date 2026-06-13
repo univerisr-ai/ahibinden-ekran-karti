@@ -4,6 +4,7 @@ import {
   closeBrowser,
   initSession,
   saveChallengeProofScreenshot,
+  saveStorageState,
 } from '../src/scrapeops.mjs';
 
 async function main() {
@@ -20,6 +21,8 @@ async function main() {
   const source = session.cookieSource || 'none';
   const count = Number.isFinite(Number(session.cookieCount)) ? Number(session.cookieCount) : 0;
   console.log(`  Keepalive OK. Session source: ${source} (${count} cookie).`);
+
+  await saveStorageState();
 }
 
 main()
