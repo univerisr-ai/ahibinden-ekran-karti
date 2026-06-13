@@ -40,7 +40,7 @@ jobs:
           HOME: /root
           CAMOUFOX_HEADLESS: true
         run: |
-          xvfb-run python3 scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
+          xvfb-run -a python3 scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
           SERVER_PID=$!
           echo "server_pid=$SERVER_PID" >> "$GITHUB_OUTPUT"
           for i in $(seq 1 60); do
