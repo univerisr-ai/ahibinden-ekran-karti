@@ -414,7 +414,7 @@ export async function scrapeSegment(priceMin, priceMax) {
 }
 
 export async function scrapePageSections(sectionCount) {
-  const firstUrl = buildSahibindenUrl(0, null, null);
+  const firstUrl = buildSahibindenUrl(0, 0, 999000);
   const { html: firstHtml, status } = await fetchPage(firstUrl, 'Toplam hesaplama');
 
   if (!firstHtml || status === 'BANNED' || status === 'BUDGET_EXHAUSTED') {
@@ -447,7 +447,7 @@ export async function scrapePageSections(sectionCount) {
       }
       await sleep(REQUEST_DELAY_MS);
       const offset = p * ITEMS_PER_PAGE;
-      const url = buildSahibindenUrl(offset, null, null);
+      const url = buildSahibindenUrl(offset, 0, 999000);
       const { html, status: pageStatus } = await fetchPage(url, `${label} (s:${p + 1})`);
 
       if (pageStatus === 'BUDGET_EXHAUSTED') break;
