@@ -1,0 +1,74 @@
+name: Test Login Page Access
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-login:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+
+      - name: Install Camoufox
+        run: pip install camoufox orjson
+
+      - name: Start Camoufox & test
+        shell: bash
+        env:
+          CAMOUFOX_HEADLESS: "true"
+        run: |
+          python3 scripts/camoufox-server.py > camoufox-server.log 2>&1 &
+          SERVER_PID=$!
+          WS=""
+          for i in $(seq 1 30); do
+            if grep -q "Websocket endpoint" camoufox-server.log 2>/dev/null; then
+              WS=$(grep -oP 'ws://[^\s]+' camoufox-server.log | head -1)
+              echo "Camoufox ready: $WS"
+              break
+            fi
+            sleep 2
+          done
+          if [ -z "$WS" ]; then
+            echo "Camoufox failed to start"
+            cat camoufox-server.log
+            exit 1
+          fi
+
+          export CAMOUFOX_WS_ENDPOINT="$WS"
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+          const ws = process.env.CAMOUFOX_WS_ENDPOINT;
+          const browser = await chromium.connectOverCDP(ws);
+          const ctx = await browser.newContext({ locale: 'tr-TR', timezoneId: 'Europe/Istanbul' });
+          const page = await ctx.newPage();
+          await page.goto('https://www.sahibinden.com/giris', { waitUntil: 'networkidle', timeout: 30000 });
+          await page.waitForTimeout(3000);
+          const title = await page.title();
+          const url = page.url();
+          console.log(`Title: ${title}`);
+          console.log(`URL: ${url}`);
+          if (url.includes('challenge') || url.includes('captcha') || url.includes('error')) {
+            console.log('RESULT: BLOCKED');
+          } else if (url.includes('giris') || url.includes('login')) {
+            console.log('RESULT: LOGIN_PAGE_REACHED');
+          } else {
+            console.log('RESULT: OTHER - ' + url);
+          }
+          await page.screenshot({ path: 'test-sahibinden-giris.png', fullPage: true });
+          await ctx.close();
+          await browser.close();
+          NODE
+
+          kill $SERVER_PID 2>/dev/null || true
+
+      - name: Upload screenshot
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: login-test-screenshot
+          path: test-sahibinden-giris.png
