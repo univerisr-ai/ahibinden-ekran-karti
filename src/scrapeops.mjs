@@ -108,13 +108,12 @@ async function ensureBrowser() {
   }
 }
 
-async function maybeHandleChallenge(url) {
+async function maybeHandleChallenge() {
   if (!page) return false;
   try {
     const currentUrl = page.url();
-    const html = await page.content();
-    if (currentUrl.includes('secure.sahibinden.com/login') || html.includes('giris yap') || html.includes('login')) {
-      console.log('  Login sayfasi algilandi, cookie olmadan devam edilemiyor.');
+    if (currentUrl.includes('secure.sahibinden.com/login') || currentUrl.includes('giris.sahibinden.com')) {
+      console.log('  Login sayfasina yonlendirildi, cookie olmadan devam edilemiyor.');
       console.log('  Login sayfasi URL:', currentUrl);
       return false;
     }
@@ -128,15 +127,15 @@ function isChallengePage(html) {
   if (!html) return false;
   const lower = html.toLowerCase();
   return (
-    lower.includes('güvenlik doğrulaması') ||
+    lower.includes('g├╝venlik do─ƒrulamas─▒') ||
     lower.includes('guvenlik dogrulamasi') ||
-    lower.includes('doğrulanıyor') ||
+    lower.includes('do─ƒrulan─▒yor') ||
     lower.includes('dogrulaniyor') ||
     lower.includes('challenge-platform') ||
     lower.includes('cf-challenge') ||
     lower.includes('turnstile') ||
     lower.includes('verify you are human') ||
-    lower.includes('gerçek kişi olduğunuzu doğrulayın') ||
+    lower.includes('ger├ºek ki┼ƒi oldu─ƒunuzu do─ƒrulay─▒n') ||
     lower.includes('bir dakika') ||
     lower.includes('please wait') ||
     lower.includes('birazdan') ||
@@ -301,7 +300,7 @@ async function solveTurnstileIfPresent(maxWait = 20000) {
 
 async function fetchPage(targetUrl, label = '') {
   if (stats.creditsUsed >= MAX_CREDITS_PER_RUN) {
-    console.log(`  BÜTÇE LİMİTİ AŞILDI (${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
+    console.log(`  B├£T├çE L─░M─░T─░ A┼₧ILDI (${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
     return { html: null, status: 'BUDGET_EXHAUSTED' };
   }
 
@@ -321,29 +320,38 @@ async function fetchPage(targetUrl, label = '') {
       });
       await sleep(1500);
 
-      const urlOk = await maybeHandleChallenge(targetUrl);
-      if (!urlOk) {
-        console.log(`  Login sayfasi (deneme ${attempt})`);
-        await sleep(2000);
-        continue;
-      }
-
-      const html = await page.content();
+      let html = await page.content();
       const respStatus = response ? response.status() : 200;
 
+      // Once listing sinyali var mi kontrol et
       if (!hasLikelyListingSignals(html)) {
         console.log(`  İlan sinyali yok (deneme ${attempt})`);
         // Cloudflare Turnstile challenge varsa coz
         const solved = await solveTurnstileIfPresent(20000);
         if (solved) {
-          const htmlAfter = await page.content();
-          if (hasLikelyListingSignals(htmlAfter)) {
+          html = await page.content();
+          if (hasLikelyListingSignals(html)) {
             stats.successfulRequests++;
             stats.pagesLoaded++;
             stats.creditsUsed++;
-            return { html: htmlAfter, status: 'OK' };
+            return { html, status: 'OK' };
           }
         }
+        // Turnstile sonrasi hala sinyal yoksa login kontrolu yap (sadece URL bazli)
+        const loginOk = await maybeHandleChallenge();
+        if (!loginOk) {
+          console.log(`  Login sayfasi (deneme ${attempt})`);
+          await sleep(2000);
+          continue;
+        }
+        await sleep(2000);
+        continue;
+      }
+
+      // Listing sinyali var, sadece URL bazli login redirect kontrolu
+      const loginOk = await maybeHandleChallenge();
+      if (!loginOk) {
+        console.log(`  Login redirect (deneme ${attempt})`);
         await sleep(2000);
         continue;
       }
@@ -356,7 +364,7 @@ async function fetchPage(targetUrl, label = '') {
       console.log(`  Hata (deneme ${attempt}): ${err.message}`);
       await sleep(2000);
     }
-  }
+  }}
 
   stats.failedRequests++;
   return { html: null, status: 'FAILED' };
@@ -436,13 +444,13 @@ export async function initSession() {
     const url = page.url();
     const html = await page.content().catch(() => '');
 
-    // Login sayfasina yonlendirildik → session gecersiz
+    // Login sayfasina yonlendirildik ΓåÆ session gecersiz
     if (url.includes('giris') || html.toLowerCase().includes('giris yap')) {
-      console.log('  Login sayfasi — cookie gerekli.');
+      console.log('  Login sayfasi ΓÇö cookie gerekli.');
       return { ok: false, code: 'LOGIN_REQUIRED' };
     }
 
-    // Bana Ozel sayfasi acildi → session gecerli
+    // Bana Ozel sayfasi acildi ΓåÆ session gecerli
     if (url.includes('banaozel')) {
       console.log('  Session dogrulandi, login kalindi.');
       const saved = loadSahibindenStorageState();
