@@ -13,6 +13,10 @@ import {
   hasLikelyListingSignals,
 } from './parser.mjs';
 import { loadSahibindenStorageState } from './session_state.mjs';
+import {
+  solveUrlWithFlareSolverr,
+  flareSolverrCookiesToPlaywright,
+} from './flaresolverr.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -112,6 +116,25 @@ function isChallengePage(html) {
     lower.includes('verify you are human') ||
     lower.includes('gerçek kişi olduğunuzu doğrulayın')
   );
+}
+
+async function applyFlareSolverrCookies(targetUrl) {
+  if (!context) return false;
+  try {
+    console.log('  FlareSolverr ile Cloudflare cozuluyor...');
+    const solution = await solveUrlWithFlareSolverr(targetUrl);
+    const cookies = flareSolverrCookiesToPlaywright(solution.cookies || []);
+    if (cookies.length === 0) {
+      console.log('  FlareSolverr cookie donmedi.');
+      return false;
+    }
+    await context.addCookies(cookies);
+    console.log(`  FlareSolverr'den ${cookies.length} cookie eklendi.`);
+    return true;
+  } catch (err) {
+    console.log(`  FlareSolverr hatasi: ${err.message}`);
+    return false;
+  }
 }
 
 async function solveTurnstileIfPresent(maxWait = 20000) {
@@ -363,7 +386,7 @@ export async function initSession() {
     // Cloudflare Turnstile challenge varsa coz (yoksa otomatik dogrulama bekle)
     await solveTurnstileIfPresent(45000);
 
-    const html = await page.content();
+    let html = await page.content();
     if (hasLikelyListingSignals(html)) {
       console.log('  Warmup basarili, ilanlar gorunuyor.');
       const saved = loadSahibindenStorageState();
@@ -379,6 +402,26 @@ export async function initSession() {
     if (url.includes('secure.sahibinden.com/login') || url.includes('giris') || html.includes('giris yap')) {
       console.log('  Login sayfasi — cookie gerekli.');
       return { ok: false, code: 'LOGIN_REQUIRED' };
+    }
+
+    // FlareSolverr fallback
+    if (isChallengePage(html)) {
+      const ok = await applyFlareSolverrCookies(warmupUrl);
+      if (ok) {
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: DEFAULT_NAV_TIMEOUT_MS });
+        await sleep(3000);
+        html = await page.content();
+        if (hasLikelyListingSignals(html)) {
+          console.log('  Warmup basarili (FlareSolverr ile), ilanlar gorunuyor.');
+          const saved = loadSahibindenStorageState();
+          return {
+            ok: true,
+            code: 'OK',
+            cookieSource: saved.source,
+            cookieCount: saved.cookieCount,
+          };
+        }
+      }
     }
 
     console.log('  Ilan gorunmuyor, Cloudflare engeli olabilir.');

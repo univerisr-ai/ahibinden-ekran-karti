@@ -31,6 +31,12 @@ jobs:
       image: ghcr.io/univerisr-ai/ahibinden-ekran-karti/scraper:latest
       options: --privileged --user root
 
+    services:
+      flaresolverr:
+        image: ghcr.io/flaresolverr/flaresolverr:latest
+        env:
+          LOG_LEVEL: info
+
     steps:
       - name: Run policy
         id: run_policy
@@ -112,6 +118,7 @@ jobs:
         shell: bash
         env:
           CAMOUFOX_WS_ENDPOINT: ${{ steps.camoufox_server.outputs.camoufox_ws }}
+          FLARESOLVERR_URL: http://flaresolverr:8191/v1
 
           HEADLESS: 'true'
           REQUIRE_SAHIBINDEN_COOKIES: 'false'
