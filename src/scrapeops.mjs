@@ -98,6 +98,22 @@ async function maybeHandleChallenge(url) {
   }
 }
 
+function isChallengePage(html) {
+  if (!html) return false;
+  const lower = html.toLowerCase();
+  return (
+    lower.includes('güvenlik doğrulaması') ||
+    lower.includes('guvenlik dogrulamasi') ||
+    lower.includes('doğrulanıyor') ||
+    lower.includes('dogrulaniyor') ||
+    lower.includes('challenge-platform') ||
+    lower.includes('cf-challenge') ||
+    lower.includes('turnstile') ||
+    lower.includes('verify you are human') ||
+    lower.includes('gerçek kişi olduğunuzu doğrulayın')
+  );
+}
+
 async function solveTurnstileIfPresent(maxWait = 20000) {
   if (!page) return false;
   try {
@@ -158,8 +174,15 @@ async function solveTurnstileIfPresent(maxWait = 20000) {
     }
 
     if (!clicked) {
-      console.log('  Turnstile iframe/widget bulunamadi.');
-      return false;
+      // Managed challenge: no visible iframe, wait for auto-verification
+      const html = await page.content().catch(() => '');
+      if (isChallengePage(html)) {
+        console.log('  Cloudflare challenge sayfasi tespit edildi, otomatik dogrulama bekleniyor...');
+        clicked = true;
+      } else {
+        console.log('  Turnstile iframe/widget bulunamadi.');
+        return false;
+      }
     }
 
     // 3. Wait for token or listings to appear
@@ -313,10 +336,10 @@ export async function initSession() {
       waitUntil: 'domcontentloaded',
       timeout: DEFAULT_NAV_TIMEOUT_MS,
     });
-    await sleep(2000);
+    await sleep(5000);
 
-    // Cloudflare Turnstile challenge varsa coz
-    await solveTurnstileIfPresent(20000);
+    // Cloudflare Turnstile challenge varsa coz (yoksa otomatik dogrulama bekle)
+    await solveTurnstileIfPresent(45000);
 
     const html = await page.content();
     if (hasLikelyListingSignals(html)) {

@@ -6,7 +6,7 @@ from pathlib import Path
 from camoufox.utils import launch_options
 from camoufox.server import to_camel_case_dict, get_nodejs
 
-headless = os.environ.get('CAMOUFOX_HEADLESS', 'true').lower() == 'true'
+headless = os.environ.get('CAMOUFOX_HEADLESS', 'false').lower() == 'true'
 
 # Generate config via Camoufox with realistic fingerprint for Cloudflare
 config = launch_options(

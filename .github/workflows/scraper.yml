@@ -87,7 +87,7 @@ jobs:
         shell: bash
         env:
           HOME: /root
-          CAMOUFOX_HEADLESS: true
+          CAMOUFOX_HEADLESS: false
         run: |
           xvfb-run -a python3 scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
           SERVER_PID=$!
