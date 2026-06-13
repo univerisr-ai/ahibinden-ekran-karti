@@ -1,0 +1,31 @@
+const { BrowserServerLauncherImpl } = require(`${process.cwd()}/lib/browserServerImpl.js`)
+
+function collectData() {
+    return new Promise((resolve) => {
+        let data = '';
+        process.stdin.setEncoding('utf8');
+        process.stdin.on('data', (chunk) => { data += chunk; });
+        process.stdin.on('end', () => {
+            resolve(JSON.parse(Buffer.from(data, "base64").toString()));
+        });
+    });
+}
+
+collectData().then((options) => {
+    console.time('Server launched');
+    console.info('Launching server...');
+    const server = new BrowserServerLauncherImpl('firefox')
+    // Strip proxy - Playwright adds null default and crashes
+    const {proxy, ...cleanOptions} = options || {};
+    server.launchServer(cleanOptions).then(browserServer => {
+        console.timeEnd('Server launched');
+        console.log('Websocket endpoint:\x1b[93m', browserServer.wsEndpoint(), '\x1b[0m');
+        process.stdin.resume();
+    }).catch(error => {
+        console.error('Error launching server:', error.message);
+        process.exit(1);
+    });
+}).catch((error) => {
+    console.error('Error collecting data:', error.message);
+    process.exit(1);
+});
