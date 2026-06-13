@@ -54,11 +54,16 @@ async function ensureBrowser() {
         ],
       });
     }
+    const fs = await import('fs');
+    const videoDir = process.env.PLAYWRIGHT_VIDEO_DIR || 'videos';
+    if (!fs.existsSync(videoDir)) fs.mkdirSync(videoDir, { recursive: true });
+
     context = await browser.newContext({
       ignoreHTTPSErrors: true,
       viewport: { width: 1366, height: 900 },
       locale: 'tr-TR',
       timezoneId: 'Europe/Istanbul',
+      recordVideo: { dir: videoDir, size: { width: 1366, height: 900 } },
     });
     page = await context.newPage();
 
@@ -93,7 +98,7 @@ async function maybeHandleChallenge(url) {
   }
 }
 
-async function solveTurnstileIfPresent(maxWait = 15000) {
+async function solveTurnstileIfPresent(maxWait = 20000) {
   if (!page) return false;
   try {
     // 1. Click "Devam Et" / Continue button if present
@@ -104,33 +109,39 @@ async function solveTurnstileIfPresent(maxWait = 15000) {
       await sleep(2000);
     }
 
-    // 2. Find Turnstile iframes
-    const iframes = page.locator('iframe');
-    const count = await iframes.count();
     let clicked = false;
 
-    for (let i = 0; i < count; i++) {
-      const iframe = iframes.nth(i);
-      const src = await iframe.getAttribute('src').catch(() => '') || '';
-      if (src.includes('turnstile') || src.includes('cloudflare') || src.includes('challenge')) {
+    // 2. Wait up to 8s for a Turnstile iframe/widget to appear
+    const searchStart = Date.now();
+    while (Date.now() - searchStart < 8000) {
+      const iframes = page.locator('iframe');
+      const count = await iframes.count().catch(() => 0);
+
+      for (let i = 0; i < count; i++) {
+        const iframe = iframes.nth(i);
+        const src = await iframe.getAttribute('src').catch(() => '') || '';
         const box = await iframe.boundingBox().catch(() => null);
-        if (box) {
-          const clickX = box.x + 30;
-          const clickY = box.y + (box.height / 2);
-          console.log(`  Turnstile iframe bulundu, tiklaniyor: ${clickX}, ${clickY}`);
-          await page.mouse.move(clickX, clickY, { steps: 5 });
-          await sleep(200);
-          await page.mouse.down();
-          await sleep(100);
-          await page.mouse.up();
-          clicked = true;
+        console.log(`  Iframe ${i}: src=${src.substring(0, 80)} box=${box ? JSON.stringify(box) : 'null'}`);
+
+        if (src.includes('turnstile') || src.includes('cloudflare') || src.includes('challenge')) {
+          if (box) {
+            const clickX = box.x + 30;
+            const clickY = box.y + (box.height / 2);
+            console.log(`  Turnstile iframe bulundu, tiklaniyor: ${clickX}, ${clickY}`);
+            await page.mouse.move(clickX, clickY, { steps: 5 });
+            await sleep(200);
+            await page.mouse.down();
+            await sleep(100);
+            await page.mouse.up();
+            clicked = true;
+          }
         }
       }
-    }
 
-    // 3. Fallback: visible Turnstile widget container
-    if (!clicked) {
-      const tw = page.locator('#turnStileWidget, [id*="turnstile" i], [class*="turnstile" i]');
+      if (clicked) break;
+
+      // Fallback: visible Turnstile widget container
+      const tw = page.locator('#turnStileWidget, [id*="turnstile" i], [class*="turnstile" i], #challenge-stage, .cf-turnstile');
       if (await tw.isVisible().catch(() => false)) {
         const tbox = await tw.boundingBox().catch(() => null);
         if (tbox) {
@@ -139,13 +150,19 @@ async function solveTurnstileIfPresent(maxWait = 15000) {
           console.log(`  Turnstile widget bulundu, tiklaniyor: ${clickX}, ${clickY}`);
           await page.mouse.click(clickX, clickY);
           clicked = true;
+          break;
         }
       }
+
+      await sleep(1000);
     }
 
-    if (!clicked) return false;
+    if (!clicked) {
+      console.log('  Turnstile iframe/widget bulunamadi.');
+      return false;
+    }
 
-    // 4. Wait for token or listings to appear
+    // 3. Wait for token or listings to appear
     const start = Date.now();
     while (Date.now() - start < maxWait) {
       await sleep(1000);

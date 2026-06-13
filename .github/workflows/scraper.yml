@@ -159,6 +159,7 @@ jobs:
             proxy-trace.txt
             cf_proof.png
             screenshots/
+            videos/
           if-no-files-found: ignore
 
       - name: Error alert
