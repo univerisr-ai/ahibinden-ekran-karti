@@ -138,6 +138,8 @@ export const PRODUCT_PROFILES = {
     priceSegments: GPU_PRICE_SEGMENTS,
     warmupPriceMax: 2000,
     artifactPrefix: 'scraper-results',
+    usePageSections: true,
+    pageSectionCount: 10,
   },
   cpu: {
     type: 'cpu',
@@ -148,6 +150,8 @@ export const PRODUCT_PROFILES = {
     priceSegments: CPU_PRICE_SEGMENTS,
     warmupPriceMax: 1500,
     artifactPrefix: 'scraper-results-cpu',
+    usePageSections: false,
+    pageSectionCount: 1,
   },
 };
 
@@ -165,6 +169,13 @@ export const PRODUCT_REPORT_TITLE = PRODUCT_PROFILE.reportTitle;
 export const PRODUCT_BANNER_TITLE = PRODUCT_PROFILE.bannerTitle;
 export const PRODUCT_ARTIFACT_PREFIX = PRODUCT_PROFILE.artifactPrefix;
 export const WARMUP_PRICE_MAX = PRODUCT_PROFILE.warmupPriceMax;
+
+export const USE_PAGE_SECTIONS = String(process.env.USE_PAGE_SECTIONS || '').trim()
+  ? (process.env.USE_PAGE_SECTIONS || '').toLowerCase() === 'true'
+  : PRODUCT_PROFILE.usePageSections;
+export const PAGE_SECTION_COUNT = parseInt(
+  process.env.PAGE_SECTION_COUNT || String(PRODUCT_PROFILE.pageSectionCount), 10
+);
 
 // ─── Sahibinden ──────────────────────────────────────────────
 export const BASE_URL = process.env.SAHIBINDEN_BASE_URL || PRODUCT_PROFILE.baseUrl;

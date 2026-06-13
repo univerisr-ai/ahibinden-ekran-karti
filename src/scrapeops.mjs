@@ -413,6 +413,56 @@ export async function scrapeSegment(priceMin, priceMax) {
   return { htmlPages, totalFound: totalCount, pages: htmlPages.length, status: 'OK' };
 }
 
+export async function scrapePageSections(sectionCount) {
+  const firstUrl = buildSahibindenUrl(0, null, null);
+  const { html: firstHtml, status } = await fetchPage(firstUrl, 'Toplam hesaplama');
+
+  if (!firstHtml || status === 'BANNED' || status === 'BUDGET_EXHAUSTED') {
+    return [];
+  }
+
+  const totalCount = extractTotalCountFromHtml(firstHtml);
+  const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
+  const pagesPerSection = Math.ceil(totalPages / sectionCount);
+
+  console.log(`\n  📋 ${sectionCount} bölüm halinde ${totalPages} sayfa taranacak`);
+  console.log(`  📊 Toplam: ${totalCount.toLocaleString('tr')} ilan, bölüm başına ~${pagesPerSection} sayfa`);
+
+  const results = [];
+  let currentPage = 0;
+
+  for (let s = 0; s < sectionCount && currentPage < totalPages; s++) {
+    const startPage = currentPage;
+    const endPage = Math.min(startPage + pagesPerSection - 1, totalPages - 1);
+    const label = `Bölüm ${s + 1}`;
+
+    console.log(`\n  ${label}: sayfa ${startPage + 1}-${endPage + 1} (Kredi: ${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
+
+    const htmlPages = [];
+
+    for (let p = startPage; p <= endPage; p++) {
+      if (p === 0 && s === 0) {
+        htmlPages.push(firstHtml);
+        continue;
+      }
+      await sleep(REQUEST_DELAY_MS);
+      const offset = p * ITEMS_PER_PAGE;
+      const url = buildSahibindenUrl(offset, null, null);
+      const { html, status: pageStatus } = await fetchPage(url, `${label} (s:${p + 1})`);
+
+      if (pageStatus === 'BUDGET_EXHAUSTED') break;
+      if (html) htmlPages.push(html);
+    }
+
+    results.push({ htmlPages, totalFound: totalCount, pages: htmlPages.length, status: 'OK' });
+    currentPage = endPage + 1;
+
+    console.log(`  ${label} bitti. Sayfa: ${htmlPages.length}`);
+  }
+
+  return results;
+}
+
 export async function scrapeDetailUrl(detailUrl) {
   const targetUrl = String(detailUrl || '').trim();
   if (!targetUrl) return { html: null, status: 'INVALID_URL' };
@@ -534,7 +584,7 @@ export async function saveStorageState() {
 }
 
 export default {
-  initSession, scrapeSegment, scrapeDetailUrl, getStats,
+  initSession, scrapeSegment, scrapePageSections, scrapeDetailUrl, getStats,
   saveChallengeProofScreenshot, takeScreenshot, closeBrowser,
   saveStorageState,
 };
