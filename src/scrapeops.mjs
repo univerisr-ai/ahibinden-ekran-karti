@@ -128,7 +128,11 @@ function isChallengePage(html) {
     lower.includes('cf-challenge') ||
     lower.includes('turnstile') ||
     lower.includes('verify you are human') ||
-    lower.includes('gerçek kişi olduğunuzu doğrulayın')
+    lower.includes('gerçek kişi olduğunuzu doğrulayın') ||
+    lower.includes('bir dakika') ||
+    lower.includes('please wait') ||
+    lower.includes('birazdan') ||
+    lower.includes('checking your browser')
   );
 }
 
@@ -254,6 +258,7 @@ async function solveTurnstileIfPresent(maxWait = 20000) {
 
     // 3. Wait for token or listings to appear
     const start = Date.now();
+    let reloaded = false;
     while (Date.now() - start < maxWait) {
       await sleep(1000);
       const token = await page.evaluate(() => {
@@ -269,6 +274,13 @@ async function solveTurnstileIfPresent(maxWait = 20000) {
       if (hasLikelyListingSignals(html)) {
         console.log('  Sayfa yuklendi, ilanlar gorunuyor.');
         return true;
+      }
+      // If waited more than half the time with no result, try reload
+      if (!reloaded && Date.now() - start > maxWait / 2) {
+        console.log('  Challenge cozulmedi, sayfa yenileniyor...');
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+        await sleep(3000);
+        reloaded = true;
       }
     }
     console.log('  Turnstile cozumu zaman asimina ugradi.');
