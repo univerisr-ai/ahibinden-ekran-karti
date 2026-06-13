@@ -13,10 +13,12 @@ import {
   hasLikelyListingSignals,
 } from './parser.mjs';
 import { loadSahibindenStorageState } from './session_state.mjs';
+import { loadAllSahibindenCookies } from './cookies.mjs';
 import {
   solveUrlWithFlareSolverr,
   flareSolverrCookiesToPlaywright,
 } from './flaresolverr.mjs';
+import { loadMouseRecording, replayMouseRecording } from './mouse_recorder.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -62,13 +64,18 @@ async function ensureBrowser() {
     const videoDir = process.env.PLAYWRIGHT_VIDEO_DIR || 'videos';
     if (!fs.existsSync(videoDir)) fs.mkdirSync(videoDir, { recursive: true });
 
-    context = await browser.newContext({
+    const contextOptions = {
       ignoreHTTPSErrors: true,
       viewport: { width: 1366, height: 900 },
       locale: 'tr-TR',
       timezoneId: 'Europe/Istanbul',
-      recordVideo: { dir: videoDir, size: { width: 1366, height: 900 } },
-    });
+    };
+    // Camoufox/Firefox server mode does not support Playwright video recording.
+    if (!USE_CAMOUFOX) {
+      contextOptions.recordVideo = { dir: videoDir, size: { width: 1366, height: 900 } };
+    }
+
+    context = await browser.newContext(contextOptions);
     page = await context.newPage();
 
     // Daha once kaydedilmis cookie varsa yukle
@@ -76,6 +83,13 @@ async function ensureBrowser() {
     if (saved.storageState && saved.cookieCount > 0) {
       await context.addCookies(saved.storageState.cookies);
       console.log(`  ${saved.cookieCount} adet kayitli cookie yuklendi (kaynak: ${saved.source}).`);
+    }
+
+    // Ayrica SAHIBINDEN_COOKIES env ve cookies.json dosyasindaki cookie'leri yukle
+    const extraCookies = loadAllSahibindenCookies();
+    if (extraCookies.length > 0) {
+      await context.addCookies(extraCookies);
+      console.log(`  ${extraCookies.length} adet ek cookie yuklendi (env/dosya).`);
     }
 
     console.log('  Tarayici hazir.');
@@ -146,6 +160,14 @@ async function solveTurnstileIfPresent(maxWait = 20000) {
       console.log('  Devam Et butonu bulundu, tiklaniyor.');
       await devamBtn.click({ force: true });
       await sleep(2000);
+    }
+
+    // 1b. Replay recorded human mouse movements if available
+    const mouseRecording = loadMouseRecording();
+    if (mouseRecording) {
+      await replayMouseRecording(page, mouseRecording);
+      await sleep(1000);
+      await page.screenshot({ path: 'after_mouse_replay.png' });
     }
 
     let clicked = false;

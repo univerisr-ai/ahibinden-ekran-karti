@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Güvenlik Doğrulaması — Simülatör</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+      width: 100%;
+      max-width: 480px;
+      padding: 40px 32px;
+      text-align: center;
+    }
+    h1 { font-size: 22px; margin-bottom: 12px; }
+    p { color: #666; font-size: 15px; margin-bottom: 28px; }
+    #btn-continue {
+      background: #1e88e5;
+      color: #fff;
+      border: 0;
+      border-radius: 4px;
+      padding: 14px 32px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #btn-continue:hover { background: #1565c0; }
+    #turnStileWidget {
+      display: none;
+      margin: 24px auto 0;
+      width: 300px;
+      height: 65px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #fafafa;
+      align-items: center;
+      padding: 0 16px;
+      cursor: default;
+      user-select: none;
+    }
+    #turnStileWidget.active { display: flex; }
+    .checkbox {
+      width: 28px;
+      height: 28px;
+      border: 2px solid #c4c4c4;
+      border-radius: 3px;
+      margin-right: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .checkbox.checked {
+      border-color: #4caf50;
+      background: #4caf50;
+    }
+    .checkbox::after {
+      content: "";
+      width: 6px;
+      height: 12px;
+      border: solid #fff;
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg) translate(-1px, -1px);
+      opacity: 0;
+    }
+    .checkbox.checked::after { opacity: 1; }
+    .label { font-size: 14px; color: #444; }
+    #status {
+      margin-top: 20px;
+      font-size: 14px;
+      min-height: 22px;
+      color: #1e88e5;
+    }
+    .success { color: #4caf50 !important; font-weight: 600; }
+    #mouseLog {
+      margin-top: 18px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #999;
+      max-height: 80px;
+      overflow: auto;
+      text-align: left;
+      background: #f9f9f9;
+      padding: 8px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Güvenlik Doğrulaması</h1>
+    <p>Lütfen devam etmek için aşağıdaki kutucuğu işaretleyin.</p>
+    <button id="btn-continue" type="button">Devam Et</button>
+
+    <div id="turnStileWidget">
+      <div class="checkbox" id="turnstile-checkbox" role="checkbox" aria-checked="false" tabindex="0"></div>
+      <span class="label">Ben robot değilim</span>
+    </div>
+
+    <div id="status">Başlamak için "Devam Et" butonuna tıklayın.</div>
+    <div id="mouseLog"></div>
+  </div>
+
+  <script>
+    const btn = document.getElementById('btn-continue');
+    const widget = document.getElementById('turnStileWidget');
+    const checkbox = document.getElementById('turnstile-checkbox');
+    const status = document.getElementById('status');
+    const mouseLog = document.getElementById('mouseLog');
+
+    // Basit mouse koordinat logu (gözlem amaçlı)
+    let lastLog = 0;
+    document.addEventListener('mousemove', (e) => {
+      const now = Date.now();
+      if (now - lastLog > 250) {
+        lastLog = now;
+        const line = `${now} move ${e.clientX},${e.clientY}`;
+        const div = document.createElement('div');
+        div.textContent = line;
+        mouseLog.prepend(div);
+        if (mouseLog.children.length > 40) mouseLog.lastChild.remove();
+      }
+    });
+
+    btn.addEventListener('click', () => {
+      widget.classList.add('active');
+      status.textContent = 'Lütfen "Ben robot değilim" kutucuğuna tıklayın.';
+      btn.disabled = true;
+      btn.style.opacity = '0.6';
+      // Recorder/oynatici için sayfa içi event fırlat
+      window.dispatchEvent(new CustomEvent('simulator:continue:clicked', {
+        detail: { timestamp: Date.now() }
+      }));
+    });
+
+    function verify() {
+      checkbox.classList.add('checked');
+      checkbox.setAttribute('aria-checked', 'true');
+      status.textContent = 'Doğrulama başarılı! Simülatör tamamlandı.';
+      status.classList.add('success');
+      window.dispatchEvent(new CustomEvent('simulator:verified', {
+        detail: { timestamp: Date.now() }
+      }));
+    }
+
+    checkbox.addEventListener('click', verify);
+    checkbox.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') verify();
+    });
+  </script>
+</body>
+</html>
