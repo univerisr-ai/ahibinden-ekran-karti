@@ -1,33 +1,9 @@
-"""Camoufox Playwright server with proxy support.
-Uses Playwright's Firefox binary by default (no Camoufox custom build needed).
-Set CAMOUFOX_BROWSER_PATH to override.
+"""Camoufox Playwright WebSocket server.
+Launches a remote browser server that Node.js/Playwright connects to.
 """
-import os, sys, json
+import os
 from camoufox.server import launch_server
 
 headless = os.environ.get('CAMOUFOX_HEADLESS', 'true').lower() == 'true'
-proxy_url = os.environ.get('CAMOUFOX_PROXY', '').strip()
-browser_path = os.environ.get('CAMOUFOX_BROWSER_PATH', '').strip()
 
-# Proxy ayari bossa veya "false"/"none" ise proxy kullanma
-use_proxy = proxy_url and proxy_url.lower() not in ('false', 'none', '0', 'no')
-
-kwargs = {
-    'headless': headless,
-    'locale': 'tr-TR',
-    'humanize': True,
-    'disable_coop': True,
-    'i_know_what_im_doing': True,
-}
-
-if browser_path:
-    kwargs['executable_path'] = browser_path
-
-if use_proxy:
-    kwargs['proxy'] = {'server': proxy_url}
-    kwargs['geoip'] = True
-else:
-    # Bos dict = "proxy yok" - None gecersek Camoufox patliyor
-    kwargs['proxy'] = {}
-
-launch_server(**kwargs)
+launch_server(headless=headless)
