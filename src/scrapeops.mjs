@@ -93,6 +93,85 @@ async function maybeHandleChallenge(url) {
   }
 }
 
+async function solveTurnstileIfPresent(maxWait = 15000) {
+  if (!page) return false;
+  try {
+    // 1. Click "Devam Et" / Continue button if present
+    const devamBtn = page.locator('#btn-continue');
+    if (await devamBtn.isVisible().catch(() => false)) {
+      console.log('  Devam Et butonu bulundu, tiklaniyor.');
+      await devamBtn.click({ force: true });
+      await sleep(2000);
+    }
+
+    // 2. Find Turnstile iframes
+    const iframes = page.locator('iframe');
+    const count = await iframes.count();
+    let clicked = false;
+
+    for (let i = 0; i < count; i++) {
+      const iframe = iframes.nth(i);
+      const src = await iframe.getAttribute('src').catch(() => '') || '';
+      if (src.includes('turnstile') || src.includes('cloudflare') || src.includes('challenge')) {
+        const box = await iframe.boundingBox().catch(() => null);
+        if (box) {
+          const clickX = box.x + 30;
+          const clickY = box.y + (box.height / 2);
+          console.log(`  Turnstile iframe bulundu, tiklaniyor: ${clickX}, ${clickY}`);
+          await page.mouse.move(clickX, clickY, { steps: 5 });
+          await sleep(200);
+          await page.mouse.down();
+          await sleep(100);
+          await page.mouse.up();
+          clicked = true;
+        }
+      }
+    }
+
+    // 3. Fallback: visible Turnstile widget container
+    if (!clicked) {
+      const tw = page.locator('#turnStileWidget, [id*="turnstile" i], [class*="turnstile" i]');
+      if (await tw.isVisible().catch(() => false)) {
+        const tbox = await tw.boundingBox().catch(() => null);
+        if (tbox) {
+          const clickX = tbox.x + 30;
+          const clickY = tbox.y + (tbox.height / 2);
+          console.log(`  Turnstile widget bulundu, tiklaniyor: ${clickX}, ${clickY}`);
+          await page.mouse.click(clickX, clickY);
+          clicked = true;
+        }
+      }
+    }
+
+    if (!clicked) return false;
+
+    // 4. Wait for token or listings to appear
+    const start = Date.now();
+    while (Date.now() - start < maxWait) {
+      await sleep(1000);
+      const token = await page.evaluate(() => {
+        const input = document.querySelector('input[name="cf-turnstile-response"]');
+        return input ? input.value : null;
+      }).catch(() => null);
+      if (token && token.length > 0) {
+        console.log('  Turnstile token alindi.');
+        await sleep(1500);
+        return true;
+      }
+      const html = await page.content().catch(() => '');
+      if (hasLikelyListingSignals(html)) {
+        console.log('  Sayfa yuklendi, ilanlar gorunuyor.');
+        return true;
+      }
+    }
+    console.log('  Turnstile cozumu zaman asimina ugradi.');
+    return false;
+  } catch (err) {
+    console.log(`  Turnstile cozme hatasi: ${err.message}`);
+    return false;
+  }
+}
+
 async function fetchPage(targetUrl, label = '') {
   if (stats.creditsUsed >= MAX_CREDITS_PER_RUN) {
     console.log(`  BÜTÇE LİMİTİ AŞILDI (${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
@@ -127,6 +206,17 @@ async function fetchPage(targetUrl, label = '') {
 
       if (!hasLikelyListingSignals(html)) {
         console.log(`  İlan sinyali yok (deneme ${attempt})`);
+        // Cloudflare Turnstile challenge varsa coz
+        const solved = await solveTurnstileIfPresent(20000);
+        if (solved) {
+          const htmlAfter = await page.content();
+          if (hasLikelyListingSignals(htmlAfter)) {
+            stats.successfulRequests++;
+            stats.pagesLoaded++;
+            stats.creditsUsed++;
+            return { html: htmlAfter, status: 'OK' };
+          }
+        }
         await sleep(2000);
         continue;
       }
@@ -207,6 +297,9 @@ export async function initSession() {
       timeout: DEFAULT_NAV_TIMEOUT_MS,
     });
     await sleep(2000);
+
+    // Cloudflare Turnstile challenge varsa coz
+    await solveTurnstileIfPresent(20000);
 
     const html = await page.content();
     if (hasLikelyListingSignals(html)) {
