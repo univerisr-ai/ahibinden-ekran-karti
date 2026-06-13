@@ -364,7 +364,7 @@ async function fetchPage(targetUrl, label = '') {
       console.log(`  Hata (deneme ${attempt}): ${err.message}`);
       await sleep(2000);
     }
-  }}
+  }
 
   stats.failedRequests++;
   return { html: null, status: 'FAILED' };
