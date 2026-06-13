@@ -8,8 +8,14 @@ from camoufox.server import to_camel_case_dict, get_nodejs
 
 headless = os.environ.get('CAMOUFOX_HEADLESS', 'true').lower() == 'true'
 
-# Generate config via Camoufox (includes fingerprint generation etc.)
-config = launch_options(headless=headless)
+# Generate config via Camoufox with realistic fingerprint for Cloudflare
+config = launch_options(
+    headless=headless,
+    locale="tr-TR",
+    window=(1920, 1080),
+    humanize=True,
+    disable_coop=True,
+)
 config.pop('proxy', None)
 
 # Use our custom launchServer.js (ships in the repo)
