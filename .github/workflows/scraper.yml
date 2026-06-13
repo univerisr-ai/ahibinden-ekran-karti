@@ -86,6 +86,7 @@ jobs:
         id: camoufox_server
         shell: bash
         env:
+          HOME: /root
           CAMOUFOX_HEADLESS: true
         run: |
           xvfb-run python3 scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
