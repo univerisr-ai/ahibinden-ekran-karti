@@ -38,7 +38,7 @@ jobs:
         shell: bash
         env:
           HOME: /root
-          CAMOUFOX_PROXY: ${{ secrets.CAMOUFOX_PROXY }}
+          CAMOUFOX_PROXY: false
         run: |
           export HOME=/root
           export CAMOUFOX_HEADLESS=true

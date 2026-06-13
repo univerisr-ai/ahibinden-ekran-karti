@@ -26,5 +26,4 @@ COPY package*.json /app/
 RUN npm ci --no-optional --ignore-scripts 2>&1 | tail -3
 
 ENV CAMOUFOX_HEADLESS=true
-ENV CAMOUFOX_PROXY=socks5://127.0.0.1:40000
 ENV CAMOUFOX_BROWSER_PATH=/opt/camoufox/camoufox-bin

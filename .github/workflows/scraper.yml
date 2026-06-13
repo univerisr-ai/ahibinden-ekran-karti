@@ -78,10 +78,14 @@ jobs:
         if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
         env:
-          CAMOUFOX_PROXY: ${{ secrets.CAMOUFOX_PROXY }}
+          CAMOUFOX_PROXY: false
         run: |
           echo "Testing proxy..."
-          curl -fsS -x "$CAMOUFOX_PROXY" https://www.cloudflare.com/cdn-cgi/trace | tee proxy-trace.txt
+          if [ -n "$CAMOUFOX_PROXY" ] && [ "$CAMOUFOX_PROXY" != "false" ]; then
+            curl -fsS -x "$CAMOUFOX_PROXY" https://www.cloudflare.com/cdn-cgi/trace | tee proxy-trace.txt
+          else
+            curl -fsS https://www.cloudflare.com/cdn-cgi/trace | tee proxy-trace.txt
+          fi
 
       - name: Start Camoufox Server
         if: steps.run_policy.outputs.should_run == 'true'
@@ -89,7 +93,7 @@ jobs:
         shell: bash
         env:
           HOME: /root
-          CAMOUFOX_PROXY: ${{ secrets.CAMOUFOX_PROXY }}
+          CAMOUFOX_PROXY: false
         run: |
           export HOME=/root
           export CAMOUFOX_HEADLESS=true

@@ -9,6 +9,9 @@ headless = os.environ.get('CAMOUFOX_HEADLESS', 'true').lower() == 'true'
 proxy_url = os.environ.get('CAMOUFOX_PROXY', '').strip()
 browser_path = os.environ.get('CAMOUFOX_BROWSER_PATH', '').strip()
 
+# Proxy ayari bossa veya "false"/"none" ise proxy kullanma
+use_proxy = proxy_url and proxy_url.lower() not in ('false', 'none', '0', 'no')
+
 kwargs = {
     'headless': headless,
     'locale': 'tr-TR',
@@ -20,7 +23,7 @@ kwargs = {
 if browser_path:
     kwargs['executable_path'] = browser_path
 
-if proxy_url:
+if use_proxy:
     kwargs['proxy'] = {'server': proxy_url}
     kwargs['geoip'] = True
 
