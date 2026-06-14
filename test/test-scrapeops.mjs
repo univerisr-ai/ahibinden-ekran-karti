@@ -62,9 +62,15 @@ async function ensureBrowser() {
       browser = await firefox.connect(CAMOUFOX_WS_ENDPOINT);
     } else if (CAMOUFOX_BIN) {
       console.log('  Camoufox binary baslatiliyor...');
+      const launchArgs = [];
+      const proxyUrl = process.env.CAMOUFOX_PROXY || process.env.ALL_PROXY || '';
+      if (proxyUrl) {
+        launchArgs.push('--proxy-server', proxyUrl);
+      }
       browser = await firefox.launch({
         executablePath: CAMOUFOX_BIN,
         headless: true,
+        args: launchArgs,
       });
     } else {
       console.log('  Chromium baslatiliyor...');
