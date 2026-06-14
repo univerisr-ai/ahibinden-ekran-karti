@@ -367,6 +367,23 @@ async function fetchPage(targetUrl, label = '') {
             return { html, status: 'OK' };
           }
         }
+        // Turnstile cozulemezse FlareSolverr dene
+        if (isChallengePage(html)) {
+          console.log(`  FlareSolverr deneniyor (deneme ${attempt})...`);
+          const fsOk = await applyFlareSolverrCookies(targetUrl);
+          if (fsOk) {
+            await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: DEFAULT_NAV_TIMEOUT_MS });
+            await sleep(3000);
+            html = await page.content();
+            if (hasLikelyListingSignals(html)) {
+              stats.successfulRequests++;
+              stats.pagesLoaded++;
+              stats.creditsUsed++;
+              page = savedPage;
+              return { html, status: 'OK' };
+            }
+          }
+        }
         // Turnstile sonrasi hala sinyal yoksa login kontrolu yap (sadece URL bazli)
         const loginOk = await maybeHandleChallenge();
         if (!loginOk) {
