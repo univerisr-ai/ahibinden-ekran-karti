@@ -36,7 +36,7 @@ jobs:
         run: |
           npx playwright install firefox
           npx playwright install-deps firefox
-          pip install websockets requests pyyaml 2>/dev/null || true
+          pip install websockets requests pyyaml orjson camoufox 2>/dev/null || true
 
       - name: Cloudflare WARP Proxy
         id: warp
