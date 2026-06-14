@@ -1,6 +1,0 @@
-selenium
-webdriver-manager
-undetected-chromedriver
-requests
-beautifulsoup4
-curl_cffi

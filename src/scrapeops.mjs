@@ -300,7 +300,7 @@ async function solveTurnstileIfPresent(maxWait = 20000) {
 
 async function fetchPage(targetUrl, label = '') {
   if (stats.creditsUsed >= MAX_CREDITS_PER_RUN) {
-    console.log(`  B├£T├çE L─░M─░T─░ A┼₧ILDI (${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
+    console.log(`  BÜTÇE LİMİTİ AŞILDI (${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
     return { html: null, status: 'BUDGET_EXHAUSTED' };
   }
 
@@ -413,89 +413,6 @@ export async function scrapeSegment(priceMin, priceMax) {
   return { htmlPages, totalFound: totalCount, pages: htmlPages.length, status: 'OK' };
 }
 
-export async function scrapePageSections(sectionCount) {
-  const firstUrl = buildSahibindenUrl(0, 0, 999000);
-
-  console.log(`  İlk sayfa yükleniyor: ${firstUrl}`);
-  let firstHtml = '';
-  let firstStatus = 'OK';
-  try {
-    const resp = await page.goto(firstUrl, { waitUntil: 'load', timeout: DEFAULT_NAV_TIMEOUT_MS });
-    await sleep(5000);
-    const curUrl = page.url();
-    const httpStatus = resp ? resp.status() : 'unknown';
-    const htmlSnippet = (await page.content().catch(() => '')).substring(0, 300);
-    console.log(`  Sayfa: ${curUrl}, HTTP: ${httpStatus}`);
-    console.log(`  HTML başı: ${htmlSnippet.replace(/\n/g, ' ').substring(0, 250)}`);
-
-    if (!hasLikelyListingSignals(htmlSnippet)) {
-      console.log('  Listing sinyali yok, Turnstile deneniyor...');
-      const solved = await solveTurnstileIfPresent(25000);
-      if (solved) {
-        await sleep(3000);
-        firstHtml = await page.content().catch(() => '');
-        console.log(`  Turnstile sonrasi HTML uzunluk: ${firstHtml.length}`);
-      }
-    } else {
-      firstHtml = await page.content().catch(() => '');
-    }
-  } catch (err) {
-    console.log(`  İlk sayfa hatası: ${err.message}`);
-    const fb = await fetchPage(firstUrl, 'Toplam hesaplama');
-    firstHtml = fb.html || '';
-    firstStatus = fb.status;
-  }
-
-  if (!firstHtml || firstStatus === 'BANNED' || firstStatus === 'BUDGET_EXHAUSTED') {
-    return [];
-  }
-
-  if (!firstHtml || status === 'BANNED' || status === 'BUDGET_EXHAUSTED') {
-    return [];
-  }
-
-  const totalCount = extractTotalCountFromHtml(firstHtml);
-  const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
-  const pagesPerSection = Math.ceil(totalPages / sectionCount);
-
-  console.log(`\n  📋 ${sectionCount} bölüm halinde ${totalPages} sayfa taranacak`);
-  console.log(`  📊 Toplam: ${totalCount.toLocaleString('tr')} ilan, bölüm başına ~${pagesPerSection} sayfa`);
-
-  const results = [];
-  let currentPage = 0;
-
-  for (let s = 0; s < sectionCount && currentPage < totalPages; s++) {
-    const startPage = currentPage;
-    const endPage = Math.min(startPage + pagesPerSection - 1, totalPages - 1);
-    const label = `Bölüm ${s + 1}`;
-
-    console.log(`\n  ${label}: sayfa ${startPage + 1}-${endPage + 1} (Kredi: ${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
-
-    const htmlPages = [];
-
-    for (let p = startPage; p <= endPage; p++) {
-      if (p === 0 && s === 0) {
-        htmlPages.push(firstHtml);
-        continue;
-      }
-      await sleep(REQUEST_DELAY_MS);
-      const offset = p * ITEMS_PER_PAGE;
-      const url = buildSahibindenUrl(offset, 0, 999000);
-      const { html, status: pageStatus } = await fetchPage(url, `${label} (s:${p + 1})`);
-
-      if (pageStatus === 'BUDGET_EXHAUSTED') break;
-      if (html) htmlPages.push(html);
-    }
-
-    results.push({ htmlPages, totalFound: totalCount, pages: htmlPages.length, status: 'OK' });
-    currentPage = endPage + 1;
-
-    console.log(`  ${label} bitti. Sayfa: ${htmlPages.length}`);
-  }
-
-  return results;
-}
-
 export async function scrapeDetailUrl(detailUrl) {
   const targetUrl = String(detailUrl || '').trim();
   if (!targetUrl) return { html: null, status: 'INVALID_URL' };
@@ -527,13 +444,13 @@ export async function initSession() {
     const url = page.url();
     const html = await page.content().catch(() => '');
 
-    // Login sayfasina yonlendirildik ΓåÆ session gecersiz
+    // Login sayfasina yonlendirildi → session gecersiz
     if (url.includes('giris') || html.toLowerCase().includes('giris yap')) {
-      console.log('  Login sayfasi ΓÇö cookie gerekli.');
+      console.log('  Login sayfasi — cookie gerekli.');
       return { ok: false, code: 'LOGIN_REQUIRED' };
     }
 
-    // Bana Ozel sayfasi acildi ΓåÆ session gecerli
+    // Bana Ozel sayfasi acildi → session gecerli
     if (url.includes('banaozel')) {
       console.log('  Session dogrulandi, login kalindi.');
       const saved = loadSahibindenStorageState();
@@ -617,7 +534,7 @@ export async function saveStorageState() {
 }
 
 export default {
-  initSession, scrapeSegment, scrapePageSections, scrapeDetailUrl, getStats,
+  initSession, scrapeSegment, scrapeDetailUrl, getStats,
   saveChallengeProofScreenshot, takeScreenshot, closeBrowser,
   saveStorageState,
 };

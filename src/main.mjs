@@ -22,11 +22,9 @@ import {
   PRODUCT_LABEL,
   PRODUCT_REPORT_TITLE,
   PRODUCT_TYPE,
-  USE_PAGE_SECTIONS,
-  PAGE_SECTION_COUNT,
   getActiveSegments,
 } from './config.mjs';
-import { initSession, scrapeSegment, scrapePageSections, getStats, saveChallengeProofScreenshot, closeBrowser, saveStorageState } from './scrapeops.mjs';
+import { initSession, scrapeSegment, getStats, saveChallengeProofScreenshot, closeBrowser, saveStorageState } from './scrapeops.mjs';
 import { parseAllPages, deduplicateListings, filterInvalidListings } from './parser.mjs';
 import { evaluateAllListings, selectTopOpportunities, fallbackSelection } from './ai_evaluator.mjs';
 import { buildAnalyzerDispatchPayload } from './analyzer_dispatch_payload.mjs';
@@ -426,11 +424,7 @@ function buildReport(stats, totalRaw, totalClean, topDeals, elapsedSec) {
   let report = `📊 *${PRODUCT_REPORT_TITLE}*\n`;
   report += `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
   report += `📈 *İstatistikler*\n`;
-  if (USE_PAGE_SECTIONS) {
-    report += `• Taranan Bölüm     : ${PAGE_SECTION_COUNT}\n`;
-  } else {
-    report += `• Taranan Segment   : ${getActiveSegments().length}\n`;
-  }
+  report += `• Taranan Segment   : ${getActiveSegments().length}\n`;
   report += `• Bulunan Toplam    : ${totalRaw.toLocaleString('tr')} ilan\n`;
   report += `• Tekrarsız İlan    : ${totalClean.toLocaleString('tr')} ilan\n`;
   report += `• Süre              : ${minutes} dk ${seconds} sn\n`;
@@ -515,27 +509,19 @@ async function main() {
     console.log(`  🍪 Session cookie source: ${session.cookieSource} (${session.cookieCount})`);
   }
 
-  // ADIM 2: Segmentleri/Sayfa bölümlerini çek
+  // ADIM 2: Segmentleri çek
+  const segments = getActiveSegments();
+  console.log(`\n  📋 ${segments.length} segment çekilecek`);
+
   const segmentResults = [];
+  for (const [priceMin, priceMax] of segments) {
+    const result = await scrapeSegment(priceMin, priceMax);
+    segmentResults.push({ priceMin, priceMax, result });
 
-  if (USE_PAGE_SECTIONS) {
-    const sectionResults = await scrapePageSections(PAGE_SECTION_COUNT);
-    for (let i = 0; i < sectionResults.length; i++) {
-      segmentResults.push({ sectionIndex: i, result: sectionResults[i] });
-    }
-  } else {
-    const segments = getActiveSegments();
-    console.log(`\n  📋 ${segments.length} segment çekilecek`);
-
-    for (const [priceMin, priceMax] of segments) {
-      const result = await scrapeSegment(priceMin, priceMax);
-      segmentResults.push({ priceMin, priceMax, result });
-
-      if (result.status === 'ACTION_REQUIRED') {
-        console.log('\n  🛑 Scrape.do hesap/domain kısıtı algılandı. Taramayı erken durduruyorum.');
-        await sendTelegram('🛑 Scrape.do bu domain için ACTION REQUIRED döndü. support@scrape.do üzerinden whitelist talep etmeniz gerekiyor.');
-        break;
-      }
+    if (result.status === 'ACTION_REQUIRED') {
+      console.log('\n  🛑 Scrape.do hesap/domain kısıtı algılandı. Taramayı erken durduruyorum.');
+      await sendTelegram('🛑 Scrape.do bu domain için ACTION REQUIRED döndü. support@scrape.do üzerinden whitelist talep etmeniz gerekiyor.');
+      break;
     }
   }
 
@@ -545,14 +531,9 @@ async function main() {
   console.log('  ════════════════════════════════════════════');
 
   let allListings = [];
-  for (const entry of segmentResults) {
-    let label;
-    if (entry.sectionIndex !== undefined) {
-      label = `Bölüm ${entry.sectionIndex + 1}`;
-    } else {
-      label = `${entry.priceMin.toLocaleString('tr')}-${entry.priceMax.toLocaleString('tr')} TL`;
-    }
-    const { htmlPages = [] } = entry.result;
+  for (const { priceMin, priceMax, result } of segmentResults) {
+    const label = `${priceMin.toLocaleString('tr')}-${priceMax.toLocaleString('tr')} TL`;
+    const { htmlPages = [] } = result;
     if (htmlPages.length > 0) {
       const { listings } = parseAllPages(htmlPages, label);
       allListings.push(...listings);
@@ -630,14 +611,13 @@ async function main() {
     stats: st,
     totalRaw,
     totalClean,
-    segmentBreakdown: segmentResults.map(entry => {
-      const { result } = entry;
-      const base = { status: result?.status || 'UNKNOWN', pages: result?.pages || 0, totalFound: result?.totalFound || 0 };
-      if (entry.sectionIndex !== undefined) {
-        return { sectionIndex: entry.sectionIndex, ...base };
-      }
-      return { priceMin: entry.priceMin, priceMax: entry.priceMax, ...base };
-    }),
+    segmentBreakdown: segmentResults.map(({ priceMin, priceMax, result }) => ({
+      priceMin,
+      priceMax,
+      status: result?.status || 'UNKNOWN',
+      pages: result?.pages || 0,
+      totalFound: result?.totalFound || 0,
+    })),
     topDeals,
     allListings,
     elapsedSeconds: elapsedSec,
