@@ -26,20 +26,24 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browsers
-        run: npx playwright install chromium
+        run: |
+          npx playwright install chromium
+          npx playwright install-deps chromium
 
       - name: Run parallel test (test-main.mjs)
         env:
           SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
+          SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
           TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
           TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          HEADLESS: 'true'
           PARALLEL_PAGES: '10'
-          MAX_PAGES_PER_SEGMENT: '5'
+          MAX_PAGES_PER_SEGMENT: '3'
           CUSTOM_MIN_PRICE: '0'
           CUSTOM_MAX_PRICE: '2000'
           BYPASS_AI: 'true'
-          ENABLE_TELEGRAM: 'true'
+          ENABLE_TELEGRAM: 'false'
         run: node test/test-main.mjs
 
       - name: Upload test results
@@ -50,7 +54,7 @@ jobs:
           path: |
             output.json
             pipeline-messages.json
-            screenshots/
             cf_proof.png
+            scraper.log
           if-no-files-found: warn
           retention-days: 7

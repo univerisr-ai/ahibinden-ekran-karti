@@ -175,7 +175,7 @@ export const MAX_PAGES_PER_SEGMENT = parseInt(process.env.MAX_PAGES_PER_SEGMENT 
 export const CONCURRENCY_LIMIT = 1;
 export const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '2', 10);
 export const REQUEST_DELAY_MS = parseInt(process.env.REQUEST_DELAY_MS || '700', 10);
-export const PARALLEL_PAGES = Math.max(1, parseInt(process.env.PARALLEL_PAGES || '10', 10));
+export const PARALLEL_PAGES = Math.max(1, parseInt(process.env.PARALLEL_PAGES || '1', 10));
 
 // ─── Fiyat Segmentleri (TL) ─────────────────────────────────
 // Yogun fiyat araliklarini bolerek Sahibinden sayfa tavanina takilmamayi hedefler.

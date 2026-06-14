@@ -12,14 +12,14 @@ import { chromium, firefox } from 'playwright';
 import {
   extractTotalCountFromHtml,
   hasLikelyListingSignals,
-} from './test-parser.mjs';
+} from './parser.mjs';
 import { loadSahibindenStorageState } from './test-session_state.mjs';
 import { loadAllSahibindenCookies } from './test-cookies.mjs';
 import {
   solveUrlWithFlareSolverr,
   flareSolverrCookiesToPlaywright,
-} from './test-flaresolverr.mjs';
-import { loadMouseRecording, replayMouseRecording } from './test-mouse_recorder.mjs';
+} from './flaresolverr.mjs';
+import { loadMouseRecording, replayMouseRecording } from './mouse_recorder.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -86,14 +86,11 @@ async function ensureBrowser() {
     }
 
     context = await browser.newContext(contextOptions);
-
-    // PARALLEL_PAGES adet sayfa (sekme) oluştur
     pages = [];
     for (let i = 0; i < PARALLEL_PAGES; i++) {
       pages.push(await context.newPage());
     }
     page = pages[0];
-    console.log(`  ${pages.length} adet sayfa (sekme) olusturuldu.`);
 
     // Daha once kaydedilmis cookie varsa yukle
     const saved = loadSahibindenStorageState();
@@ -125,11 +122,10 @@ async function ensureBrowser() {
   }
 }
 
-async function maybeHandleChallenge(targetPage) {
-  const p = targetPage || page;
-  if (!p) return false;
+async function maybeHandleChallenge() {
+  if (!page) return false;
   try {
-    const currentUrl = p.url();
+    const currentUrl = page.url();
     if (currentUrl.includes('secure.sahibinden.com/login') || currentUrl.includes('giris.sahibinden.com')) {
       console.log('  Login sayfasina yonlendirildi, cookie olmadan devam edilemiyor.');
       console.log('  Login sayfasi URL:', currentUrl);
@@ -180,12 +176,11 @@ async function applyFlareSolverrCookies(targetUrl) {
   }
 }
 
-async function solveTurnstileIfPresent(maxWait = 20000, targetPage) {
-  const p = targetPage || page;
-  if (!p) return false;
+async function solveTurnstileIfPresent(maxWait = 20000) {
+  if (!page) return false;
   try {
     // 1. Click "Devam Et" / Continue button if present
-    const devamBtn = p.locator('#btn-continue');
+    const devamBtn = page.locator('#btn-continue');
     if (await devamBtn.isVisible().catch(() => false)) {
       console.log('  Devam Et butonu bulundu, tiklaniyor.');
       await devamBtn.click({ force: true });
@@ -195,9 +190,9 @@ async function solveTurnstileIfPresent(maxWait = 20000, targetPage) {
     // 1b. Replay recorded human mouse movements if available
     const mouseRecording = loadMouseRecording();
     if (mouseRecording) {
-      await replayMouseRecording(p, mouseRecording);
+      await replayMouseRecording(page, mouseRecording);
       await sleep(1000);
-      await p.screenshot({ path: 'after_mouse_replay.png' });
+      await page.screenshot({ path: 'after_mouse_replay.png' });
     }
 
     let clicked = false;
@@ -206,7 +201,7 @@ async function solveTurnstileIfPresent(maxWait = 20000, targetPage) {
     const searchStart = Date.now();
     while (Date.now() - searchStart < 10000) {
       // 2a. Try frameLocator approach: checkbox inside any iframe
-      const frames = p.frames();
+      const frames = page.frames();
       for (let i = 0; i < frames.length; i++) {
         const frame = frames[i];
         try {
@@ -222,7 +217,7 @@ async function solveTurnstileIfPresent(maxWait = 20000, targetPage) {
       if (clicked) break;
 
       // 2b. Find Turnstile iframes by src / bounding box
-      const iframes = p.locator('iframe');
+      const iframes = page.locator('iframe');
       const count = await iframes.count().catch(() => 0);
       for (let i = 0; i < count; i++) {
         const iframe = iframes.nth(i);
@@ -235,11 +230,11 @@ async function solveTurnstileIfPresent(maxWait = 20000, targetPage) {
             const clickX = box.x + 25;
             const clickY = box.y + (box.height / 2);
             console.log(`  Turnstile iframe bulundu, tiklaniyor: ${clickX}, ${clickY}`);
-            await p.mouse.move(clickX, clickY, { steps: 5 });
+            await page.mouse.move(clickX, clickY, { steps: 5 });
             await sleep(200);
-            await p.mouse.down();
+            await page.mouse.down();
             await sleep(100);
-            await p.mouse.up();
+            await page.mouse.up();
             clicked = true;
           }
         } else if (box && box.width > 250 && box.width < 350 && box.height > 50 && box.height < 90) {
@@ -247,21 +242,21 @@ async function solveTurnstileIfPresent(maxWait = 20000, targetPage) {
           const clickX = box.x + 25;
           const clickY = box.y + (box.height / 2);
           console.log(`  Turnstile-benzeri iframe bulundu, tiklaniyor: ${clickX}, ${clickY}`);
-          await p.mouse.click(clickX, clickY);
+          await page.mouse.click(clickX, clickY);
           clicked = true;
         }
       }
       if (clicked) break;
 
       // 2c. Fallback: visible Turnstile widget container
-      const tw = p.locator('#turnStileWidget, [id*="turnstile" i], [class*="turnstile" i], #challenge-stage, .cf-turnstile, .challenge-stage');
+      const tw = page.locator('#turnStileWidget, [id*="turnstile" i], [class*="turnstile" i], #challenge-stage, .cf-turnstile, .challenge-stage');
       if (await tw.isVisible().catch(() => false)) {
         const tbox = await tw.boundingBox().catch(() => null);
         if (tbox) {
           const clickX = tbox.x + 25;
           const clickY = tbox.y + (tbox.height / 2);
           console.log(`  Turnstile widget bulundu, tiklaniyor: ${clickX}, ${clickY}`);
-          await p.mouse.click(clickX, clickY);
+          await page.mouse.click(clickX, clickY);
           clicked = true;
           break;
         }
@@ -272,7 +267,7 @@ async function solveTurnstileIfPresent(maxWait = 20000, targetPage) {
 
     if (!clicked) {
       // Managed challenge: no visible iframe, wait for auto-verification
-      const html = await p.content().catch(() => '');
+      const html = await page.content().catch(() => '');
       if (isChallengePage(html)) {
         console.log('  Cloudflare challenge sayfasi tespit edildi, otomatik dogrulama bekleniyor...');
         clicked = true;
@@ -287,7 +282,7 @@ async function solveTurnstileIfPresent(maxWait = 20000, targetPage) {
     let reloaded = false;
     while (Date.now() - start < maxWait) {
       await sleep(1000);
-      const token = await p.evaluate(() => {
+      const token = await page.evaluate(() => {
         const input = document.querySelector('input[name="cf-turnstile-response"]');
         return input ? input.value : null;
       }).catch(() => null);
@@ -296,7 +291,7 @@ async function solveTurnstileIfPresent(maxWait = 20000, targetPage) {
         await sleep(1500);
         return true;
       }
-      const html = await p.content().catch(() => '');
+      const html = await page.content().catch(() => '');
       if (hasLikelyListingSignals(html)) {
         console.log('  Sayfa yuklendi, ilanlar gorunuyor.');
         return true;
@@ -304,7 +299,7 @@ async function solveTurnstileIfPresent(maxWait = 20000, targetPage) {
       // If waited more than half the time with no result, try reload
       if (!reloaded && Date.now() - start > maxWait / 2) {
         console.log('  Challenge cozulmedi, sayfa yenileniyor...');
-        await p.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
         await sleep(3000);
         reloaded = true;
       }
@@ -329,36 +324,39 @@ async function fetchPage(targetUrl, label = '') {
   }
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    const currentPage = acquirePage();
-    console.log(`  (page ${(nextPageIndex - 1) % PARALLEL_PAGES + 1}/${PARALLEL_PAGES}) -> ${label} (Deneme ${attempt})`);
+    // Paralel havuzdan bir sayfa (sekme) al, gecici olarak page'i degistir
+    const savedPage = page;
+    page = acquirePage();
+    console.log(`  Camoufox (page ${((nextPageIndex - 1) % PARALLEL_PAGES) + 1}/${PARALLEL_PAGES}) -> ${label} (Deneme ${attempt})`);
     stats.totalRequests++;
 
     try {
-      const response = await currentPage.goto(targetUrl, {
+      const response = await page.goto(targetUrl, {
         waitUntil: 'domcontentloaded',
         timeout: DEFAULT_NAV_TIMEOUT_MS,
       });
       await sleep(1500);
 
-      let html = await currentPage.content();
+      let html = await page.content();
       const respStatus = response ? response.status() : 200;
 
       // Once listing sinyali var mi kontrol et
       if (!hasLikelyListingSignals(html)) {
         console.log(`  İlan sinyali yok (deneme ${attempt})`);
         // Cloudflare Turnstile challenge varsa coz
-        const solved = await solveTurnstileIfPresent(20000, currentPage);
+        const solved = await solveTurnstileIfPresent(20000);
         if (solved) {
-          html = await currentPage.content();
+          html = await page.content();
           if (hasLikelyListingSignals(html)) {
             stats.successfulRequests++;
             stats.pagesLoaded++;
             stats.creditsUsed++;
+            page = savedPage;
             return { html, status: 'OK' };
           }
         }
         // Turnstile sonrasi hala sinyal yoksa login kontrolu yap (sadece URL bazli)
-        const loginOk = await maybeHandleChallenge(currentPage);
+        const loginOk = await maybeHandleChallenge();
         if (!loginOk) {
           console.log(`  Login sayfasi (deneme ${attempt})`);
           await sleep(2000);
@@ -369,7 +367,7 @@ async function fetchPage(targetUrl, label = '') {
       }
 
       // Listing sinyali var, sadece URL bazli login redirect kontrolu
-      const loginOk = await maybeHandleChallenge(currentPage);
+      const loginOk = await maybeHandleChallenge();
       if (!loginOk) {
         console.log(`  Login redirect (deneme ${attempt})`);
         await sleep(2000);
@@ -379,10 +377,13 @@ async function fetchPage(targetUrl, label = '') {
       stats.successfulRequests++;
       stats.pagesLoaded++;
       stats.creditsUsed++;
+      page = savedPage;
       return { html, status: 'OK' };
     } catch (err) {
       console.log(`  Hata (deneme ${attempt}): ${err.message}`);
       await sleep(2000);
+    } finally {
+      page = savedPage;
     }
   }
 
@@ -416,39 +417,55 @@ export async function scrapeSegment(priceMin, priceMax) {
   const totalPages = Math.min(Math.ceil(totalCount / ITEMS_PER_PAGE), MAX_PAGES_PER_SEGMENT);
   console.log(`  ${label}: ${totalCount.toLocaleString('tr')} ilan, ${totalPages} sayfa.`);
 
-  // Kalan sayfalari PARALLEL_PAGES'lik batch'ler halinde paralel çek
-  const pageIndexes = [];
-  for (let i = 1; i < totalPages; i++) {
-    pageIndexes.push(i);
-  }
+  if (PARALLEL_PAGES <= 1) {
+    // Tekli mod: eski sıralı çekim
+    for (let pageIndex = 1; pageIndex < totalPages; pageIndex++) {
+      await sleep(REQUEST_DELAY_MS);
+      const offset = pageIndex * ITEMS_PER_PAGE;
+      const url = buildSahibindenUrl(offset, priceMin, priceMax);
+      const { html, status: pageStatus } = await fetchPage(url, `${label} (s:${pageIndex + 1})`);
 
-  for (let batchStart = 0; batchStart < pageIndexes.length; batchStart += PARALLEL_PAGES) {
-    const batch = pageIndexes.slice(batchStart, batchStart + PARALLEL_PAGES);
-    console.log(`  Batch ${Math.floor(batchStart / PARALLEL_PAGES) + 1}: ${batch.length} sayfa paralel`);
-    const batchResults = await Promise.allSettled(
-      batch.map(async (pageIndex) => {
-        await sleep(REQUEST_DELAY_MS);
-        const offset = pageIndex * ITEMS_PER_PAGE;
-        const url = buildSahibindenUrl(offset, priceMin, priceMax);
-        return fetchPage(url, `${label} (s:${pageIndex + 1})`);
-      })
-    );
+      if (pageStatus === 'BANNED' || pageStatus === 'BUDGET_EXHAUSTED') {
+        return { htmlPages, totalFound: totalCount, pages: htmlPages.length, status: pageStatus };
+      }
 
-    let stopped = false;
-    for (const result of batchResults) {
-      if (result.status === 'fulfilled') {
-        const { html, status: pageStatus } = result.value;
-        if (html) htmlPages.push(html);
-        if (pageStatus === 'BANNED' || pageStatus === 'BUDGET_EXHAUSTED') {
-          stopped = true;
-          break;
+      if (html) htmlPages.push(html);
+    }
+  } else {
+    // Paralel mod: sayfaları batch'ler halinde çek
+    const pageIndexes = [];
+    for (let i = 1; i < totalPages; i++) {
+      pageIndexes.push(i);
+    }
+
+    for (let batchStart = 0; batchStart < pageIndexes.length; batchStart += PARALLEL_PAGES) {
+      const batch = pageIndexes.slice(batchStart, batchStart + PARALLEL_PAGES);
+      console.log(`  Batch ${Math.floor(batchStart / PARALLEL_PAGES) + 1}: ${batch.length} sayfa paralel`);
+      const batchResults = await Promise.allSettled(
+        batch.map(async (pageIndex) => {
+          await sleep(REQUEST_DELAY_MS);
+          const offset = pageIndex * ITEMS_PER_PAGE;
+          const url = buildSahibindenUrl(offset, priceMin, priceMax);
+          return fetchPage(url, `${label} (s:${pageIndex + 1})`);
+        })
+      );
+
+      let stopped = false;
+      for (const result of batchResults) {
+        if (result.status === 'fulfilled') {
+          const { html, status: pageStatus } = result.value;
+          if (html) htmlPages.push(html);
+          if (pageStatus === 'BANNED' || pageStatus === 'BUDGET_EXHAUSTED') {
+            stopped = true;
+            break;
+          }
         }
       }
+      if (stopped) break;
     }
-    if (stopped) break;
   }
 
-  // Segment sonunda storage state'i kaydet (crash durumunda cookie kaybini önle)
+  // Segment sonunda storage state kaydet
   await saveStorageState();
 
   console.log(`  Segment bitti. Toplam sayfa: ${htmlPages.length}`);
