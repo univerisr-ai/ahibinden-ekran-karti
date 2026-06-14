@@ -41,10 +41,10 @@ jobs:
     - name: Gerekli Paketleri Yükle
       run: npm install
 
-    - name: Chromium'u Kur (Playwright için)
+    - name: Google Chrome'u Kur (Playwright için)
       run: |
-        npx playwright install chromium
-        npx playwright install-deps chromium
+        npx playwright install chrome
+        npx playwright install-deps chrome
 
     - name: Cloudflare WARP Proxy Kurulumu
       if: vars.USE_WARP_PROXY == 'true' || vars.DOLAP_USE_WARP_PROXY == 'true'

@@ -300,7 +300,7 @@ async function solveTurnstileIfPresent(maxWait = 20000) {
 
 async function fetchPage(targetUrl, label = '') {
   if (stats.creditsUsed >= MAX_CREDITS_PER_RUN) {
-    console.log(`  BÜTÇE LİMİTİ AŞILDI (${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
+    console.log(`  B├£T├çE L─░M─░T─░ A┼₧ILDI (${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
     return { html: null, status: 'BUDGET_EXHAUSTED' };
   }
 
@@ -444,13 +444,13 @@ export async function initSession() {
     const url = page.url();
     const html = await page.content().catch(() => '');
 
-    // Login sayfasina yonlendirildi → session gecersiz
+    // Login sayfasina yonlendirildik ΓåÆ session gecersiz
     if (url.includes('giris') || html.toLowerCase().includes('giris yap')) {
-      console.log('  Login sayfasi — cookie gerekli.');
+      console.log('  Login sayfasi ΓÇö cookie gerekli.');
       return { ok: false, code: 'LOGIN_REQUIRED' };
     }
 
-    // Bana Ozel sayfasi acildi → session gecerli
+    // Bana Ozel sayfasi acildi ΓåÆ session gecerli
     if (url.includes('banaozel')) {
       console.log('  Session dogrulandi, login kalindi.');
       const saved = loadSahibindenStorageState();
