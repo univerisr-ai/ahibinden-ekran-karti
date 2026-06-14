@@ -26,8 +26,8 @@ import {
 } from './test-config.mjs';
 import { initSession, scrapeSegment, getStats, saveChallengeProofScreenshot, closeBrowser, saveStorageState } from './test-scrapeops.mjs';
 import { parseAllPages, deduplicateListings, filterInvalidListings } from './test-parser.mjs';
-import { evaluateAllListings, selectTopOpportunities, fallbackSelection } from './test-ai_evaluator.mjs';
-import { buildAnalyzerDispatchPayload } from './test-analyzer_dispatch_payload.mjs';
+import { evaluateAllListings, selectTopOpportunities, fallbackSelection } from '../src/ai_evaluator.mjs';
+import { buildAnalyzerDispatchPayload } from '../src/analyzer_dispatch_payload.mjs';
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 let telegramTargetModeLogged = false;

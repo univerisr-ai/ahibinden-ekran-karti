@@ -12,14 +12,14 @@ import { chromium, firefox } from 'playwright';
 import {
   extractTotalCountFromHtml,
   hasLikelyListingSignals,
-} from './parser.mjs';
-import { loadSahibindenStorageState } from './test-session_state.mjs';
-import { loadAllSahibindenCookies } from './test-cookies.mjs';
+} from './test-parser.mjs';
+import { loadSahibindenStorageState } from '../src/session_state.mjs';
+import { loadAllSahibindenCookies } from '../src/cookies.mjs';
 import {
   solveUrlWithFlareSolverr,
   flareSolverrCookiesToPlaywright,
-} from './flaresolverr.mjs';
-import { loadMouseRecording, replayMouseRecording } from './mouse_recorder.mjs';
+} from '../src/flaresolverr.mjs';
+import { loadMouseRecording, replayMouseRecording } from '../src/mouse_recorder.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

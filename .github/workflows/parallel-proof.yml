@@ -13,6 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    services:
+      flaresolverr:
+        image: ghcr.io/flaresolverr/flaresolverr:latest
+        env:
+          LOG_LEVEL: info
+          PROXY_URL: socks5://127.0.0.1:40000
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,18 +32,74 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright browsers
+      - name: Install Playwright browsers + Camoufox deps
         run: |
-          npx playwright install chromium
-          npx playwright install-deps chromium
+          npx playwright install firefox
+          npx playwright install-deps firefox
+          pip install websockets requests pyyaml 2>/dev/null || true
+
+      - name: Cloudflare WARP Proxy
+        id: warp
+        shell: bash
+        run: |
+          set -u
+          if (
+            set -euo pipefail
+            curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+            sudo apt-get update
+            sudo apt-get install -y cloudflare-warp xvfb
+            warp-cli --accept-tos registration new || warp-cli --accept-tos register
+            warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy
+            warp-cli --accept-tos proxy port 40000 || warp-cli --accept-tos set-proxy-port 40000
+            warp-cli --accept-tos connect
+            sleep 8
+            warp-cli --accept-tos status
+            curl -fsS -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | tee warp-trace.txt
+          ); then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "proxy_url=socks5://127.0.0.1:40000" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "proxy_url=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Start Camoufox server
+        id: camoufox
+        shell: bash
+        run: |
+          xvfb-run -a python3 scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
+          SERVER_PID=$!
+          echo "server_pid=$SERVER_PID" >> "$GITHUB_OUTPUT"
+          for i in $(seq 1 60); do
+            if grep -q "Websocket endpoint" /tmp/camoufox-server.log 2>/dev/null; then
+              WS=$(grep -oP 'ws://[^\s]+' /tmp/camoufox-server.log | head -1)
+              echo "camoufox_ws=$WS" >> "$GITHUB_OUTPUT"
+              echo "Camoufox server ready: $WS"
+              break
+            fi
+            sleep 2
+          done
+          if [ -z "$WS" ]; then
+            echo "Camoufox server failed to start"
+            cat /tmp/camoufox-server.log
+            exit 1
+          fi
+
+      - name: Cache storage state
+        uses: actions/cache@v4
+        with:
+          path: .playwright/storage-state.json
+          key: sahibinden-storage-state-Linux-${{ github.run_id }}
+          restore-keys: |
+            sahibinden-storage-state-Linux-
 
       - name: Run parallel test (test-main.mjs)
         env:
-          SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
-          SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
-          TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
-          TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CAMOUFOX_WS_ENDPOINT: ${{ steps.camoufox.outputs.camoufox_ws }}
+          CAMOUFOX_PROXY: socks5://127.0.0.1:40000
+          CAMOUFOX_HEADLESS: 'true'
+          FLARESOLVERR_URL: http://flaresolverr:8191/v1
           HEADLESS: 'true'
           PARALLEL_PAGES: '10'
           MAX_PAGES_PER_SEGMENT: '3'
@@ -44,6 +107,11 @@ jobs:
           CUSTOM_MAX_PRICE: '2000'
           BYPASS_AI: 'true'
           ENABLE_TELEGRAM: 'false'
+          SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
+          SAHIBINDEN_STORAGE_STATE_FILE: .playwright/storage-state.json
+          SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
+          TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: node test/test-main.mjs
 
       - name: Upload test results
