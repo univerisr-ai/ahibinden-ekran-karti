@@ -11,7 +11,7 @@ on:
 jobs:
   parallel-proof:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     services:
       flaresolverr:
@@ -32,46 +32,43 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Camoufox + download browser
+      - name: Install Camoufox + deps
         run: |
           pip install --upgrade pip 2>/dev/null || true
-          pip install "camoufox>=0.4" 2>/dev/null || true
-          python3 -m camoufox fetch 2>&1 | tail -5
+          pip install "camoufox[geoip]>=0.4" playwright websockets requests pyyaml 2>/dev/null || true
+          playwright install chromium 2>&1 | tail -3
+          python3 -m camoufox fetch 2>&1 | tail -3
           sudo apt-get install -y xvfb 2>/dev/null || true
 
-      - name: Get Camoufox binary
-        id: camoufox-bin
+      - name: Fix Playwright driver for Camoufox compat
         shell: bash
         run: |
-          CAMO_DIR=$(python3 -m camoufox path 2>/dev/null || echo "$HOME/.cache/camoufox")
-          echo "Camoufox dir: $CAMO_DIR"
-          ls -la "$CAMO_DIR" 2>/dev/null || true
-          echo "---"
-          find "$CAMO_DIR" -type f -ls 2>/dev/null || find "$CAMO_DIR" -type f 2>/dev/null
+          # Find the Playwright driver lib directory
+          DRIVER_LIB=$(python3 -c "
+from playwright._impl._driver import compute_driver_executable
+import pathlib
+p = compute_driver_executable()[0]
+d = pathlib.Path(p).parent / 'package' / 'lib'
+print(d)
+" 2>/dev/null)
+          echo "Driver lib: $DRIVER_LIB"
+          ls "$DRIVER_LIB/" 2>/dev/null || echo "dir not found"
           
-          # Find firefox executable (Camoufox is a Firefox fork)
-          BIN=""
-          for p in "$CAMO_DIR/camoufox-bin" "$CAMO_DIR/firefox" "$CAMO_DIR/firefox/firefox" "$CAMO_DIR/firefox/firefox-bin"; do
-            if [ -f "$p" ]; then
-              chmod +x "$p" 2>/dev/null || true
-              BIN="$p"
-              break
+          # Check if browserServerImpl.js exists somewhere
+          MISSING="$DRIVER_LIB/browserServerImpl.js"
+          if [ ! -f "$MISSING" ]; then
+            echo "browserServerImpl.js missing, searching for it..."
+            FOUND=$(find "$DRIVER_LIB/.." -name "browserServerImpl.js" 2>/dev/null | head -1)
+            if [ -n "$FOUND" ]; then
+              echo "Found at: $FOUND"
+              ln -sf "$FOUND" "$MISSING" && echo "Symlink created"
+            else
+              echo "browserServerImpl.js not found anywhere. Checking available files:"
+              find "$DRIVER_LIB/.." -name "*.js" -type f 2>/dev/null | head -30
             fi
-          done
-          
-          # Fallback: find any executable file
-          if [ -z "$BIN" ]; then
-            BIN=$(find "$CAMO_DIR" -type f -perm /u+x 2>/dev/null | head -1)
+          else
+            echo "browserServerImpl.js exists"
           fi
-          
-          if [ -z "$BIN" ]; then
-            echo "No binary found!"
-            exit 1
-          fi
-          
-          chmod +x "$BIN" 2>/dev/null || true
-          echo "bin_path=$BIN" >> "$GITHUB_OUTPUT"
-          file "$BIN"
 
       - name: Cloudflare WARP Proxy
         id: warp
@@ -99,6 +96,37 @@ jobs:
             echo "proxy_url=" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Start Camoufox server
+        id: camoufox
+        shell: bash
+        run: |
+          CAMOUFOX_HEADLESS=true CAMOUFOX_PROXY=socks5://127.0.0.1:40000 \
+            xvfb-run python3 scripts/camoufox-server.py \
+            > /tmp/camoufox-server.log 2>&1 &
+          SERVER_PID=$!
+          echo "server_pid=$SERVER_PID" >> "$GITHUB_OUTPUT"
+
+          for i in $(seq 1 90); do
+            if grep -q "Websocket endpoint" /tmp/camoufox-server.log 2>/dev/null; then
+              WS=$(grep -oP 'ws://[^\s]+' /tmp/camoufox-server.log | head -1)
+              echo "camoufox_ws=$WS" >> "$GITHUB_OUTPUT"
+              echo "Camoufox server ready: $WS"
+              break
+            fi
+            if grep -q "Server error\|Traceback\|Error:" /tmp/camoufox-server.log 2>/dev/null; then
+              echo "Camoufox server error detected"
+              cat /tmp/camoufox-server.log
+              exit 1
+            fi
+            sleep 2
+          done
+
+          if [ -z "$WS" ]; then
+            echo "Camoufox server failed to start"
+            cat /tmp/camoufox-server.log
+            exit 1
+          fi
+
       - name: Cache storage state
         uses: actions/cache@v4
         with:
@@ -109,8 +137,7 @@ jobs:
 
       - name: Run parallel test (test-main.mjs)
         env:
-          CAMOUFOX_BIN: ${{ steps.camoufox-bin.outputs.bin_path }}
-          CAMOUFOX_PROXY: socks5://127.0.0.1:40000
+          CAMOUFOX_WS_ENDPOINT: ${{ steps.camoufox.outputs.camoufox_ws }}
           HEADLESS: 'true'
           PARALLEL_PAGES: '10'
           MAX_PAGES_PER_SEGMENT: '3'
