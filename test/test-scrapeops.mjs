@@ -51,14 +51,21 @@ export function getStats() {
 }
 
 const CAMOUFOX_WS_ENDPOINT = String(process.env.CAMOUFOX_WS_ENDPOINT || '').trim();
-const USE_CAMOUFOX = CAMOUFOX_WS_ENDPOINT.length > 0;
+const CAMOUFOX_BIN = String(process.env.CAMOUFOX_BIN || '').trim();
+const USE_CAMOUFOX = CAMOUFOX_WS_ENDPOINT.length > 0 || CAMOUFOX_BIN.length > 0;
 
 async function ensureBrowser() {
   if (browser && context && pages.length > 0) return true;
   try {
-    if (USE_CAMOUFOX) {
+    if (CAMOUFOX_WS_ENDPOINT) {
       console.log('  Camoufox server mode baslatiliyor...');
       browser = await firefox.connect(CAMOUFOX_WS_ENDPOINT);
+    } else if (CAMOUFOX_BIN) {
+      console.log('  Camoufox binary baslatiliyor...');
+      browser = await firefox.launch({
+        executablePath: CAMOUFOX_BIN,
+        headless: true,
+      });
     } else {
       console.log('  Chromium baslatiliyor...');
       browser = await chromium.launch({
@@ -80,7 +87,6 @@ async function ensureBrowser() {
       locale: 'tr-TR',
       timezoneId: 'Europe/Istanbul',
     };
-    // Camoufox/Firefox server mode does not support Playwright video recording.
     if (!USE_CAMOUFOX) {
       contextOptions.recordVideo = { dir: videoDir, size: { width: 1366, height: 900 } };
     }
