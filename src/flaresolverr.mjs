@@ -17,7 +17,6 @@ function loadSahibindenCookiesForFlareSolverr() {
       .map((c) => ({
         name: c.name,
         value: c.value,
-        domain: c.domain || undefined,
       }))
       .filter((c) => c.name && c.value);
   } catch (err) {
