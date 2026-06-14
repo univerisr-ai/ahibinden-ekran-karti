@@ -18,7 +18,7 @@ jobs:
         image: ghcr.io/flaresolverr/flaresolverr:latest
         env:
           LOG_LEVEL: info
-          PROXY_URL: socks5://127.0.0.1:40000
+          PROXY_URL: socks5://host.docker.internal:40000
 
     steps:
       - name: Checkout
@@ -90,10 +90,21 @@ jobs:
           restore-keys: |
             sahibinden-storage-state-Linux-
 
+      - name: Test FlareSolverr connectivity
+        shell: bash
+        run: |
+          echo "Testing FlareSolverr..."
+          curl -fsS -m 5 http://flaresolverr:8191/v1 && echo "OK" || echo "FAILED"
+          curl -fsS -m 10 -X POST http://flaresolverr:8191/v1 \
+            -H "Content-Type: application/json" \
+            -d "{\"cmd\":\"request.get\",\"url\":\"https://httpbin.org/ip\",\"maxTimeout\":30000}" \
+            > /tmp/fs-test.json 2>&1 && cat /tmp/fs-test.json || echo "FlareSolverr test failed"
+
       - name: Run parallel test (test-main.mjs)
         env:
           CAMOUFOX_BIN: ${{ steps.camoufox-bin.outputs.bin_path }}
           CAMOUFOX_PROXY: socks5://127.0.0.1:40000
+          FLARESOLVERR_URL: http://flaresolverr:8191/v1
           HEADLESS: 'true'
           PARALLEL_PAGES: '10'
           MAX_PAGES_PER_SEGMENT: '3'
