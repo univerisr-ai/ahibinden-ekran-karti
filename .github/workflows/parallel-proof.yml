@@ -35,17 +35,9 @@ jobs:
       - name: Install Camoufox + deps
         run: |
           pip install --upgrade pip 2>/dev/null || true
-          pip install "camoufox>=0.4" 2>/dev/null || true
-          python3 -m camoufox fetch 2>&1 | tail -3
+          pip install "camoufox>=0.4" websockets requests pyyaml 2>/dev/null || true
+          python3 -m camoufox fetch
           sudo apt-get install -y xvfb 2>/dev/null || true
-
-      - name: Get Camoufox binary path
-        id: camoufox-bin
-        shell: bash
-        run: |
-          BIN_PATH=$(python3 -m camoufox path 2>/dev/null)
-          echo "bin_path=$BIN_PATH" >> "$GITHUB_OUTPUT"
-          echo "Camoufox binary: $BIN_PATH"
 
       - name: Cloudflare WARP Proxy
         id: warp
@@ -73,6 +65,37 @@ jobs:
             echo "proxy_url=" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Start Camoufox server
+        id: camoufox
+        shell: bash
+        run: |
+          CAMOUFOX_HEADLESS=true CAMOUFOX_PROXY=socks5://127.0.0.1:40000 \
+            xvfb-run python3 scripts/camoufox-server.py \
+            > /tmp/camoufox-server.log 2>&1 &
+          SERVER_PID=$!
+          echo "server_pid=$SERVER_PID" >> "$GITHUB_OUTPUT"
+
+          for i in $(seq 1 90); do
+            if grep -q "Websocket endpoint" /tmp/camoufox-server.log 2>/dev/null; then
+              WS=$(grep -oP 'ws://[^\s]+' /tmp/camoufox-server.log | head -1)
+              echo "camoufox_ws=$WS" >> "$GITHUB_OUTPUT"
+              echo "Camoufox server ready: $WS"
+              break
+            fi
+            if grep -q "Server error\|Traceback\|Error:" /tmp/camoufox-server.log 2>/dev/null; then
+              echo "Camoufox server error detected"
+              cat /tmp/camoufox-server.log
+              exit 1
+            fi
+            sleep 2
+          done
+
+          if [ -z "$WS" ]; then
+            echo "Camoufox server failed to start"
+            cat /tmp/camoufox-server.log
+            exit 1
+          fi
+
       - name: Cache storage state
         uses: actions/cache@v4
         with:
@@ -83,7 +106,7 @@ jobs:
 
       - name: Run parallel test (test-main.mjs)
         env:
-          CAMOUFOX_BIN: ${{ steps.camoufox-bin.outputs.bin_path }}
+          CAMOUFOX_WS_ENDPOINT: ${{ steps.camoufox.outputs.camoufox_ws }}
           HEADLESS: 'true'
           PARALLEL_PAGES: '10'
           MAX_PAGES_PER_SEGMENT: '3'
