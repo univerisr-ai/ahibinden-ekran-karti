@@ -13,7 +13,7 @@ import {
   AI_CHUNK_SIZE,
   AI_DELAY_BETWEEN_CHUNKS_MS,
   AI_TOP_RESULTS,
-} from './config.mjs';
+} from './test-config.mjs';
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
