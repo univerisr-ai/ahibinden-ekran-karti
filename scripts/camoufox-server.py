@@ -1,35 +1,18 @@
-"""Camoufox Playwright WebSocket server with WARP/proxy support.
+"""Camoufox WebSocket server using Playwright Python directly.
 
-This wrapper replicates camoufox.server.launch_server but removes a null
-`proxy` key before sending the config to Camoufox. Firefox/Camoufox rejects
-`proxy: null` with "expected object, got null".
+Launches Camoufox/Firefox via Playwright's firefox.launch with full
+fingerprint config from Camoufox, then prints the WebSocket endpoint
+URL so Node.js can connect to it.
 """
-import os
-import base64
-import subprocess
+import os, sys, json, base64, time, signal, atexit
 from pathlib import Path
-
-import orjson
-from playwright._impl._driver import compute_driver_executable
 
 from camoufox.utils import launch_options
 from camoufox.server import to_camel_case_dict
-from camoufox.pkgman import LOCAL_DATA
-
-LAUNCH_SCRIPT: Path = LOCAL_DATA / "launchServer.js"
-
-
-def get_nodejs() -> str:
-    """Get the bundled Node.js executable (handles old & new Playwright APIs)."""
-    _nodejs = compute_driver_executable()[0]
-    if isinstance(_nodejs, tuple):
-        return _nodejs[0]
-    return _nodejs
-
+from playwright.sync_api import sync_playwright
 
 headless = os.environ.get('CAMOUFOX_HEADLESS', 'false').lower() == 'true'
 proxy_url = os.environ.get('CAMOUFOX_PROXY', '').strip()
-fingerprint_json = os.environ.get('CAMOUFOX_FINGERPRINT', '').strip()
 
 kwargs = {
     'headless': headless,
@@ -40,36 +23,44 @@ kwargs = {
     'i_know_what_im_doing': True,
 }
 
-if fingerprint_json:
-    import json
-    kwargs['fingerprint'] = json.loads(fingerprint_json)
-
 if proxy_url:
     kwargs['proxy'] = {'server': proxy_url}
     kwargs['geoip'] = True
 
+config = launch_options(**kwargs)
+if config.get('proxy') is None:
+    del config['proxy']
+
+browser = None
+pw = None
+
+def cleanup():
+    global browser, pw
+    if browser:
+        try: browser.close()
+        except: pass
+    if pw:
+        try: pw.stop()
+        except: pass
+
+atexit.register(cleanup)
+signal.signal(signal.SIGTERM, lambda *_: cleanup())
+
 try:
-    config = launch_options(**kwargs)
-    # Camoufox/Playwright firefox.launch rejects proxy: null.
-    if config.get('proxy') is None:
-        del config['proxy']
-
-    nodejs = get_nodejs()
-    data = orjson.dumps(to_camel_case_dict(config))
-
-    process = subprocess.Popen(
-        [nodejs, str(LAUNCH_SCRIPT)],
-        cwd=Path(nodejs).parent / "package",
-        stdin=subprocess.PIPE,
-        text=True,
-    )
-    if process.stdin:
-        process.stdin.write(base64.b64encode(data).decode())
-        process.stdin.close()
-
-    print("Launching server...")
-    process.wait()
-    raise RuntimeError("Server process terminated unexpectedly")
-except Exception as e:
-    print(f"Server error: {e}")
-    raise
+    pw = sync_playwright().start()
+    # Launch with Camoufox binary path
+    camoufox_bin = os.environ.get('CAMOUFOX_BIN', '')
+    if camoufox_bin:
+        config['executable_path'] = camoufox_bin
+    browser = pw.firefox.launch(**config)
+    # Get the WebSocket endpoint from the browser's connect options
+    ws_endpoint = browser._channel._channel._transport._ws_endpoint
+    print(f"Websocket endpoint: {ws_endpoint}")
+    sys.stdout.flush()
+    # Keep running until interrupted
+    while True:
+        time.sleep(10)
+except KeyboardInterrupt:
+    pass
+finally:
+    cleanup()
