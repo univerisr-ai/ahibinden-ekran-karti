@@ -1,0 +1,49 @@
+name: Parallel Page Proof of Concept
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'test/parallel-proof.mjs'
+      - '.github/workflows/parallel-proof.yml'
+
+jobs:
+  parallel-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Run parallel proof test
+        env:
+          SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
+          TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
+          TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node test/parallel-proof.mjs
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parallel-proof-report
+          path: |
+            test/parallel-proof-report.json
+            test/cookie-system-analysis.md
+            test/screenshots/
+          if-no-files-found: warn
+          retention-days: 7

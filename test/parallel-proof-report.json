@@ -1,0 +1,212 @@
+{
+  "timestamp": "2026-06-14T20:22:36.535Z",
+  "platform": "win32",
+  "nodeVersion": "v25.8.0",
+  "parallelCount": 10,
+  "cookieSystem": {
+    "storageState": {
+      "source": "none",
+      "cookieCount": 0,
+      "originCount": 0,
+      "droppedExpired": 0,
+      "droppedUnrelated": 0,
+      "hasState": false
+    },
+    "extraCookies": {
+      "count": 0,
+      "names": [],
+      "sampleDomains": []
+    }
+  },
+  "browserInfo": {
+    "contextCookies": 0,
+    "cookieNames": [],
+    "cookieDomains": [],
+    "pageCount": 10
+  },
+  "parallelFetch": {
+    "parallelTotalTime": 1310,
+    "results": [
+      {
+        "index": 0,
+        "offset": 0,
+        "url": "https://www.sahibinden.com/ekran-karti-masaustu?pagingOffset=0&pagingSize=50&sorting=date_desc&price_min=0&price_max=50000",
+        "status": 403,
+        "elapsed": 1291,
+        "sizeKB": 12,
+        "title": "",
+        "htmlPreview": "<html lang=\"tr\"><head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <meta id=\"Content-Language\" http-equiv=\"Content-Language\" content=\"tr\">",
+        "cookieCount": 2,
+        "cookieNames": [
+          "cf_clearance",
+          "__cf_bm"
+        ]
+      },
+      {
+        "index": 1,
+        "offset": 50,
+        "url": "https://www.sahibinden.com/ekran-karti-masaustu?pagingOffset=50&pagingSize=50&sorting=date_desc&price_min=0&price_max=50000",
+        "status": 403,
+        "elapsed": 1291,
+        "sizeKB": 12,
+        "title": "",
+        "htmlPreview": "<html lang=\"tr\"><head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <meta id=\"Content-Language\" http-equiv=\"Content-Language\" content=\"tr\">",
+        "cookieCount": 2,
+        "cookieNames": [
+          "cf_clearance",
+          "__cf_bm"
+        ]
+      },
+      {
+        "index": 2,
+        "offset": 100,
+        "url": "https://www.sahibinden.com/ekran-karti-masaustu?pagingOffset=100&pagingSize=50&sorting=date_desc&price_min=0&price_max=50000",
+        "status": 403,
+        "elapsed": 1286,
+        "sizeKB": 12,
+        "title": "",
+        "htmlPreview": "<html lang=\"tr\"><head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <meta id=\"Content-Language\" http-equiv=\"Content-Language\" content=\"tr\">",
+        "cookieCount": 2,
+        "cookieNames": [
+          "cf_clearance",
+          "__cf_bm"
+        ]
+      },
+      {
+        "index": 3,
+        "offset": 150,
+        "url": "https://www.sahibinden.com/ekran-karti-masaustu?pagingOffset=150&pagingSize=50&sorting=date_desc&price_min=0&price_max=50000",
+        "status": 403,
+        "elapsed": 1286,
+        "sizeKB": 12,
+        "title": "",
+        "htmlPreview": "<html lang=\"tr\"><head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <meta id=\"Content-Language\" http-equiv=\"Content-Language\" content=\"tr\">",
+        "cookieCount": 2,
+        "cookieNames": [
+          "cf_clearance",
+          "__cf_bm"
+        ]
+      },
+      {
+        "index": 4,
+        "offset": 200,
+        "url": "https://www.sahibinden.com/ekran-karti-masaustu?pagingOffset=200&pagingSize=50&sorting=date_desc&price_min=0&price_max=50000",
+        "status": 403,
+        "elapsed": 1285,
+        "sizeKB": 12,
+        "title": "",
+        "htmlPreview": "<html lang=\"tr\"><head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <meta id=\"Content-Language\" http-equiv=\"Content-Language\" content=\"tr\">",
+        "cookieCount": 2,
+        "cookieNames": [
+          "cf_clearance",
+          "__cf_bm"
+        ]
+      },
+      {
+        "index": 5,
+        "offset": 250,
+        "url": "https://www.sahibinden.com/ekran-karti-masaustu?pagingOffset=250&pagingSize=50&sorting=date_desc&price_min=0&price_max=50000",
+        "status": 403,
+        "elapsed": 1290,
+        "sizeKB": 12,
+        "title": "",
+        "htmlPreview": "<html lang=\"tr\"><head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <meta id=\"Content-Language\" http-equiv=\"Content-Language\" content=\"tr\">",
+        "cookieCount": 2,
+        "cookieNames": [
+          "cf_clearance",
+          "__cf_bm"
+        ]
+      },
+      {
+        "index": 6,
+        "offset": 300,
+        "url": "https://www.sahibinden.com/ekran-karti-masaustu?pagingOffset=300&pagingSize=50&sorting=date_desc&price_min=0&price_max=50000",
+        "status": 403,
+        "elapsed": 1290,
+        "sizeKB": 12,
+        "title": "",
+        "htmlPreview": "<html lang=\"tr\"><head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <meta id=\"Content-Language\" http-equiv=\"Content-Language\" content=\"tr\">",
+        "cookieCount": 2,
+        "cookieNames": [
+          "cf_clearance",
+          "__cf_bm"
+        ]
+      },
+      {
+        "index": 7,
+        "offset": 350,
+        "url": "https://www.sahibinden.com/ekran-karti-masaustu?pagingOffset=350&pagingSize=50&sorting=date_desc&price_min=0&price_max=50000",
+        "status": 403,
+        "elapsed": 1289,
+        "sizeKB": 12,
+        "title": "",
+        "htmlPreview": "<html lang=\"tr\"><head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <meta id=\"Content-Language\" http-equiv=\"Content-Language\" content=\"tr\">",
+        "cookieCount": 2,
+        "cookieNames": [
+          "cf_clearance",
+          "__cf_bm"
+        ]
+      },
+      {
+        "index": 8,
+        "offset": 400,
+        "url": "https://www.sahibinden.com/ekran-karti-masaustu?pagingOffset=400&pagingSize=50&sorting=date_desc&price_min=0&price_max=50000",
+        "status": 403,
+        "elapsed": 1290,
+        "sizeKB": 12,
+        "title": "",
+        "htmlPreview": "<html lang=\"tr\"><head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <meta id=\"Content-Language\" http-equiv=\"Content-Language\" content=\"tr\">",
+        "cookieCount": 2,
+        "cookieNames": [
+          "cf_clearance",
+          "__cf_bm"
+        ]
+      },
+      {
+        "index": 9,
+        "offset": 450,
+        "url": "https://www.sahibinden.com/ekran-karti-masaustu?pagingOffset=450&pagingSize=50&sorting=date_desc&price_min=0&price_max=50000",
+        "status": 403,
+        "elapsed": 1283,
+        "sizeKB": 12,
+        "title": "",
+        "htmlPreview": "<html lang=\"tr\"><head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <meta id=\"Content-Language\" http-equiv=\"Content-Language\" content=\"tr\">",
+        "cookieCount": 2,
+        "cookieNames": [
+          "cf_clearance",
+          "__cf_bm"
+        ]
+      }
+    ],
+    "stats": {
+      "successful": 0,
+      "failed": 10,
+      "avgTime": 1288,
+      "totalSize": 120
+    }
+  },
+  "sessionCheck": {
+    "uniqueSessionCount": 1,
+    "shared": true,
+    "sampleCookieSet": "cf_clearance=0s0o1Vb0bW...; __cf_bm=2NwY3kU77S..."
+  },
+  "cookieExpiry": {
+    "cookieCount": 0,
+    "sessionCookies": [],
+    "expired": [],
+    "healthy": [],
+    "expiryInfo": [],
+    "warnings": [
+      "Hiç cookie bulunamadı. SAHIBINDEN_COOKIES env veya auth.json gerekli."
+    ]
+  },
+  "sequentialComparison": {
+    "sequentialTotalTime": 3263,
+    "sequentialAvgTime": 1088,
+    "sequentialTimes": [
+      1203,
+      1029,
+      1031
+    ]
+  }
+}
