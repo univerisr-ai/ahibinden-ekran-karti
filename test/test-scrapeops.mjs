@@ -148,21 +148,20 @@ function isChallengePage(html) {
 }
 
 async function applyFlareSolverrCookies(targetUrl) {
-  if (!context) return false;
+  if (!context) return { ok: false, cookies: [], html: '' };
   try {
     console.log('  FlareSolverr ile Cloudflare cozuluyor...');
     const solution = await solveUrlWithFlareSolverr(targetUrl);
     const cookies = flareSolverrCookiesToPlaywright(solution.cookies || []);
-    if (cookies.length === 0) {
-      console.log('  FlareSolverr cookie donmedi.');
-      return false;
+    if (cookies.length > 0) {
+      await context.addCookies(cookies);
+      console.log('  FlareSolverr\'den ${cookies.length} cookie eklendi.');
     }
-    await context.addCookies(cookies);
-    console.log(`  FlareSolverr'den ${cookies.length} cookie eklendi.`);
-    return true;
+    const html = solution.response || '';
+    return { ok: true, cookies, html };
   } catch (err) {
-    console.log(`  FlareSolverr hatasi: ${err.message}`);
-    return false;
+    console.log('  FlareSolverr hatasi: ${err.message}');
+    return { ok: false, cookies: [], html: '' };
   }
 }
 
@@ -348,20 +347,16 @@ async function fetchPage(targetUrl, label = '') {
         // Turnstile cozulemezse FlareSolverr dene
         if (isChallengePage(html)) {
           console.log(`  FlareSolverr deneniyor (deneme ${attempt})...`);
-          const fsOk = await applyFlareSolverrCookies(targetUrl);
-          if (fsOk) {
-            await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: DEFAULT_NAV_TIMEOUT_MS });
-            await sleep(3000);
-            html = await page.content();
-            if (hasLikelyListingSignals(html)) {
-              stats.successfulRequests++;
-              stats.pagesLoaded++;
-              stats.creditsUsed++;
-              page = savedPage;
-              return { html, status: 'OK' };
-            }
-          }
-        }
+          const fsResult = await applyFlareSolverrCookies(targetUrl);
+          if (fsResult.ok && fsResult.html && hasLikelyListingSignals(fsResult.html)) {
+            console.log('  FlareSolverr sayfayi cozdu, HTML kullaniliyor.');
+            html = fsResult.html;
+            stats.successfulRequests++;
+            stats.pagesLoaded++;
+            stats.creditsUsed++;
+            page = savedPage;
+            return { html, status: 'OK' };
+          } }
         // Turnstile sonrasi hala sinyal yoksa login kontrolu yap (sadece URL bazli)
         const loginOk = await maybeHandleChallenge();
         if (!loginOk) {
@@ -569,8 +564,8 @@ export async function initSession() {
 
     // Cloudflare challenge sayfasi
     if (isChallengePage(html)) {
-      const fsOk = await applyFlareSolverrCookies(url);
-      if (fsOk) {
+      const fsResult = await applyFlareSolverrCookies(url);
+      if (fsResult.ok && fsResult.html) {
         await page.reload({ waitUntil: 'domcontentloaded', timeout: DEFAULT_NAV_TIMEOUT_MS });
         await sleep(5000);
         const url2 = page.url();
@@ -580,7 +575,6 @@ export async function initSession() {
           return { ok: true, code: 'OK', cookieSource: saved.source, cookieCount: saved.cookieCount };
         }
       }
-      console.log('  Cloudflare engeli asilamadi.');
       return { ok: false, code: 'CF_BLOCKED' };
     }
 
