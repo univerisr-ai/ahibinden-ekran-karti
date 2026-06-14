@@ -13,13 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
-    services:
-      flaresolverr:
-        image: ghcr.io/flaresolverr/flaresolverr:latest
-        env:
-          LOG_LEVEL: info
-          PROXY_URL: socks5://host.docker.internal:40000
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -82,6 +75,22 @@ jobs:
             echo "proxy_url=" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Start FlareSolverr with host network
+        shell: bash
+        run: |
+          docker run -d --name flaresolverr --network host \
+            -e LOG_LEVEL=info \
+            -e PROXY_URL=socks5://127.0.0.1:40000 \
+            ghcr.io/flaresolverr/flaresolverr:latest
+          for i in $(seq 1 15); do
+            if curl -s --noproxy '*' -m 3 http://127.0.0.1:8191/v1 >/dev/null 2>&1; then
+              echo "FlareSolverr ready on port 8191"
+              break
+            fi
+            sleep 2
+          done
+          curl -s --noproxy '*' -m 5 http://127.0.0.1:8191/v1 | head -5 || echo "FlareSolverr not ready"
+
       - name: Cache storage state
         uses: actions/cache@v4
         with:
@@ -93,18 +102,18 @@ jobs:
       - name: Test FlareSolverr connectivity
         shell: bash
         run: |
-          echo "Testing FlareSolverr..."
-          curl -fsS -m 5 http://flaresolverr:8191/v1 && echo "OK" || echo "FAILED"
-          curl -fsS -m 10 -X POST http://flaresolverr:8191/v1 \
+          echo "=== FlareSolverr health check ==="
+          curl -sv --noproxy '*' -m 5 http://127.0.0.1:8191/v1 2>&1 | head -20
+          echo "=== POST test (httpbin.org/ip) ==="
+          curl -sv --noproxy '*' -m 15 -X POST http://127.0.0.1:8191/v1 \
             -H "Content-Type: application/json" \
-            -d "{\"cmd\":\"request.get\",\"url\":\"https://httpbin.org/ip\",\"maxTimeout\":30000}" \
-            > /tmp/fs-test.json 2>&1 && cat /tmp/fs-test.json || echo "FlareSolverr test failed"
+            -d '{"cmd":"request.get","url":"https://httpbin.org/ip","maxTimeout":15000}' 2>&1 | head -30
 
       - name: Run parallel test (test-main.mjs)
         env:
           CAMOUFOX_BIN: ${{ steps.camoufox-bin.outputs.bin_path }}
           CAMOUFOX_PROXY: socks5://127.0.0.1:40000
-          FLARESOLVERR_URL: http://flaresolverr:8191/v1
+          FLARESOLVERR_URL: http://127.0.0.1:8191/v1
           HEADLESS: 'true'
           PARALLEL_PAGES: '10'
           MAX_PAGES_PER_SEGMENT: '3'
