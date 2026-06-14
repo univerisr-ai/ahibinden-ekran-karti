@@ -104,28 +104,6 @@ async function ensureBrowser() {
     }
     page = pages[0];
 
-    // Daha once kaydedilmis cookie varsa yukle
-    const saved = loadSahibindenStorageState();
-    if (saved.storageState && saved.cookieCount > 0) {
-      // Log cookie expiry diagnostics
-      const now = Math.floor(Date.now() / 1000);
-      for (const c of saved.storageState.cookies) {
-        if (['csid', 'cwt', 'st'].includes(c.name) && c.expires) {
-          const days = Math.round((c.expires - now) / 86400);
-          console.log(`  Cookie ${c.name}: expires in ${days} day(s) (${new Date(c.expires * 1000).toISOString()})`);
-        }
-      }
-      await context.addCookies(saved.storageState.cookies);
-      console.log(`  ${saved.cookieCount} adet kayitli cookie yuklendi (kaynak: ${saved.source}).`);
-    }
-
-    // Ayrica SAHIBINDEN_COOKIES env ve cookies.json dosyasindaki cookie'leri yukle
-    const extraCookies = loadAllSahibindenCookies();
-    if (extraCookies.length > 0) {
-      await context.addCookies(extraCookies);
-      console.log(`  ${extraCookies.length} adet ek cookie yuklendi (env/dosya).`);
-    }
-
     console.log('  Tarayici hazir.');
     return true;
   } catch (err) {
@@ -507,6 +485,30 @@ export async function scrapeDetailUrl(detailUrl) {
   return fetchPage(targetUrl, `detail: ${targetUrl}`);
 }
 
+export async function loadSahibindenCookiesToContext() {
+  if (!context) return 0;
+  const saved = loadSahibindenStorageState();
+  let total = 0;
+  if (saved.storageState && saved.cookieCount > 0) {
+    const now = Math.floor(Date.now() / 1000);
+    for (const c of saved.storageState.cookies) {
+      if (['csid', 'cwt', 'st'].includes(c.name) && c.expires) {
+        const days = Math.round((c.expires - now) / 86400);
+        console.log('  Cookie ' + c.name + ': expires in ' + days + ' day(s) (' + new Date(c.expires * 1000).toISOString() + ')');
+      }
+    }
+    await context.addCookies(saved.storageState.cookies);
+    total += saved.cookieCount;
+    console.log('  ' + saved.cookieCount + ' adet kayitli cookie yuklendi (kaynak: ' + saved.source + ').');
+  }
+  const extraCookies = loadAllSahibindenCookies();
+  if (extraCookies.length > 0) {
+    await context.addCookies(extraCookies);
+    total += extraCookies.length;
+    console.log('  ' + extraCookies.length + ' adet ek cookie yuklendi (env/dosya).');
+  }
+  return total;
+}
 export async function initSession() {
   const ok = await ensureBrowser();
   if (!ok) return { ok: false, code: 'BROWSER_INIT_FAILED' };
@@ -532,10 +534,25 @@ export async function initSession() {
     const url = page.url();
     const html = await page.content().catch(() => '');
 
-    // Login sayfasina yonlendirildik ΓåÆ session gecersiz
+    // Login sayfasina yonlendirildik ΓåÆ cookie yukle ve tekrar dene
     if (url.includes('giris') || html.toLowerCase().includes('giris yap')) {
-      console.log('  Login sayfasi ΓÇö cookie gerekli.');
-      return { ok: false, code: 'LOGIN_REQUIRED' };
+      console.log('  Login sayfasi ΓÇö cookie yukleniyor...');
+      const cookieCount = await loadSahibindenCookiesToContext();
+      if (cookieCount === 0) {
+        console.log('  Cookie bulunamadi.');
+        return { ok: false, code: 'LOGIN_REQUIRED' };
+      }
+      await page.goto('https://banaozel.sahibinden.com/', {
+        waitUntil: 'domcontentloaded',
+        timeout: DEFAULT_NAV_TIMEOUT_MS,
+      });
+      await sleep(5000);
+      url = page.url();
+      html = await page.content().catch(() => '');
+      if (url.includes('giris') || html.toLowerCase().includes('giris yap')) {
+        console.log('  Cookie yuklendi ama hala login sayfasi.');
+        return { ok: false, code: 'LOGIN_REQUIRED' };
+      }
     }
 
     // Bana Ozel sayfasi acildi ΓåÆ session gecerli
@@ -624,7 +641,7 @@ export async function saveStorageState() {
 }
 
 export default {
-  initSession, scrapeSegment, scrapeDetailUrl, getStats,
+  initSession, loadSahibindenCookiesToContext, scrapeSegment, scrapeDetailUrl, getStats,
   saveChallengeProofScreenshot, takeScreenshot, closeBrowser,
   saveStorageState,
 };
