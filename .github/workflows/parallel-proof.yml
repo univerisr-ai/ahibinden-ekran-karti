@@ -37,7 +37,7 @@ jobs:
           npx playwright install firefox
           npx playwright install-deps firefox
           pip install --upgrade pip 2>/dev/null || true
-          pip install playwright camoufox orjson websockets requests pyyaml 2>/dev/null || true
+          pip install "playwright<1.49" camoufox websockets requests pyyaml 2>/dev/null || true
           python3 -m playwright install firefox 2>/dev/null || true
 
       - name: Cloudflare WARP Proxy
