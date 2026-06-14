@@ -43,27 +43,18 @@ jobs:
       - name: Fix Playwright driver for Camoufox compat
         shell: bash
         run: |
-          # Find the Playwright driver lib directory
-          DRIVER_LIB=$(python3 -c "
-from playwright._impl._driver import compute_driver_executable
-import pathlib
-p = compute_driver_executable()[0]
-d = pathlib.Path(p).parent / 'package' / 'lib'
-print(d)
-" 2>/dev/null)
+          DRIVER_LIB=$(python3 -c "import pathlib; from playwright._impl._driver import compute_driver_executable; p = compute_driver_executable()[0]; print(pathlib.Path(p).parent / 'package' / 'lib')" 2>/dev/null)
           echo "Driver lib: $DRIVER_LIB"
           ls "$DRIVER_LIB/" 2>/dev/null || echo "dir not found"
-          
-          # Check if browserServerImpl.js exists somewhere
           MISSING="$DRIVER_LIB/browserServerImpl.js"
           if [ ! -f "$MISSING" ]; then
-            echo "browserServerImpl.js missing, searching for it..."
+            echo "browserServerImpl.js missing, searching..."
             FOUND=$(find "$DRIVER_LIB/.." -name "browserServerImpl.js" 2>/dev/null | head -1)
             if [ -n "$FOUND" ]; then
               echo "Found at: $FOUND"
               ln -sf "$FOUND" "$MISSING" && echo "Symlink created"
             else
-              echo "browserServerImpl.js not found anywhere. Checking available files:"
+              echo "browserServerImpl.js not found. Available JS files:"
               find "$DRIVER_LIB/.." -name "*.js" -type f 2>/dev/null | head -30
             fi
           else
