@@ -352,8 +352,21 @@ async function fetchPage(targetUrl, label = '') {
       // Once listing sinyali var mi kontrol et
       if (!hasLikelyListingSignals(html)) {
         console.log(`  İlan sinyali yok (deneme ${attempt})`);
+        // Challenge sayfasiysa direkt FlareSolverr dene (Turnstile bekleme)
+        if (isChallengePage(html)) {
+          console.log(`  FlareSolverr deneniyor (deneme ${attempt})...`);
+          const fsResult = await applyFlareSolverrCookies(targetUrl);
+          if (fsResult.ok && fsResult.html && hasLikelyListingSignals(fsResult.html)) {
+            console.log('  FlareSolverr sayfayi cozdu, HTML kullaniliyor.');
+            page = savedPage;
+            stats.successfulRequests++;
+            stats.pagesLoaded++;
+            stats.creditsUsed++;
+            return { html: fsResult.html, status: 'OK' };
+          }
+        }
         // Cloudflare Turnstile challenge varsa coz
-        const solved = await solveTurnstileIfPresent(20000);
+        const solved = await solveTurnstileIfPresent(10000);
         if (solved) {
           html = await page.content();
           if (hasLikelyListingSignals(html)) {
@@ -362,35 +375,6 @@ async function fetchPage(targetUrl, label = '') {
             stats.pagesLoaded++;
             stats.creditsUsed++;
             return { html, status: 'OK' };
-          }
-        }
-        // Turnstile cozulemezse FlareSolverr dene
-        if (isChallengePage(html)) {
-          console.log(`  FlareSolverr deneniyor (deneme ${attempt})...`);
-          const fsResult = await applyFlareSolverrCookies(targetUrl);
-          if (fsResult.ok && fsResult.html && hasLikelyListingSignals(fsResult.html)) {
-            console.log('  FlareSolverr sayfayi cozdu, HTML kullaniliyor.');
-            html = fsResult.html;
-            page = savedPage;
-            stats.successfulRequests++;
-            stats.pagesLoaded++;
-            stats.creditsUsed++;
-            return { html, status: 'OK' };
-          }
-          if (fsResult.html) {
-            await page.goto(targetUrl, {
-              waitUntil: 'domcontentloaded',
-              timeout: DEFAULT_NAV_TIMEOUT_MS,
-            }).catch(() => {});
-            await sleep(2000);
-            html = await page.content();
-            if (hasLikelyListingSignals(html)) {
-              page = savedPage;
-              stats.successfulRequests++;
-              stats.pagesLoaded++;
-              stats.creditsUsed++;
-              return { html, status: 'OK' };
-            }
           }
         }
         // Turnstile sonrasi hala sinyal yoksa login kontrolu yap (sadece URL bazli)

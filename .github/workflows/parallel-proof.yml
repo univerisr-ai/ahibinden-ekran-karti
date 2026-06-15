@@ -115,9 +115,7 @@ jobs:
           FLARESOLVERR_URL: http://127.0.0.1:8191/v1
           HEADLESS: 'true'
           PARALLEL_PAGES: '10'
-          MAX_PAGES_PER_SEGMENT: '3'
-          CUSTOM_MIN_PRICE: '0'
-          CUSTOM_MAX_PRICE: '2000'
+          MAX_PAGES_PER_SEGMENT: '40'
           BYPASS_AI: 'true'
           ENABLE_TELEGRAM: 'false'
           SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
