@@ -448,10 +448,18 @@ export async function scrapeSegment(priceMin, priceMax) {
   console.log(`\n  Segment: ${label} (Kredi: ${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
 
   const firstUrl = buildSahibindenUrl(0, priceMin, priceMax);
-  const { html: firstHtml, status } = await fetchPage(firstUrl, `${label} (s:1)`);
+  let { html: firstHtml, status } = await fetchPage(firstUrl, `${label} (s:1)`);
 
   if (!firstHtml || status === 'BANNED' || status === 'BUDGET_EXHAUSTED') {
-    return { htmlPages: [], totalFound: 0, pages: 0, status };
+    const fsResult = await applyFlareSolverrCookies(firstUrl);
+    if (fsResult.ok && fsResult.html && hasLikelyListingSignals(fsResult.html)) {
+      console.log('  FlareSolverr ilk sayfayi cozdu, devam ediliyor.');
+      firstHtml = fsResult.html;
+      status = 'OK';
+    } else {
+      console.log('  Ilk sayfa alinamadi, segment atlaniyor.');
+      return { htmlPages: [], totalFound: 0, pages: 0, status: 'FAILED' };
+    }
   }
 
   const htmlPages = [firstHtml];
