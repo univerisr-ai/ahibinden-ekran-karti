@@ -23,11 +23,11 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies + Playwright Chrome
+      - name: Install dependencies + Playwright browsers
         run: |
           npm ci
-          npx playwright install chrome
-          npx playwright install-deps chrome
+          npx playwright install chromium chrome
+          npx playwright install-deps chromium chrome
 
       - name: Cloudflare WARP Proxy
         id: warp
