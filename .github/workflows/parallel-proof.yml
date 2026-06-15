@@ -7,6 +7,7 @@ on:
     paths:
       - 'test/test-*.mjs'
       - '.github/workflows/parallel-proof.yml'
+      - 'scripts/camoufox-config.py'
 
 jobs:
   parallel-proof:

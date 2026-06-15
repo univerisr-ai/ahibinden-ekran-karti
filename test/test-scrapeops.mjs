@@ -529,35 +529,60 @@ export async function initSession() {
 
     // 1. Once ana sayfaya git (Cloudflare challenge varsa cozulsun)
     await page.goto('https://www.sahibinden.com/', {
-      waitUntil: 'domcontentloaded',
-      timeout: DEFAULT_NAV_TIMEOUT_MS,
-    });
+      waitUntil: 'load',
+      timeout: 45000,
+    }).catch(() => {});
     await sleep(3000);
     await solveTurnstileIfPresent(30000);
 
     // 2. Session dogrulamasi icin login gerektiren sayfaya git
-    await page.goto('https://banaozel.sahibinden.com/', {
-      waitUntil: 'domcontentloaded',
-      timeout: DEFAULT_NAV_TIMEOUT_MS,
-    });
-    await sleep(5000);
+    let url, html;
+    try {
+      await page.goto('https://banaozel.sahibinden.com/', {
+        waitUntil: 'load',
+        timeout: 30000,
+      });
+    } catch (_) {}
+    await sleep(3000);
+    await solveTurnstileIfPresent(20000);
 
-    const url = page.url();
-    const html = await page.content().catch(() => '');
+    url = page.url();
+    html = await page.content().catch(() => '');
 
-    // Login sayfasina yonlendirildik ΓåÆ cookie yukle ve tekrar dene
+    // Cloudflare challenge sayfasiysa FlareSolverr dene
+    if (isChallengePage(html) || !url.includes('banaozel')) {
+      console.log('  Cloudflare engeli, FlareSolverr ile cozulmeye calisiliyor...');
+      const fsResult = await applyFlareSolverrCookies('https://banaozel.sahibinden.com/');
+      if (fsResult.ok && fsResult.html) {
+        try {
+          await page.goto('https://banaozel.sahibinden.com/', {
+            waitUntil: 'load',
+            timeout: 30000,
+          });
+        } catch (_) {}
+        await sleep(3000);
+        await solveTurnstileIfPresent(15000);
+        url = page.url();
+        html = await page.content().catch(() => '');
+      }
+    }
+
+    // Login sayfasina yonlendirildik → cookie yukle ve tekrar dene
     if (url.includes('giris') || html.toLowerCase().includes('giris yap')) {
-      console.log('  Login sayfasi ΓÇö cookie yukleniyor...');
+      console.log('  Login sayfasi — cookie yukleniyor...');
       const cookieCount = await loadSahibindenCookiesToContext();
       if (cookieCount === 0) {
         console.log('  Cookie bulunamadi.');
         return { ok: false, code: 'LOGIN_REQUIRED' };
       }
-      await page.goto('https://banaozel.sahibinden.com/', {
-        waitUntil: 'domcontentloaded',
-        timeout: DEFAULT_NAV_TIMEOUT_MS,
-      });
-      await sleep(5000);
+      try {
+        await page.goto('https://banaozel.sahibinden.com/', {
+          waitUntil: 'load',
+          timeout: 30000,
+        });
+      } catch (_) {}
+      await sleep(3000);
+      await solveTurnstileIfPresent(15000);
       url = page.url();
       html = await page.content().catch(() => '');
       if (url.includes('giris') || html.toLowerCase().includes('giris yap')) {
@@ -566,7 +591,7 @@ export async function initSession() {
       }
     }
 
-    // Bana Ozel sayfasi acildi ΓåÆ session gecerli
+    // Bana Ozel sayfasi acildi → session gecerli
     if (url.includes('banaozel')) {
       console.log('  Session dogrulandi, login kalindi.');
       const saved = loadSahibindenStorageState();
@@ -578,14 +603,17 @@ export async function initSession() {
       };
     }
 
-    // Cloudflare challenge sayfasi
+    // Hala challenge sayfasi
     if (isChallengePage(html)) {
       const fsResult = await applyFlareSolverrCookies(url);
       if (fsResult.ok && fsResult.html) {
-        await page.reload({ waitUntil: 'domcontentloaded', timeout: DEFAULT_NAV_TIMEOUT_MS });
-        await sleep(5000);
-        const url2 = page.url();
-        if (url2.includes('banaozel')) {
+        try {
+          await page.reload({ waitUntil: 'load', timeout: 30000 });
+        } catch (_) {}
+        await sleep(3000);
+        await solveTurnstileIfPresent(15000);
+        url = page.url();
+        if (url.includes('banaozel')) {
           console.log('  Session dogrulandi (FlareSolverr ile).');
           const saved = loadSahibindenStorageState();
           return { ok: true, code: 'OK', cookieSource: saved.source, cookieCount: saved.cookieCount };
