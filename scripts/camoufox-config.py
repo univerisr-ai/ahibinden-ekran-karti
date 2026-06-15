@@ -19,9 +19,14 @@ if proxy_url:
     kwargs['geoip'] = True
 
 config = launch_options(**kwargs)
-# Serialise env vars (CAMOU_CONFIG_1 etc.) as plain dict
+# Only keep Camoufox-specific env vars, not entire inherited env
+CAMOUFOX_ENV_KEYS = {'CAMOU_CONFIG_1', 'CAMOU_CONFIG_2', 'FONTCONFIG_PATH',
+                     'CAMOUFOX_PROXY', 'CAMOUFOX_HEADLESS'}
 if 'env' in config and isinstance(config['env'], dict):
-    config['env'] = {k: str(v) for k, v in config['env'].items()}
+    config['env'] = {k: str(v) for k, v in config['env'].items()
+                     if k in CAMOUFOX_ENV_KEYS}
+    if not config['env']:
+        del config['env']
 # Convert tuple window → list for JSON
 if 'window' in config:
     config['window'] = list(config['window'])
