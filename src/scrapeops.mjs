@@ -167,21 +167,22 @@ function isChallengePage(html) {
 }
 
 async function applyFlareSolverrCookies(targetUrl) {
-  if (!context) return false;
+  if (!context) return { ok: false, cookies: [], html: '' };
   try {
     console.log('  FlareSolverr ile Cloudflare cozuluyor...');
     const solution = await solveUrlWithFlareSolverr(targetUrl);
     const cookies = flareSolverrCookiesToPlaywright(solution.cookies || []);
-    if (cookies.length === 0) {
+    if (cookies.length > 0) {
+      await context.addCookies(cookies);
+      console.log(`  FlareSolverr'den ${cookies.length} cookie eklendi.`);
+    } else {
       console.log('  FlareSolverr cookie donmedi.');
-      return false;
     }
-    await context.addCookies(cookies);
-    console.log(`  FlareSolverr'den ${cookies.length} cookie eklendi.`);
-    return true;
+    const html = solution.response || '';
+    return { ok: true, cookies, html };
   } catch (err) {
     console.log(`  FlareSolverr hatasi: ${err.message}`);
-    return false;
+    return { ok: false, cookies: [], html: '' };
   }
 }
 
@@ -367,7 +368,16 @@ async function fetchPage(targetUrl, label = '') {
         if (isChallengePage(html)) {
           console.log(`  FlareSolverr deneniyor (deneme ${attempt})...`);
           const fsResult = await applyFlareSolverrCookies(targetUrl);
-          if (fsResult) {
+          if (fsResult.ok && fsResult.html && hasLikelyListingSignals(fsResult.html)) {
+            console.log('  FlareSolverr sayfayi cozdu, HTML kullaniliyor.');
+            html = fsResult.html;
+            page = savedPage;
+            stats.successfulRequests++;
+            stats.pagesLoaded++;
+            stats.creditsUsed++;
+            return { html, status: 'OK' };
+          }
+          if (fsResult.html) {
             await page.goto(targetUrl, {
               waitUntil: 'domcontentloaded',
               timeout: DEFAULT_NAV_TIMEOUT_MS,
@@ -516,22 +526,31 @@ export async function initSession() {
 
   let url = page.url();
   let html = await page.content().catch(() => '');
+  let cookieCount = 0;
 
-  // Login sayfasina yonlendirildik → cookie yukle ve banaozel'e git
+  // Cookie yukle (her durumda, login sayfasi olsun ya da olmasin)
+  const saved = loadSahibindenStorageState();
+  if (saved.storageState && saved.cookieCount > 0) {
+    const now = Math.floor(Date.now() / 1000);
+    for (const c of saved.storageState.cookies) {
+      if (['csid', 'cwt', 'st'].includes(c.name) && c.expires) {
+        const days = Math.round((c.expires - now) / 86400);
+        console.log(`  Cookie ${c.name}: expires in ${days} day(s)`);
+      }
+    }
+    await context.addCookies(saved.storageState.cookies);
+    cookieCount += saved.cookieCount;
+  }
+  const extraCookies = loadAllSahibindenCookies();
+  if (extraCookies.length > 0) {
+    await context.addCookies(extraCookies);
+    cookieCount += extraCookies.length;
+  }
+  console.log(`  ${cookieCount} cookie yuklendi.`);
+
+  // Login sayfasina yonlendirildikse banaozel'e git
   if (url.includes('giris') || html.toLowerCase().includes('giris yap')) {
-    console.log('  Login sayfasi, cookie yukleniyor...');
-    const saved = loadSahibindenStorageState();
-    let cookieCount = 0;
-    if (saved.storageState && saved.cookieCount > 0) {
-      await context.addCookies(saved.storageState.cookies);
-      cookieCount += saved.cookieCount;
-    }
-    const extraCookies = loadAllSahibindenCookies();
-    if (extraCookies.length > 0) {
-      await context.addCookies(extraCookies);
-      cookieCount += extraCookies.length;
-    }
-    console.log(`  ${cookieCount} cookie yuklendi, banaozel kontrol ediliyor...`);
+    console.log('  Login sayfasi, banaozel kontrol ediliyor...');
     if (cookieCount > 0) {
       try {
         await page.goto('https://banaozel.sahibinden.com/', {
@@ -560,8 +579,8 @@ export async function initSession() {
     console.log(`  Toplam ${pages.length} sayfa hazir.`);
   }
 
-  const saved = loadSahibindenStorageState();
-  return { ok: true, code: 'OK', cookieSource: saved.source, cookieCount: saved.cookieCount };
+  const finalSaved = loadSahibindenStorageState();
+  return { ok: true, code: 'OK', cookieSource: finalSaved.source, cookieCount: finalSaved.cookieCount };
 }
 
 export async function saveChallengeProofScreenshot(label) {
