@@ -509,19 +509,28 @@ async function main() {
     console.log(`  🍪 Session cookie source: ${session.cookieSource} (${session.cookieCount})`);
   }
 
-  // ADIM 2: Segmentleri çek
+  // ADIM 2: Segmentleri paralel cek
   const segments = getActiveSegments();
-  console.log(`\n  📋 ${segments.length} segment çekilecek`);
-
+  const parallelSegments = parseInt(process.env.PARALLEL_SEGMENTS || '4', 10);
+  console.log(`\n  📋 ${segments.length} segment, ${parallelSegments} paralel`);
+  
   const segmentResults = [];
-  for (const [priceMin, priceMax] of segments) {
-    const result = await scrapeSegment(priceMin, priceMax);
-    segmentResults.push({ priceMin, priceMax, result });
-
-    if (result.status === 'ACTION_REQUIRED') {
-      console.log('\n  🛑 Scrape.do hesap/domain kısıtı algılandı. Taramayı erken durduruyorum.');
-      await sendTelegram('🛑 Scrape.do bu domain için ACTION REQUIRED döndü. support@scrape.do üzerinden whitelist talep etmeniz gerekiyor.');
-      break;
+  for (let i = 0; i < segments.length; i += parallelSegments) {
+    const batch = segments.slice(i, i + parallelSegments);
+    const results = await Promise.allSettled(
+      batch.map(async ([priceMin, priceMax]) => {
+        const result = await scrapeSegment(priceMin, priceMax);
+        return { priceMin, priceMax, result };
+      })
+    );
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        segmentResults.push(r.value);
+        if (r.value.result.status === 'ACTION_REQUIRED') {
+          i = segments.length;
+          r.value.result._stopAll = true;
+        }
+      }
     }
   }
 
