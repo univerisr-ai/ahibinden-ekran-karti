@@ -12,7 +12,7 @@ on:
 jobs:
   parallel-proof:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -23,11 +23,11 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies + Playwright Chromium
+      - name: Install dependencies + Playwright Chrome
         run: |
           npm ci
-          npx playwright install chromium
-          npx playwright install-deps chromium
+          npx playwright install chrome
+          npx playwright install-deps chrome
 
       - name: Cloudflare WARP Proxy
         id: warp
@@ -55,20 +55,6 @@ jobs:
             echo "proxy_url=" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Start FlareSolverr with host network
-        shell: bash
-        run: |
-          docker run -d --name flaresolverr --network host \
-            -e LOG_LEVEL=info \
-            ghcr.io/flaresolverr/flaresolverr:latest
-          for i in $(seq 1 20); do
-            if curl -s --noproxy '*' -m 3 http://127.0.0.1:8191/v1 -X POST -H 'Content-Type: application/json' -d '{"cmd":"request.get","url":"https://httpbin.org/ip","maxTimeout":10000}' >/dev/null 2>&1; then
-              echo "FlareSolverr ready on port 8191"
-              break
-            fi
-            sleep 2
-          done
-
       - name: Cache storage state
         uses: actions/cache@v4
         with:
@@ -79,10 +65,9 @@ jobs:
 
       - name: Run parallel test (src/main.mjs)
         env:
-          FLARESOLVERR_URL: http://127.0.0.1:8191/v1
           HEADLESS: 'true'
           PARALLEL_PAGES: '10'
-          MAX_PAGES_PER_SEGMENT: '5'
+          MAX_PAGES_PER_SEGMENT: '40'
           REQUEST_DELAY_MS: '300'
           BYPASS_AI: 'true'
           ENABLE_TELEGRAM: 'false'
