@@ -119,35 +119,11 @@ async function ensureBrowser() {
     }
 
     context = await browser.newContext(contextOptions);
-    pages = [];
-    for (let i = 0; i < PARALLEL_PAGES; i++) {
-      pages.push(await context.newPage());
-    }
-    page = pages[0];
+    // Once sadece 1 sayfa ac, gerisi giris yapildiktan sonra
+    page = await context.newPage();
+    pages = [page];
 
-    // Daha once kaydedilmis cookie varsa yukle
-    const saved = loadSahibindenStorageState();
-    if (saved.storageState && saved.cookieCount > 0) {
-      // Log cookie expiry diagnostics
-      const now = Math.floor(Date.now() / 1000);
-      for (const c of saved.storageState.cookies) {
-        if (['csid', 'cwt', 'st'].includes(c.name) && c.expires) {
-          const days = Math.round((c.expires - now) / 86400);
-          console.log(`  Cookie ${c.name}: expires in ${days} day(s) (${new Date(c.expires * 1000).toISOString()})`);
-        }
-      }
-      await context.addCookies(saved.storageState.cookies);
-      console.log(`  ${saved.cookieCount} adet kayitli cookie yuklendi (kaynak: ${saved.source}).`);
-    }
-
-    // Ayrica SAHIBINDEN_COOKIES env ve cookies.json dosyasindaki cookie'leri yukle
-    const extraCookies = loadAllSahibindenCookies();
-    if (extraCookies.length > 0) {
-      await context.addCookies(extraCookies);
-      console.log(`  ${extraCookies.length} adet ek cookie yuklendi (env/dosya).`);
-    }
-
-    console.log('  Tarayici hazir.');
+    console.log('  Tarayici hazir (1 sayfa).');
     return true;
   } catch (err) {
     console.log(`  Tarayici baslatilamadi: ${err.message}`);
@@ -509,7 +485,7 @@ export async function initSession() {
   const ok = await ensureBrowser();
   if (!ok) return { ok: false, code: 'BROWSER_INIT_FAILED' };
 
-  console.log('  Ana sayfaya gidiliyor...');
+  console.log('  Ana sayfaya gidiliyor (cookiesiz)...');
   try {
     await page.goto('https://www.sahibinden.com/', {
       waitUntil: 'domcontentloaded',
@@ -521,7 +497,7 @@ export async function initSession() {
   let url = page.url();
   let html = await page.content().catch(() => '');
 
-  // Login sayfasina yonlendirildik → cookie yukle
+  // Login sayfasina yonlendirildik → cookie yukle ve banaozel'e git
   if (url.includes('giris') || html.toLowerCase().includes('giris yap')) {
     console.log('  Login sayfasi, cookie yukleniyor...');
     const saved = loadSahibindenStorageState();
@@ -535,6 +511,7 @@ export async function initSession() {
       await context.addCookies(extraCookies);
       cookieCount += extraCookies.length;
     }
+    console.log(`  ${cookieCount} cookie yuklendi, banaozel kontrol ediliyor...`);
     if (cookieCount > 0) {
       try {
         await page.goto('https://banaozel.sahibinden.com/', {
@@ -548,13 +525,21 @@ export async function initSession() {
     }
   }
 
-  if (url.includes('banaozel')) {
-    console.log('  Session dogrulandi.');
-    const saved = loadSahibindenStorageState();
-    return { ok: true, code: 'OK', cookieSource: saved.source, cookieCount: saved.cookieCount };
+  // Ekran fotografi al
+  try {
+    await page.screenshot({ path: 'init_session.png', fullPage: false });
+    console.log('  Ekran fotografi alindi: init_session.png');
+  } catch (_) {}
+
+  // Giris yapildiysa kalan paralel sayfalari ac
+  if (PARALLEL_PAGES > 1) {
+    console.log(`  ${PARALLEL_PAGES - 1} ek sayfa aciliyor...`);
+    for (let i = pages.length; i < PARALLEL_PAGES; i++) {
+      pages.push(await context.newPage());
+    }
+    console.log(`  Toplam ${pages.length} sayfa hazir.`);
   }
 
-  console.log('  Session hazir.');
   const saved = loadSahibindenStorageState();
   return { ok: true, code: 'OK', cookieSource: saved.source, cookieCount: saved.cookieCount };
 }
