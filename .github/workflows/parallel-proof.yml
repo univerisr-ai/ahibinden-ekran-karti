@@ -99,6 +99,14 @@ jobs:
           restore-keys: |
             sahibinden-storage-state-Linux-
 
+      - name: Generate Camoufox fingerprint config
+        shell: bash
+        run: |
+          CAMOUFOX_HEADLESS=true CAMOUFOX_PROXY=socks5://127.0.0.1:40000 \
+            python3 scripts/camoufox-config.py > .camoufox-config.json
+          echo "Camoufox config generated:"
+          python3 -c "import json; c=json.load(open('.camoufox-config.json')); print('executable:', c.get('executable_path','?')); print('env keys:', list(c.get('env',{}).keys())); print('args:', c.get('args',[]))"
+
       - name: Test FlareSolverr connectivity
         shell: bash
         run: |
@@ -111,8 +119,7 @@ jobs:
 
       - name: Run parallel test (test-main.mjs)
         env:
-          CAMOUFOX_BIN: ${{ steps.camoufox-bin.outputs.bin_path }}
-          CAMOUFOX_PROXY: socks5://127.0.0.1:40000
+          CAMOUFOX_CONFIG: .camoufox-config.json
           FLARESOLVERR_URL: http://127.0.0.1:8191/v1
           HEADLESS: 'true'
           PARALLEL_PAGES: '10'

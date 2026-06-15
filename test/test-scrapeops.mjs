@@ -52,7 +52,8 @@ export function getStats() {
 
 const CAMOUFOX_WS_ENDPOINT = String(process.env.CAMOUFOX_WS_ENDPOINT || '').trim();
 const CAMOUFOX_BIN = String(process.env.CAMOUFOX_BIN || '').trim();
-const USE_CAMOUFOX = CAMOUFOX_WS_ENDPOINT.length > 0 || CAMOUFOX_BIN.length > 0;
+const CAMOUFOX_CONFIG = String(process.env.CAMOUFOX_CONFIG || '').trim();
+const USE_CAMOUFOX = CAMOUFOX_WS_ENDPOINT.length > 0 || CAMOUFOX_BIN.length > 0 || CAMOUFOX_CONFIG.length > 0;
 
 async function ensureBrowser() {
   if (browser && context && pages.length > 0) return true;
@@ -60,6 +61,21 @@ async function ensureBrowser() {
     if (CAMOUFOX_WS_ENDPOINT) {
       console.log('  Camoufox server mode baslatiliyor...');
       browser = await firefox.connect(CAMOUFOX_WS_ENDPOINT);
+    } else if (CAMOUFOX_CONFIG) {
+      console.log('  Camoufox fingerprint config baslatiliyor...');
+      const fs = await import('fs');
+      const raw = fs.readFileSync(CAMOUFOX_CONFIG, 'utf8');
+      const cfg = JSON.parse(raw);
+      const launchOpts = {
+        executablePath: cfg.executable_path,
+        headless: true,
+        args: cfg.args || [],
+        firefoxUserPrefs: cfg.firefox_user_prefs || {},
+      };
+      if (cfg.env && typeof cfg.env === 'object') {
+        launchOpts.env = cfg.env;
+      }
+      browser = await firefox.launch(launchOpts);
     } else if (CAMOUFOX_BIN) {
       console.log('  Camoufox binary baslatiliyor...');
       const launchArgs = [];
