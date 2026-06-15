@@ -81,7 +81,6 @@ jobs:
         run: |
           docker run -d --name flaresolverr --network host \
             -e LOG_LEVEL=info \
-            -e PROXY_URL=socks5://127.0.0.1:40000 \
             ghcr.io/flaresolverr/flaresolverr:latest
           for i in $(seq 1 15); do
             if curl -s --noproxy '*' -m 3 http://127.0.0.1:8191/v1 >/dev/null 2>&1; then
