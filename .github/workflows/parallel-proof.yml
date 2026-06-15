@@ -25,12 +25,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Camoufox + deps
+      - name: Install Camoufox + download browser
         run: |
           pip install --upgrade pip 2>/dev/null || true
-          pip install "camoufox[geoip]>=0.4" playwright 2>/dev/null || true
+          pip install "camoufox[geoip]>=0.4" 2>/dev/null || true
           python3 -m camoufox fetch 2>&1 | tail -5
           sudo apt-get install -y xvfb 2>/dev/null || true
+
+      - name: Get Camoufox binary path
+        id: camoufox-bin
+        shell: bash
+        run: |
+          CAMO_DIR=$(python3 -m camoufox path 2>/dev/null || echo "$HOME/.cache/camoufox")
+          echo "Camoufox dir: $CAMO_DIR"
+          BIN=$(find "$CAMO_DIR" -type f \( -name "camoufox-bin" -o -name "firefox-bin" -o -name "firefox" \) 2>/dev/null | head -1)
+          if [ -z "$BIN" ]; then
+            BIN=$(find "$CAMO_DIR" -type f -executable 2>/dev/null | head -1)
+          fi
+          if [ -z "$BIN" ]; then
+            echo "No binary found!" && exit 1
+          fi
+          chmod +x "$BIN" 2>/dev/null || true
+          echo "bin_path=$BIN" >> "$GITHUB_OUTPUT"
+          file "$BIN"
 
       - name: Cloudflare WARP Proxy
         id: warp
@@ -82,37 +99,6 @@ jobs:
           restore-keys: |
             sahibinden-storage-state-Linux-
 
-      - name: Start Camoufox server (fingerprint mode)
-        id: camoufox-server
-        shell: bash
-        run: |
-          CAMOUFOX_HEADLESS=true CAMOUFOX_PROXY=socks5://127.0.0.1:40000 \
-            xvfb-run python3 scripts/camoufox-server.py \
-            > /tmp/camoufox-server.log 2>&1 &
-          SERVER_PID=$!
-          echo "server_pid=$SERVER_PID" >> "$GITHUB_OUTPUT"
-
-          for i in $(seq 1 60); do
-            WS=$(grep -oP 'Websocket endpoint: \K(ws://[^\s]+)' /tmp/camoufox-server.log 2>/dev/null | head -1)
-            if [ -n "$WS" ]; then
-              echo "camoufox_ws=$WS" >> "$GITHUB_OUTPUT"
-              echo "Camoufox server ready: $WS"
-              break
-            fi
-            if grep -q "Server error\|Traceback\|Error:" /tmp/camoufox-server.log 2>/dev/null; then
-              echo "Camoufox server error detected"
-              cat /tmp/camoufox-server.log
-              exit 1
-            fi
-            sleep 2
-          done
-
-          if [ -z "$WS" ]; then
-            echo "Camoufox server failed to start"
-            cat /tmp/camoufox-server.log
-            exit 1
-          fi
-
       - name: Test FlareSolverr connectivity
         shell: bash
         run: |
@@ -125,7 +111,8 @@ jobs:
 
       - name: Run parallel test (test-main.mjs)
         env:
-          CAMOUFOX_WS_ENDPOINT: ${{ steps.camoufox-server.outputs.camoufox_ws }}
+          CAMOUFOX_BIN: ${{ steps.camoufox-bin.outputs.bin_path }}
+          CAMOUFOX_PROXY: socks5://127.0.0.1:40000
           FLARESOLVERR_URL: http://127.0.0.1:8191/v1
           HEADLESS: 'true'
           PARALLEL_PAGES: '10'
