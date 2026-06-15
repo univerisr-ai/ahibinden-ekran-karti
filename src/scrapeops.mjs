@@ -448,18 +448,24 @@ export async function scrapeSegment(priceMin, priceMax) {
   console.log(`\n  Segment: ${label} (Kredi: ${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
 
   const firstUrl = buildSahibindenUrl(0, priceMin, priceMax);
-  let { html: firstHtml, status } = await fetchPage(firstUrl, `${label} (s:1)`);
+
+  // Once FlareSolverr ile dene (hizli), browser fallback
+  let firstHtml = null;
+  let status = 'FAILED';
+  const fsFirst = await applyFlareSolverrCookies(firstUrl);
+  if (fsFirst.ok && fsFirst.html && hasLikelyListingSignals(fsFirst.html)) {
+    firstHtml = fsFirst.html;
+    status = 'OK';
+    console.log('  FlareSolverr ilk sayfayi cozdu.');
+  } else {
+    const browserResult = await fetchPage(firstUrl, `${label} (s:1)`);
+    firstHtml = browserResult.html;
+    status = browserResult.status;
+  }
 
   if (!firstHtml || status === 'BANNED' || status === 'BUDGET_EXHAUSTED') {
-    const fsResult = await applyFlareSolverrCookies(firstUrl);
-    if (fsResult.ok && fsResult.html && hasLikelyListingSignals(fsResult.html)) {
-      console.log('  FlareSolverr ilk sayfayi cozdu, devam ediliyor.');
-      firstHtml = fsResult.html;
-      status = 'OK';
-    } else {
-      console.log('  Ilk sayfa alinamadi, segment atlaniyor.');
-      return { htmlPages: [], totalFound: 0, pages: 0, status: 'FAILED' };
-    }
+    console.log('  Ilk sayfa alinamadi, segment atlaniyor.');
+    return { htmlPages: [], totalFound: 0, pages: 0, status: 'FAILED' };
   }
 
   const htmlPages = [firstHtml];
