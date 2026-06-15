@@ -528,11 +528,7 @@ export async function initSession() {
   const ok = await ensureBrowser();
   if (!ok) return { ok: false, code: 'BROWSER_INIT_FAILED' };
 
-  console.log('  Cookies yukleniyor...');
-  const cookieCount = await loadSahibindenCookiesToContext();
-  console.log(`  Toplam ${cookieCount} cookie yuklendi.`);
-
-  console.log('  Ana sayfa kontrol ediliyor...');
+  console.log('  Ana sayfaya gidiliyor (cookiesiz)...');
   try {
     await page.goto('https://www.sahibinden.com/', {
       waitUntil: 'domcontentloaded',
@@ -541,16 +537,36 @@ export async function initSession() {
     await sleep(2000);
   } catch (_) {}
 
-  const url = page.url();
-  const html = await page.content().catch(() => '');
+  let url = page.url();
+  let html = await page.content().catch(() => '');
 
+  // Login sayfasina yonlendirildik → cookie yukle ve banaozel'e git
   if (url.includes('giris') || html.toLowerCase().includes('giris yap')) {
-    console.log('  Login sayfasi — cookie yuklendi ama login gerekiyor.');
-    return { ok: true, code: 'OK', cookieCount, notice: 'login page' };
+    console.log('  Login sayfasi — cookie yukleniyor...');
+    const cookieCount = await loadSahibindenCookiesToContext();
+    if (cookieCount === 0) {
+      console.log('  Cookie bulunamadi, yine de devam ediliyor.');
+    } else {
+      console.log(`  ${cookieCount} cookie yuklendi, banaozel kontrol ediliyor...`);
+      try {
+        await page.goto('https://banaozel.sahibinden.com/', {
+          waitUntil: 'domcontentloaded',
+          timeout: 30000,
+        });
+      } catch (_) {}
+      await sleep(2000);
+      url = page.url();
+      html = await page.content().catch(() => '');
+      if (url.includes('banaozel')) {
+        console.log('  Session dogrulandi, login kalindi.');
+        const saved = loadSahibindenStorageState();
+        return { ok: true, code: 'OK', cookieSource: saved.source, cookieCount: saved.cookieCount };
+      }
+    }
   }
 
   console.log(`  Ana sayfa: ${url.substring(0, 80)}`);
-  console.log('  Session hazir.');
+  console.log('  Session hazir (cookie varsa kullanilacak).');
   const saved = loadSahibindenStorageState();
   return { ok: true, code: 'OK', cookieSource: saved.source, cookieCount: saved.cookieCount };
 }
