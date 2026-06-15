@@ -43,12 +43,28 @@ let stats = {
 
 export function getStats() { return { ...stats }; }
 
+const CAMOUFOX_CONFIG = String(process.env.CAMOUFOX_CONFIG || '').trim();
 const CAMOUFOX_BIN = String(process.env.CAMOUFOX_BIN || '').trim();
 
 async function ensureBrowser() {
   if (browser && context && pages.length > 0) return true;
   try {
-    if (CAMOUFOX_BIN) {
+    if (CAMOUFOX_CONFIG) {
+      console.log('  Camoufox fingerprint config baslatiliyor...');
+      const fs = await import('fs');
+      const raw = fs.readFileSync(CAMOUFOX_CONFIG, 'utf8');
+      const cfg = JSON.parse(raw);
+      const launchOpts = {
+        executablePath: cfg.executable_path,
+        headless: true,
+        args: [...(cfg.args || [])],
+        firefoxUserPrefs: cfg.firefox_user_prefs || {},
+      };
+      const proxyUrl = process.env.CAMOUFOX_PROXY || process.env.ALL_PROXY || '';
+      if (proxyUrl) launchOpts.args.push('--proxy-server', proxyUrl);
+      if (cfg.env && typeof cfg.env === 'object') launchOpts.env = cfg.env;
+      browser = await firefox.launch(launchOpts);
+    } else if (CAMOUFOX_BIN) {
       console.log('  Camoufox binary baslatiliyor...');
       const launchArgs = [];
       const proxyUrl = process.env.CAMOUFOX_PROXY || process.env.ALL_PROXY || '';

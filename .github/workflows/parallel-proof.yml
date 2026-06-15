@@ -31,6 +31,15 @@ jobs:
           pip install --upgrade pip 2>/dev/null || true
           pip install "camoufox[geoip]>=0.4" 2>/dev/null || true
           python3 -m camoufox fetch 2>&1 | tail -5
+          sudo apt-get install -y xvfb 2>/dev/null || true
+
+      - name: Generate Camoufox fingerprint config
+        shell: bash
+        run: |
+          CAMOUFOX_HEADLESS=true CAMOUFOX_PROXY=socks5://127.0.0.1:40000 \
+            python3 scripts/camoufox-config.py > .camoufox-config.json
+          echo "Camoufox config generated:"
+          python3 -c "import json; c=json.load(open('.camoufox-config.json')); print('executable:', c.get('executable_path','?')); print('env keys:', list(c.get('env',{}).keys()))"
 
       - name: Get Camoufox binary path
         id: camoufox-bin
@@ -80,6 +89,7 @@ jobs:
 
       - name: Run parallel test (src/main.mjs)
         env:
+          CAMOUFOX_CONFIG: .camoufox-config.json
           CAMOUFOX_BIN: ${{ steps.camoufox-bin.outputs.bin_path }}
           CAMOUFOX_PROXY: ${{ steps.warp.outputs.proxy_url }}
           PARALLEL_PAGES: '10'
