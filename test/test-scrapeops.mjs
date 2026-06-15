@@ -69,9 +69,13 @@ async function ensureBrowser() {
       const launchOpts = {
         executablePath: cfg.executable_path,
         headless: true,
-        args: cfg.args || [],
+        args: [...(cfg.args || [])],
         firefoxUserPrefs: cfg.firefox_user_prefs || {},
       };
+      const proxyUrl = process.env.CAMOUFOX_PROXY || process.env.ALL_PROXY || '';
+      if (proxyUrl) {
+        launchOpts.args.push('--proxy-server', proxyUrl);
+      }
       if (cfg.env && typeof cfg.env === 'object') {
         launchOpts.env = cfg.env;
       }
@@ -171,12 +175,12 @@ async function applyFlareSolverrCookies(targetUrl) {
     const cookies = flareSolverrCookiesToPlaywright(solution.cookies || []);
     if (cookies.length > 0) {
       await context.addCookies(cookies);
-      console.log('  FlareSolverr\'den ${cookies.length} cookie eklendi.');
+      console.log(`  FlareSolverr'den ${cookies.length} cookie eklendi.`);
     }
     const html = solution.response || '';
     return { ok: true, cookies, html };
   } catch (err) {
-    console.log('  FlareSolverr hatasi: ${err.message}');
+    console.log(`  FlareSolverr hatasi: ${err.message}`);
     return { ok: false, cookies: [], html: '' };
   }
 }
