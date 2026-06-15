@@ -5,9 +5,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'test/test-*.mjs'
+      - 'src/*.mjs'
       - '.github/workflows/parallel-proof.yml'
       - 'scripts/camoufox-config.py'
+      - 'src/config.mjs'
 
 jobs:
   parallel-proof:
@@ -118,7 +119,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"cmd":"request.get","url":"https://httpbin.org/ip","maxTimeout":15000}' 2>&1 | head -30
 
-      - name: Run parallel test (test-main.mjs)
+      - name: Run parallel test (src/main.mjs)
         env:
           CAMOUFOX_CONFIG: .camoufox-config.json
           FLARESOLVERR_URL: http://127.0.0.1:8191/v1
@@ -134,7 +135,7 @@ jobs:
           SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
           TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: node test/test-main.mjs
+        run: node src/main.mjs
 
       - name: Upload test results
         if: always()

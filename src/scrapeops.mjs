@@ -6,6 +6,7 @@ import {
   BASE_URL,
   MAX_PAGES_PER_SEGMENT,
   WARMUP_PRICE_MAX,
+  PARALLEL_PAGES,
 } from './config.mjs';
 import { chromium, firefox } from 'playwright';
 import {
@@ -27,6 +28,15 @@ const DEFAULT_NAV_TIMEOUT_MS = parseInt(process.env.NAV_TIMEOUT_MS || '90000', 1
 let browser = null;
 let context = null;
 let page = null;
+let pages = [];
+let nextPageIndex = 0;
+
+function acquirePage() {
+  if (pages.length === 0) return page;
+  const p = pages[nextPageIndex % pages.length];
+  nextPageIndex++;
+  return p;
+}
 
 let stats = {
   totalRequests: 0,
@@ -41,14 +51,47 @@ export function getStats() {
 }
 
 const CAMOUFOX_WS_ENDPOINT = String(process.env.CAMOUFOX_WS_ENDPOINT || '').trim();
-const USE_CAMOUFOX = CAMOUFOX_WS_ENDPOINT.length > 0;
+const CAMOUFOX_BIN = String(process.env.CAMOUFOX_BIN || '').trim();
+const CAMOUFOX_CONFIG = String(process.env.CAMOUFOX_CONFIG || '').trim();
+const USE_CAMOUFOX = CAMOUFOX_WS_ENDPOINT.length > 0 || CAMOUFOX_BIN.length > 0 || CAMOUFOX_CONFIG.length > 0;
 
 async function ensureBrowser() {
-  if (browser && context && page) return true;
+  if (browser && context && pages.length > 0) return true;
   try {
-    if (USE_CAMOUFOX) {
+    if (CAMOUFOX_WS_ENDPOINT) {
       console.log('  Camoufox server mode baslatiliyor...');
       browser = await firefox.connect(CAMOUFOX_WS_ENDPOINT);
+    } else if (CAMOUFOX_CONFIG) {
+      console.log('  Camoufox fingerprint config baslatiliyor...');
+      const fs = await import('fs');
+      const raw = fs.readFileSync(CAMOUFOX_CONFIG, 'utf8');
+      const cfg = JSON.parse(raw);
+      const launchOpts = {
+        executablePath: cfg.executable_path,
+        headless: true,
+        args: [...(cfg.args || [])],
+        firefoxUserPrefs: cfg.firefox_user_prefs || {},
+      };
+      const proxyUrl = process.env.CAMOUFOX_PROXY || process.env.ALL_PROXY || '';
+      if (proxyUrl) {
+        launchOpts.args.push('--proxy-server', proxyUrl);
+      }
+      if (cfg.env && typeof cfg.env === 'object') {
+        launchOpts.env = cfg.env;
+      }
+      browser = await firefox.launch(launchOpts);
+    } else if (CAMOUFOX_BIN) {
+      console.log('  Camoufox binary baslatiliyor...');
+      const launchArgs = [];
+      const proxyUrl = process.env.CAMOUFOX_PROXY || process.env.ALL_PROXY || '';
+      if (proxyUrl) {
+        launchArgs.push('--proxy-server', proxyUrl);
+      }
+      browser = await firefox.launch({
+        executablePath: CAMOUFOX_BIN,
+        headless: true,
+        args: launchArgs,
+      });
     } else {
       console.log('  Chromium baslatiliyor...');
       browser = await chromium.launch({
@@ -76,7 +119,11 @@ async function ensureBrowser() {
     }
 
     context = await browser.newContext(contextOptions);
-    page = await context.newPage();
+    pages = [];
+    for (let i = 0; i < PARALLEL_PAGES; i++) {
+      pages.push(await context.newPage());
+    }
+    page = pages[0];
 
     // Daha once kaydedilmis cookie varsa yukle
     const saved = loadSahibindenStorageState();
@@ -310,7 +357,9 @@ async function fetchPage(targetUrl, label = '') {
   }
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    console.log(`  Camoufox -> ${label} (Deneme ${attempt})`);
+    const savedPage = page;
+    page = acquirePage();
+    console.log(`  Page ${((nextPageIndex - 1) % PARALLEL_PAGES) + 1}/${PARALLEL_PAGES} -> ${label} (Deneme ${attempt})`);
     stats.totalRequests++;
 
     try {
@@ -331,6 +380,7 @@ async function fetchPage(targetUrl, label = '') {
         if (solved) {
           html = await page.content();
           if (hasLikelyListingSignals(html)) {
+            page = savedPage;
             stats.successfulRequests++;
             stats.pagesLoaded++;
             stats.creditsUsed++;
@@ -356,6 +406,7 @@ async function fetchPage(targetUrl, label = '') {
         continue;
       }
 
+      page = savedPage;
       stats.successfulRequests++;
       stats.pagesLoaded++;
       stats.creditsUsed++;
@@ -363,6 +414,8 @@ async function fetchPage(targetUrl, label = '') {
     } catch (err) {
       console.log(`  Hata (deneme ${attempt}): ${err.message}`);
       await sleep(2000);
+    } finally {
+      page = savedPage;
     }
   }
 
@@ -396,17 +449,50 @@ export async function scrapeSegment(priceMin, priceMax) {
   const totalPages = Math.min(Math.ceil(totalCount / ITEMS_PER_PAGE), MAX_PAGES_PER_SEGMENT);
   console.log(`  ${label}: ${totalCount.toLocaleString('tr')} ilan, ${totalPages} sayfa.`);
 
-  for (let pageIndex = 1; pageIndex < totalPages; pageIndex++) {
-    await sleep(REQUEST_DELAY_MS);
-    const offset = pageIndex * ITEMS_PER_PAGE;
-    const url = buildSahibindenUrl(offset, priceMin, priceMax);
-    const { html, status: pageStatus } = await fetchPage(url, `${label} (s:${pageIndex + 1})`);
+  if (PARALLEL_PAGES <= 1) {
+    for (let pageIndex = 1; pageIndex < totalPages; pageIndex++) {
+      await sleep(REQUEST_DELAY_MS);
+      const offset = pageIndex * ITEMS_PER_PAGE;
+      const url = buildSahibindenUrl(offset, priceMin, priceMax);
+      const { html, status: pageStatus } = await fetchPage(url, `${label} (s:${pageIndex + 1})`);
 
-    if (pageStatus === 'BANNED' || pageStatus === 'BUDGET_EXHAUSTED') {
-      return { htmlPages, totalFound: totalCount, pages: htmlPages.length, status: pageStatus };
+      if (pageStatus === 'BANNED' || pageStatus === 'BUDGET_EXHAUSTED') {
+        return { htmlPages, totalFound: totalCount, pages: htmlPages.length, status: pageStatus };
+      }
+
+      if (html) htmlPages.push(html);
+    }
+  } else {
+    const pageIndexes = [];
+    for (let i = 1; i < totalPages; i++) {
+      pageIndexes.push(i);
     }
 
-    if (html) htmlPages.push(html);
+    for (let batchStart = 0; batchStart < pageIndexes.length; batchStart += PARALLEL_PAGES) {
+      const batch = pageIndexes.slice(batchStart, batchStart + PARALLEL_PAGES);
+      console.log(`  Batch ${Math.floor(batchStart / PARALLEL_PAGES) + 1}: ${batch.length} sayfa paralel`);
+      const batchResults = await Promise.allSettled(
+        batch.map(async (pageIndex) => {
+          await sleep(REQUEST_DELAY_MS);
+          const offset = pageIndex * ITEMS_PER_PAGE;
+          const url = buildSahibindenUrl(offset, priceMin, priceMax);
+          return fetchPage(url, `${label} (s:${pageIndex + 1})`);
+        })
+      );
+
+      let stopped = false;
+      for (const result of batchResults) {
+        if (result.status === 'fulfilled') {
+          const { html, status: pageStatus } = result.value;
+          if (html) htmlPages.push(html);
+          if (pageStatus === 'BANNED' || pageStatus === 'BUDGET_EXHAUSTED') {
+            stopped = true;
+            break;
+          }
+        }
+      }
+      if (stopped) break;
+    }
   }
 
   console.log(`  Segment bitti. Toplam sayfa: ${htmlPages.length}`);
@@ -423,68 +509,54 @@ export async function initSession() {
   const ok = await ensureBrowser();
   if (!ok) return { ok: false, code: 'BROWSER_INIT_FAILED' };
 
-  console.log('  Session dogrulaniyor (banaozel.sahibinden.com)...');
+  console.log('  Ana sayfaya gidiliyor...');
   try {
-
-    // 1. Once ana sayfaya git (Cloudflare challenge varsa cozulsun)
     await page.goto('https://www.sahibinden.com/', {
       waitUntil: 'domcontentloaded',
-      timeout: DEFAULT_NAV_TIMEOUT_MS,
-    });
-    await sleep(3000);
-    await solveTurnstileIfPresent(30000);
+      timeout: 30000,
+    }).catch(() => {});
+    await sleep(2000);
+  } catch (_) {}
 
-    // 2. Session dogrulamasi icin login gerektiren sayfaya git
-    await page.goto('https://banaozel.sahibinden.com/', {
-      waitUntil: 'domcontentloaded',
-      timeout: DEFAULT_NAV_TIMEOUT_MS,
-    });
-    await sleep(5000);
+  let url = page.url();
+  let html = await page.content().catch(() => '');
 
-    const url = page.url();
-    const html = await page.content().catch(() => '');
-
-    // Login sayfasina yonlendirildik ΓåÆ session gecersiz
-    if (url.includes('giris') || html.toLowerCase().includes('giris yap')) {
-      console.log('  Login sayfasi ΓÇö cookie gerekli.');
-      return { ok: false, code: 'LOGIN_REQUIRED' };
+  // Login sayfasina yonlendirildik → cookie yukle
+  if (url.includes('giris') || html.toLowerCase().includes('giris yap')) {
+    console.log('  Login sayfasi, cookie yukleniyor...');
+    const saved = loadSahibindenStorageState();
+    let cookieCount = 0;
+    if (saved.storageState && saved.cookieCount > 0) {
+      await context.addCookies(saved.storageState.cookies);
+      cookieCount += saved.cookieCount;
     }
-
-    // Bana Ozel sayfasi acildi ΓåÆ session gecerli
-    if (url.includes('banaozel')) {
-      console.log('  Session dogrulandi, login kalindi.');
-      const saved = loadSahibindenStorageState();
-      return {
-        ok: true,
-        code: 'OK',
-        cookieSource: saved.source,
-        cookieCount: saved.cookieCount,
-      };
+    const extraCookies = loadAllSahibindenCookies();
+    if (extraCookies.length > 0) {
+      await context.addCookies(extraCookies);
+      cookieCount += extraCookies.length;
     }
-
-    // Cloudflare challenge sayfasi
-    if (isChallengePage(html)) {
-      const fsOk = await applyFlareSolverrCookies(url);
-      if (fsOk) {
-        await page.reload({ waitUntil: 'domcontentloaded', timeout: DEFAULT_NAV_TIMEOUT_MS });
-        await sleep(5000);
-        const url2 = page.url();
-        if (url2.includes('banaozel')) {
-          console.log('  Session dogrulandi (FlareSolverr ile).');
-          const saved = loadSahibindenStorageState();
-          return { ok: true, code: 'OK', cookieSource: saved.source, cookieCount: saved.cookieCount };
-        }
-      }
-      console.log('  Cloudflare engeli asilamadi.');
-      return { ok: false, code: 'CF_BLOCKED' };
+    if (cookieCount > 0) {
+      try {
+        await page.goto('https://banaozel.sahibinden.com/', {
+          waitUntil: 'domcontentloaded',
+          timeout: 30000,
+        });
+      } catch (_) {}
+      await sleep(2000);
+      url = page.url();
+      html = await page.content().catch(() => '');
     }
-
-    console.log('  Bilinmeyen yonlendirme.');
-    return { ok: false, code: 'UNKNOWN_REDIRECT' };
-  } catch (err) {
-    console.log(`  Session init hatasi: ${err.message}`);
-    return { ok: false, code: 'INIT_SESSION_ERROR' };
   }
+
+  if (url.includes('banaozel')) {
+    console.log('  Session dogrulandi.');
+    const saved = loadSahibindenStorageState();
+    return { ok: true, code: 'OK', cookieSource: saved.source, cookieCount: saved.cookieCount };
+  }
+
+  console.log('  Session hazir.');
+  const saved = loadSahibindenStorageState();
+  return { ok: true, code: 'OK', cookieSource: saved.source, cookieCount: saved.cookieCount };
 }
 
 export async function saveChallengeProofScreenshot(label) {
@@ -510,6 +582,8 @@ export async function takeScreenshot(label) {
 
 export async function closeBrowser() {
   try {
+    for (const p of pages) { await p.close().catch(() => {}); }
+    pages = [];
     if (page) { await page.close().catch(() => {}); page = null; }
     if (context) { await context.close().catch(() => {}); context = null; }
     if (browser) { await browser.close().catch(() => {}); browser = null; }
