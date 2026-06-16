@@ -39,7 +39,7 @@ function acquirePage() {
 }
 
 async function expandPagePool() {
-  if (PARALLEL_PAGES <= 1) return;
+  if (PARALLEL_PAGES <= 1 || !context) return;
   console.log(`  ${PARALLEL_PAGES - 1} ek sayfa aciliyor...`);
   for (let i = pages.length; i < PARALLEL_PAGES; i++) {
     pages.push(await context.newPage());
@@ -70,9 +70,8 @@ async function ensureBrowser() {
       browser = await firefox.connect(CAMOUFOX_WS_ENDPOINT);
     } else {
       console.log('  Chromium baslatiliyor...');
-      const headless = (process.env.HEADLESS || 'true').trim().toLowerCase() !== 'false';
       browser = await chromium.launch({
-        headless,
+        headless: true,
         args: [
           '--no-sandbox',
           '--disable-blink-features=AutomationControlled',
@@ -424,17 +423,16 @@ export async function scrapeSegment(priceMin, priceMax) {
   const totalPages = Math.min(Math.ceil(totalCount / ITEMS_PER_PAGE), MAX_PAGES_PER_SEGMENT);
   console.log(`  ${label}: ${totalCount.toLocaleString('tr')} ilan, ${totalPages} sayfa.`);
 
+  if (totalPages <= 1) return { htmlPages, totalFound: totalCount, pages: 1, status: 'OK' };
+
   if (PARALLEL_PAGES > 1) {
-    const pageIndexes = [];
-    for (let i = 1; i < totalPages; i++) pageIndexes.push(i);
-    for (let b = 0; b < pageIndexes.length; b += PARALLEL_PAGES) {
-      const batch = pageIndexes.slice(b, b + PARALLEL_PAGES);
+    for (let b = 1; b < totalPages; b += PARALLEL_PAGES) {
+      const batch = [];
+      for (let i = b; i < Math.min(b + PARALLEL_PAGES, totalPages); i++) batch.push(i);
       const results = await Promise.allSettled(
         batch.map(async (pi) => {
           await sleep(REQUEST_DELAY_MS);
-          const offset = pi * ITEMS_PER_PAGE;
-          const url = buildSahibindenUrl(offset, priceMin, priceMax);
-          return fetchPage(url, `${label} (s:${pi + 1})`);
+          return fetchPage(buildSahibindenUrl(pi * ITEMS_PER_PAGE, priceMin, priceMax), `${label} (s:${pi + 1})`);
         })
       );
       for (const r of results) {
