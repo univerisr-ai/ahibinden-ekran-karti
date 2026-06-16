@@ -18,10 +18,6 @@ import { loadAllSahibindenCookies } from './cookies.mjs';
 import {
   solveUrlWithFlareSolverr,
   flareSolverrCookiesToPlaywright,
-  createFlareSolverrSession,
-  getFlareSolverrSessionId,
-  getFlareSolverrBatchSize,
-  setFreshCookies,
 } from './flaresolverr.mjs';
 import { loadMouseRecording, replayMouseRecording } from './mouse_recorder.mjs';
 
@@ -171,12 +167,13 @@ function isChallengePage(html) {
 }
 
 async function applyFlareSolverrCookies(targetUrl) {
+  if (!context) return { ok: false, cookies: [], html: '' };
   try {
     console.log('  FlareSolverr ile Cloudflare cozuluyor...');
     const solution = await solveUrlWithFlareSolverr(targetUrl);
     const cookies = flareSolverrCookiesToPlaywright(solution.cookies || []);
     if (cookies.length > 0) {
-      if (context) await context.addCookies(cookies);
+      await context.addCookies(cookies);
       console.log(`  FlareSolverr'den ${cookies.length} cookie eklendi.`);
     } else {
       console.log('  FlareSolverr cookie donmedi.');
@@ -325,20 +322,6 @@ async function solveTurnstileIfPresent(maxWait = 20000) {
   }
 }
 
-async function fetchPageViaFlareSolverr(targetUrl, label) {
-  if (stats.creditsUsed >= MAX_CREDITS_PER_RUN) return { html: null, status: 'BUDGET_EXHAUSTED' };
-  stats.totalRequests++;
-  const { ok, html } = await applyFlareSolverrCookies(targetUrl);
-  if (ok && html && hasLikelyListingSignals(html)) {
-    stats.successfulRequests++;
-    stats.pagesLoaded++;
-    stats.creditsUsed++;
-    return { html, status: 'OK' };
-  }
-  stats.failedRequests++;
-  return { html: null, status: 'FAILED' };
-}
-
 async function fetchPage(targetUrl, label = '') {
   if (stats.creditsUsed >= MAX_CREDITS_PER_RUN) {
     console.log(`  B├£T├çE L─░M─░T─░ A┼₧ILDI (${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
@@ -461,9 +444,9 @@ export async function scrapeSegment(priceMin, priceMax) {
   console.log(`\n  Segment: ${label} (Kredi: ${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
 
   const firstUrl = buildSahibindenUrl(0, priceMin, priceMax);
-  const { html: firstHtml, status } = await fetchPageViaFlareSolverr(firstUrl, `${label} (s:1)`);
+  const { html: firstHtml, status } = await fetchPage(firstUrl, `${label} (s:1)`);
 
-  if (!firstHtml || status === 'BUDGET_EXHAUSTED') {
+  if (!firstHtml || status === 'BANNED' || status === 'BUDGET_EXHAUSTED') {
     return { htmlPages: [], totalFound: 0, pages: 0, status };
   }
 
@@ -472,30 +455,60 @@ export async function scrapeSegment(priceMin, priceMax) {
   const totalPages = Math.min(Math.ceil(totalCount / ITEMS_PER_PAGE), MAX_PAGES_PER_SEGMENT);
   console.log(`  ${label}: ${totalCount.toLocaleString('tr')} ilan, ${totalPages} sayfa.`);
 
-  if (totalPages <= 1) return { htmlPages, totalFound: totalCount, pages: 1, status: 'OK' };
+  if (PARALLEL_PAGES <= 1) {
+    for (let pageIndex = 1; pageIndex < totalPages; pageIndex++) {
+      await sleep(REQUEST_DELAY_MS);
+      const offset = pageIndex * ITEMS_PER_PAGE;
+      const url = buildSahibindenUrl(offset, priceMin, priceMax);
+      const { html, status: pageStatus } = await fetchPage(url, `${label} (s:${pageIndex + 1})`);
 
-  // Kalan sayfalari FlareSolverr ile paralel cek (batch size: 5)
-  const batchSize = getFlareSolverrBatchSize();
-  const pageIndexes = [];
-  for (let i = 1; i < totalPages; i++) pageIndexes.push(i);
+      if (pageStatus === 'BANNED' || pageStatus === 'BUDGET_EXHAUSTED') {
+        return { htmlPages, totalFound: totalCount, pages: htmlPages.length, status: pageStatus };
+      }
 
-  for (let b = 0; b < pageIndexes.length; b += batchSize) {
-    const batch = pageIndexes.slice(b, b + batchSize);
-    const results = await Promise.allSettled(
-      batch.map(async (pi) => {
-        await sleep(REQUEST_DELAY_MS);
-        const offset = pi * ITEMS_PER_PAGE;
-        const url = buildSahibindenUrl(offset, priceMin, priceMax);
-        return fetchPageViaFlareSolverr(url, `${label} (s:${pi + 1})`);
-      })
-    );
-    for (const r of results) {
-      if (r.status === 'fulfilled' && r.value.html) htmlPages.push(r.value.html);
+      if (html) htmlPages.push(html);
+    }
+  } else {
+    const pageIndexes = [];
+    for (let i = 1; i < totalPages; i++) {
+      pageIndexes.push(i);
+    }
+
+    for (let batchStart = 0; batchStart < pageIndexes.length; batchStart += PARALLEL_PAGES) {
+      const batch = pageIndexes.slice(batchStart, batchStart + PARALLEL_PAGES);
+      console.log(`  Batch ${Math.floor(batchStart / PARALLEL_PAGES) + 1}: ${batch.length} sayfa paralel`);
+      const batchResults = await Promise.allSettled(
+        batch.map(async (pageIndex) => {
+          await sleep(REQUEST_DELAY_MS);
+          const offset = pageIndex * ITEMS_PER_PAGE;
+          const url = buildSahibindenUrl(offset, priceMin, priceMax);
+          return fetchPage(url, `${label} (s:${pageIndex + 1})`);
+        })
+      );
+
+      let stopped = false;
+      for (const result of batchResults) {
+        if (result.status === 'fulfilled') {
+          const { html, status: pageStatus } = result.value;
+          if (html) htmlPages.push(html);
+          if (pageStatus === 'BANNED' || pageStatus === 'BUDGET_EXHAUSTED') {
+            stopped = true;
+            break;
+          }
+        }
+      }
+      if (stopped) break;
     }
   }
 
   console.log(`  Segment bitti. Toplam sayfa: ${htmlPages.length}`);
   return { htmlPages, totalFound: totalCount, pages: htmlPages.length, status: 'OK' };
+}
+
+export async function scrapeDetailUrl(detailUrl) {
+  const targetUrl = String(detailUrl || '').trim();
+  if (!targetUrl) return { html: null, status: 'INVALID_URL' };
+  return fetchPage(targetUrl, `detail: ${targetUrl}`);
 }
 
 export async function initSession() {
@@ -506,15 +519,16 @@ export async function initSession() {
   try {
     await page.goto('https://www.sahibinden.com/', {
       waitUntil: 'domcontentloaded',
-      timeout: 45000,
+      timeout: 30000,
     }).catch(() => {});
     await sleep(2000);
   } catch (_) {}
 
   let url = page.url();
   let html = await page.content().catch(() => '');
+  let cookieCount = 0;
 
-  // Cookie yukle
+  // Cookie yukle (her durumda, login sayfasi olsun ya da olmasin)
   const saved = loadSahibindenStorageState();
   if (saved.storageState && saved.cookieCount > 0) {
     const now = Math.floor(Date.now() / 1000);
@@ -525,45 +539,48 @@ export async function initSession() {
       }
     }
     await context.addCookies(saved.storageState.cookies);
+    cookieCount += saved.cookieCount;
   }
   const extraCookies = loadAllSahibindenCookies();
-  if (extraCookies.length > 0) await context.addCookies(extraCookies);
+  if (extraCookies.length > 0) {
+    await context.addCookies(extraCookies);
+    cookieCount += extraCookies.length;
+  }
+  console.log(`  ${cookieCount} cookie yuklendi.`);
 
-  // Login sayfasi → banaozel'e git
+  // Login sayfasina yonlendirildikse banaozel'e git
   if (url.includes('giris') || html.toLowerCase().includes('giris yap')) {
     console.log('  Login sayfasi, banaozel kontrol ediliyor...');
-    try {
-      await page.goto('https://banaozel.sahibinden.com/', {
-        waitUntil: 'domcontentloaded',
-        timeout: 45000,
-      });
-    } catch (_) {}
-    await sleep(2000);
-    url = page.url();
-    html = await page.content().catch(() => '');
+    if (cookieCount > 0) {
+      try {
+        await page.goto('https://banaozel.sahibinden.com/', {
+          waitUntil: 'domcontentloaded',
+          timeout: 30000,
+        });
+      } catch (_) {}
+      await sleep(2000);
+      url = page.url();
+      html = await page.content().catch(() => '');
+    }
   }
 
-  // Ekran fotografi
-  try { await page.screenshot({ path: 'init_session.png', fullPage: false }); } catch (_) {}
+  // Ekran fotografi al
+  try {
+    await page.screenshot({ path: 'init_session.png', fullPage: false });
+    console.log('  Ekran fotografi alindi: init_session.png');
+  } catch (_) {}
 
-  // Cookie'leri al ve tarayiciyi kapat
-  const allCookies = await context.cookies();
-  console.log(`  Toplam ${allCookies.length} cookie tarayicidan alindi.`);
+  // Giris yapildiysa kalan paralel sayfalari ac
+  if (PARALLEL_PAGES > 1) {
+    console.log(`  ${PARALLEL_PAGES - 1} ek sayfa aciliyor...`);
+    for (let i = pages.length; i < PARALLEL_PAGES; i++) {
+      pages.push(await context.newPage());
+    }
+    console.log(`  Toplam ${pages.length} sayfa hazir.`);
+  }
 
-  // FlareSolverr'a fresh cookie'leri gonder
-  setFreshCookies(allCookies);
-
-  await closeBrowser();
-  console.log('  Tarayici kapatildi (RAM serbest).');
-
-  console.log(`  Session hazir, ${allCookies.length} cookie ile devam.`);
-  return { ok: true, code: 'OK', cookieCount: allCookies.length };
-}
-
-export async function scrapeDetailUrl(detailUrl) {
-  const targetUrl = String(detailUrl || '').trim();
-  if (!targetUrl) return { html: null, status: 'INVALID_URL' };
-  return fetchPageViaFlareSolverr(targetUrl, `detail: ${targetUrl}`);
+  const finalSaved = loadSahibindenStorageState();
+  return { ok: true, code: 'OK', cookieSource: finalSaved.source, cookieCount: finalSaved.cookieCount };
 }
 
 export async function saveChallengeProofScreenshot(label) {
@@ -617,5 +634,5 @@ export async function saveStorageState() {
 export default {
   initSession, scrapeSegment, scrapeDetailUrl, getStats,
   saveChallengeProofScreenshot, takeScreenshot, closeBrowser,
-  saveStorageState, fetchPageViaFlareSolverr,
+  saveStorageState,
 };

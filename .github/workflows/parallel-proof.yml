@@ -12,7 +12,7 @@ on:
 jobs:
   parallel-proof:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -76,22 +76,20 @@ jobs:
             echo "proxy_url=" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Start FlareSolverr with WARP proxy
+      - name: Start FlareSolverr with host network
         shell: bash
         run: |
           docker run -d --name flaresolverr --network host \
             -e LOG_LEVEL=info \
-            -e PROXY_URL=socks5://127.0.0.1:40000 \
             ghcr.io/flaresolverr/flaresolverr:latest
           for i in $(seq 1 15); do
-            if curl -s --noproxy '*' -m 3 -X POST http://127.0.0.1:8191/v1 \
-              -H 'Content-Type: application/json' \
-              -d '{"cmd":"sessions.create","session":"test"}' >/dev/null 2>&1; then
+            if curl -s --noproxy '*' -m 3 http://127.0.0.1:8191/v1 >/dev/null 2>&1; then
               echo "FlareSolverr ready on port 8191"
               break
             fi
             sleep 2
           done
+          curl -s --noproxy '*' -m 5 http://127.0.0.1:8191/v1 | head -5 || echo "FlareSolverr not ready"
 
       - name: Cache storage state
         uses: actions/cache@v4
@@ -116,8 +114,7 @@ jobs:
           CAMOUFOX_BIN: ${{ steps.camoufox-bin.outputs.bin_path }}
           FLARESOLVERR_URL: http://127.0.0.1:8191/v1
           HEADLESS: 'true'
-          PARALLEL_PAGES: '1'
-          FLARESOLVERR_BATCH_SIZE: '5'
+          PARALLEL_PAGES: '10'
           MAX_PAGES_PER_SEGMENT: '40'
           BYPASS_AI: 'true'
           ENABLE_TELEGRAM: 'false'
