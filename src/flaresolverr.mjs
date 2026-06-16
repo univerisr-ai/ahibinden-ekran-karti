@@ -38,25 +38,13 @@ export function setFreshCookies(cookies) {
 }
 
 export async function solveUrlWithFlareSolverr(targetUrl) {
-  const storedCookies = loadSahibindenCookiesForFlareSolverr();
-  const cookies = [...storedCookies];
-  // Add fresh cookies from browser login (convert to FlareSolverr format)
-  for (const c of freshPlaywrightCookies) {
-    cookies.push({
-      name: c.name,
-      value: c.value,
-      domain: c.domain || '.sahibinden.com',
-    });
-  }
   const body = {
     cmd: 'request.get',
     url: targetUrl,
     maxTimeout: FLARESOLVERR_TIMEOUT,
   };
-  if (cookies.length > 0) {
-    body.cookies = cookies;
-    console.log(`  FlareSolverr istegine ${cookies.length} adet cookie eklendi.`);
-  }
+  // Arama sayfalari public, cookie gerekmez
+  console.log('  FlareSolverr istek gonderiliyor...');
 
   const res = await fetch(FLARESOLVERR_URL, {
     method: 'POST',
