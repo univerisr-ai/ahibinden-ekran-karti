@@ -19,14 +19,7 @@ function loadSahibindenCookiesForFlareSolverr() {
     }
     return parsed
       .filter((c) => c && typeof c === 'object' && typeof c.name === 'string' && typeof c.value === 'string')
-      .map((c) => {
-        const d = (c.domain || '').toLowerCase();
-        // Only include sahibinden domains, skip invalid/empty domains
-        const domain = d.includes('sahibinden') ? d : '';
-        const entry = { name: c.name, value: c.value };
-        if (domain) entry.domain = domain;
-        return entry;
-      })
+      .map((c) => ({ name: c.name, value: c.value }))
       .filter((c) => c.name && c.value);
   } catch (err) {
     console.log(`  SAHIBINDEN_COOKIES parse hatasi (FlareSolverr): ${err.message}`);
