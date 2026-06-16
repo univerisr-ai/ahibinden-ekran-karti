@@ -22,7 +22,7 @@ function loadSahibindenCookiesForFlareSolverr() {
       .map((c) => ({
         name: c.name,
         value: c.value,
-        domain: c.domain || undefined,
+        domain: c.domain || '.sahibinden.com',
       }))
       .filter((c) => c.name && c.value);
   } catch (err) {
