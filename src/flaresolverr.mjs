@@ -19,11 +19,14 @@ function loadSahibindenCookiesForFlareSolverr() {
     }
     return parsed
       .filter((c) => c && typeof c === 'object' && typeof c.name === 'string' && typeof c.value === 'string')
-      .map((c) => ({
-        name: c.name,
-        value: c.value,
-        domain: c.domain || '.sahibinden.com',
-      }))
+      .map((c) => {
+        const d = (c.domain || '').toLowerCase();
+        // Only include sahibinden domains, skip invalid/empty domains
+        const domain = d.includes('sahibinden') ? d : '';
+        const entry = { name: c.name, value: c.value };
+        if (domain) entry.domain = domain;
+        return entry;
+      })
       .filter((c) => c.name && c.value);
   } catch (err) {
     console.log(`  SAHIBINDEN_COOKIES parse hatasi (FlareSolverr): ${err.message}`);
@@ -38,13 +41,16 @@ export function setFreshCookies(cookies) {
 }
 
 export async function solveUrlWithFlareSolverr(targetUrl) {
+  const cookies = loadSahibindenCookiesForFlareSolverr();
   const body = {
     cmd: 'request.get',
     url: targetUrl,
     maxTimeout: FLARESOLVERR_TIMEOUT,
   };
-  // Arama sayfalari public, cookie gerekmez
-  console.log('  FlareSolverr istek gonderiliyor...');
+  if (cookies.length > 0) {
+    body.cookies = cookies;
+    console.log(`  FlareSolverr istegine ${cookies.length} cookie eklendi.`);
+  }
 
   const res = await fetch(FLARESOLVERR_URL, {
     method: 'POST',
