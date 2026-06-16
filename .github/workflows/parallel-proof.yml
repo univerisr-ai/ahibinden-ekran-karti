@@ -7,7 +7,6 @@ on:
     paths:
       - 'src/*.mjs'
       - '.github/workflows/parallel-proof.yml'
-      - 'src/config.mjs'
 
 jobs:
   parallel-proof:
@@ -15,80 +14,93 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Kodu İndir
+      uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+    - name: Node.js Kurulumu
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
 
-      - name: Install dependencies + Playwright Chrome + xvfb
-        run: |
-          npm ci
-          npx playwright install chrome
-          npx playwright install-deps chrome
-          sudo apt-get install -y xvfb
+    - name: Gerekli Paketleri Yükle
+      run: npm install
 
-      - name: Cloudflare WARP Proxy
-        id: warp
-        shell: bash
-        run: |
-          set -u
-          if (
-            set -euo pipefail
-            curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-            sudo apt-get update
-            sudo apt-get install -y cloudflare-warp
-            warp-cli --accept-tos registration new || warp-cli --accept-tos register
-            warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy
-            warp-cli --accept-tos proxy port 40000 || warp-cli --accept-tos set-proxy-port 40000
-            warp-cli --accept-tos connect
-            sleep 8
-            warp-cli --accept-tos status
-            curl -fsS -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | tee warp-trace.txt
-          ); then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "proxy_url=socks5://127.0.0.1:40000" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "proxy_url=" >> "$GITHUB_OUTPUT"
-          fi
+    - name: Google Chrome'u Kur (Playwright için)
+      run: |
+        npx playwright install chrome
+        npx playwright install-deps chrome
+        sudo apt-get install -y xvfb
 
-      - name: Cache storage state
-        uses: actions/cache@v4
-        with:
-          path: .playwright/storage-state.json
-          key: sahibinden-storage-state-Linux-${{ github.run_id }}
-          restore-keys: |
-            sahibinden-storage-state-Linux-
+    - name: Cloudflare WARP Proxy Kurulumu
+      id: warp
+      shell: bash
+      run: |
+        set -u
+        if (
+          set -euo pipefail
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update
+          sudo apt-get install -y cloudflare-warp
+          warp-cli --accept-tos registration new || warp-cli --accept-tos register
+          warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy
+          warp-cli --accept-tos proxy port 40000 || warp-cli --accept-tos set-proxy-port 40000
+          warp-cli --accept-tos connect
+          sleep 8
+          warp-cli --accept-tos status
+          curl -fsS -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | tee warp-trace.txt
+        ); then
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "proxy_url=socks5://127.0.0.1:40000" >> "$GITHUB_OUTPUT"
+        else
+          echo "::warning::Cloudflare WARP proxy setup failed; continuing without WARP proxy."
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+          echo "proxy_url=" >> "$GITHUB_OUTPUT"
+        fi
 
-      - name: Run parallel test (src/main.mjs)
-        env:
-          HEADLESS: 'false'
-          PARALLEL_PAGES: '10'
-          MAX_PAGES_PER_SEGMENT: '40'
-          REQUEST_DELAY_MS: '300'
-          BYPASS_AI: 'true'
-          ENABLE_TELEGRAM: 'false'
-          SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
-          SAHIBINDEN_STORAGE_STATE_FILE: .playwright/storage-state.json
-          SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
-          TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs
+    - name: Sahibinden Playwright Profil Cache
+      uses: actions/cache@v4
+      with:
+        path: .playwright/sahibinden-profile
+        key: sahibinden-playwright-profile-v2-${{ runner.os }}-${{ github.run_id }}
+        restore-keys: |
+          sahibinden-playwright-profile-v2-${{ runner.os }}-
 
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: parallel-proof-results
-          path: |
-            output.json
-            pipeline-messages.json
-            cf_proof.png
-            init_session.png
-            scraper.log
-          if-no-files-found: warn
-          retention-days: 7
+    - name: Cache storage state
+      uses: actions/cache@v4
+      with:
+        path: .playwright/storage-state.json
+        key: sahibinden-storage-state-Linux-${{ github.run_id }}
+        restore-keys: |
+          sahibinden-storage-state-Linux-
+
+    - name: Run parallel scraper
+      env:
+        HEADLESS: 'false'
+        SAHIBINDEN_USER_DATA_DIR: .playwright/sahibinden-profile
+        PARALLEL_PAGES: '10'
+        MAX_PAGES_PER_SEGMENT: '40'
+        REQUEST_DELAY_MS: '300'
+        BYPASS_AI: 'true'
+        ENABLE_TELEGRAM: 'false'
+        SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
+        SAHIBINDEN_STORAGE_STATE_FILE: .playwright/storage-state.json
+        SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
+        TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: |
+        xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs 2>&1 | tee scraper.log
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: parallel-proof-results
+        path: |
+          output.json
+          pipeline-messages.json
+          cf_proof.png
+          init_session.png
+          scraper.log
+        if-no-files-found: warn
+        retention-days: 7
