@@ -564,6 +564,12 @@ export async function initSession() {
   return { ok: true, code: 'OK', cookieCount: allCookies.length };
 }
 
+export async function scrapeDetailUrl(detailUrl) {
+  const targetUrl = String(detailUrl || '').trim();
+  if (!targetUrl) return { html: null, status: 'INVALID_URL' };
+  return fetchPageViaFlareSolverr(targetUrl, `detail: ${targetUrl}`);
+}
+
 export async function saveChallengeProofScreenshot(label) {
   try {
     if (page && !page.isClosed()) {
