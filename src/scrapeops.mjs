@@ -18,6 +18,10 @@ import { loadAllSahibindenCookies } from './cookies.mjs';
 import {
   solveUrlWithFlareSolverr,
   flareSolverrCookiesToPlaywright,
+  createFlareSolverrSession,
+  getFlareSolverrSessionId,
+  getFlareSolverrBatchSize,
+  setFreshCookies,
 } from './flaresolverr.mjs';
 import { loadMouseRecording, replayMouseRecording } from './mouse_recorder.mjs';
 
@@ -429,6 +433,20 @@ async function fetchPage(targetUrl, label = '') {
   return { html: null, status: 'FAILED' };
 }
 
+async function fetchPageViaFlareSolverr(targetUrl, label) {
+  if (stats.creditsUsed >= MAX_CREDITS_PER_RUN) return { html: null, status: 'BUDGET_EXHAUSTED' };
+  stats.totalRequests++;
+  const { ok, html } = await applyFlareSolverrCookies(targetUrl);
+  if (ok && html && hasLikelyListingSignals(html)) {
+    stats.successfulRequests++;
+    stats.pagesLoaded++;
+    stats.creditsUsed++;
+    return { html, status: 'OK' };
+  }
+  stats.failedRequests++;
+  return { html: null, status: 'FAILED' };
+}
+
 export function buildSahibindenUrl(offset, priceMin, priceMax) {
   const url = new URL(BASE_URL);
   url.searchParams.set('pagingOffset', String(offset));
@@ -444,9 +462,9 @@ export async function scrapeSegment(priceMin, priceMax) {
   console.log(`\n  Segment: ${label} (Kredi: ${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
 
   const firstUrl = buildSahibindenUrl(0, priceMin, priceMax);
-  const { html: firstHtml, status } = await fetchPage(firstUrl, `${label} (s:1)`);
+  const { html: firstHtml, status } = await fetchPageViaFlareSolverr(firstUrl, `${label} (s:1)`);
 
-  if (!firstHtml || status === 'BANNED' || status === 'BUDGET_EXHAUSTED') {
+  if (!firstHtml || status === 'BUDGET_EXHAUSTED') {
     return { htmlPages: [], totalFound: 0, pages: 0, status };
   }
 
@@ -455,49 +473,22 @@ export async function scrapeSegment(priceMin, priceMax) {
   const totalPages = Math.min(Math.ceil(totalCount / ITEMS_PER_PAGE), MAX_PAGES_PER_SEGMENT);
   console.log(`  ${label}: ${totalCount.toLocaleString('tr')} ilan, ${totalPages} sayfa.`);
 
-  if (PARALLEL_PAGES <= 1) {
-    for (let pageIndex = 1; pageIndex < totalPages; pageIndex++) {
-      await sleep(REQUEST_DELAY_MS);
-      const offset = pageIndex * ITEMS_PER_PAGE;
-      const url = buildSahibindenUrl(offset, priceMin, priceMax);
-      const { html, status: pageStatus } = await fetchPage(url, `${label} (s:${pageIndex + 1})`);
+  if (totalPages <= 1) return { htmlPages, totalFound: totalCount, pages: 1, status: 'OK' };
 
-      if (pageStatus === 'BANNED' || pageStatus === 'BUDGET_EXHAUSTED') {
-        return { htmlPages, totalFound: totalCount, pages: htmlPages.length, status: pageStatus };
-      }
+  const batchSize = getFlareSolverrBatchSize();
+  const pageIndexes = [];
+  for (let i = 1; i < totalPages; i++) pageIndexes.push(i);
 
-      if (html) htmlPages.push(html);
-    }
-  } else {
-    const pageIndexes = [];
-    for (let i = 1; i < totalPages; i++) {
-      pageIndexes.push(i);
-    }
-
-    for (let batchStart = 0; batchStart < pageIndexes.length; batchStart += PARALLEL_PAGES) {
-      const batch = pageIndexes.slice(batchStart, batchStart + PARALLEL_PAGES);
-      console.log(`  Batch ${Math.floor(batchStart / PARALLEL_PAGES) + 1}: ${batch.length} sayfa paralel`);
-      const batchResults = await Promise.allSettled(
-        batch.map(async (pageIndex) => {
-          await sleep(REQUEST_DELAY_MS);
-          const offset = pageIndex * ITEMS_PER_PAGE;
-          const url = buildSahibindenUrl(offset, priceMin, priceMax);
-          return fetchPage(url, `${label} (s:${pageIndex + 1})`);
-        })
-      );
-
-      let stopped = false;
-      for (const result of batchResults) {
-        if (result.status === 'fulfilled') {
-          const { html, status: pageStatus } = result.value;
-          if (html) htmlPages.push(html);
-          if (pageStatus === 'BANNED' || pageStatus === 'BUDGET_EXHAUSTED') {
-            stopped = true;
-            break;
-          }
-        }
-      }
-      if (stopped) break;
+  for (let b = 0; b < pageIndexes.length; b += batchSize) {
+    const batch = pageIndexes.slice(b, b + batchSize);
+    const results = await Promise.allSettled(
+      batch.map(async (pi) => {
+        await sleep(REQUEST_DELAY_MS);
+        return fetchPageViaFlareSolverr(buildSahibindenUrl(pi * ITEMS_PER_PAGE, priceMin, priceMax), `${label} (s:${pi + 1})`);
+      })
+    );
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value.html) htmlPages.push(r.value.html);
     }
   }
 
