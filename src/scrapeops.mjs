@@ -170,13 +170,12 @@ function isChallengePage(html) {
 }
 
 async function applyFlareSolverrCookies(targetUrl) {
-  if (!context) return { ok: false, cookies: [], html: '' };
   try {
     console.log('  FlareSolverr ile Cloudflare cozuluyor...');
     const solution = await solveUrlWithFlareSolverr(targetUrl);
     const cookies = flareSolverrCookiesToPlaywright(solution.cookies || []);
     if (cookies.length > 0) {
-      await context.addCookies(cookies);
+      if (context) await context.addCookies(cookies);
       console.log(`  FlareSolverr'den ${cookies.length} cookie eklendi.`);
     } else {
       console.log('  FlareSolverr cookie donmedi.');
