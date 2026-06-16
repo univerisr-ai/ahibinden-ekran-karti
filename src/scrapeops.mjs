@@ -51,8 +51,9 @@ async function ensureBrowser() {
       browser = await firefox.connect(CAMOUFOX_WS_ENDPOINT);
     } else {
       console.log('  Chromium baslatiliyor...');
+      const headless = (process.env.HEADLESS || 'true').trim().toLowerCase() !== 'false';
       browser = await chromium.launch({
-        headless: true,
+        headless,
         channel: 'chrome',
         args: [
           '--no-sandbox',
