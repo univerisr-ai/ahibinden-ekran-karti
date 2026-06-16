@@ -21,6 +21,7 @@ import {
   createFlareSolverrSession,
   getFlareSolverrSessionId,
   getFlareSolverrBatchSize,
+  setFreshCookies,
 } from './flaresolverr.mjs';
 import { loadMouseRecording, replayMouseRecording } from './mouse_recorder.mjs';
 
@@ -549,17 +550,13 @@ export async function initSession() {
   const allCookies = await context.cookies();
   console.log(`  Toplam ${allCookies.length} cookie tarayicidan alindi.`);
 
+  // FlareSolverr'a fresh cookie'leri gonder
+  setFreshCookies(allCookies);
+
   await closeBrowser();
   console.log('  Tarayici kapatildi (RAM serbest).');
 
-  // FlareSolverr session olustur
-  const fsSession = await createFlareSolverrSession(allCookies);
-  if (!fsSession) {
-    console.log('  FlareSolverr session olusturulamadi!');
-    return { ok: false, code: 'FS_SESSION_FAILED' };
-  }
-
-  console.log(`  Session hazir: ${fsSession}`);
+  console.log(`  Session hazir, ${allCookies.length} cookie ile devam.`);
   return { ok: true, code: 'OK', cookieCount: allCookies.length };
 }
 
