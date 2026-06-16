@@ -2,6 +2,11 @@ import { env } from 'node:process';
 
 const FLARESOLVERR_URL = String(env.FLARESOLVERR_URL || 'http://flaresolverr:8191/v1').trim();
 const FLARESOLVERR_TIMEOUT = parseInt(env.FLARESOLVERR_TIMEOUT_MS || '90000', 10);
+const FLARESOLVERR_BATCH_SIZE = parseInt(env.FLARESOLVERR_BATCH_SIZE || '5', 10);
+
+export { FLARESOLVERR_URL, FLARESOLVERR_TIMEOUT, FLARESOLVERR_BATCH_SIZE };
+
+let flareSolverrSessionId = null;
 
 function loadSahibindenCookiesForFlareSolverr() {
   const raw = String(env.SAHIBINDEN_COOKIES || '').trim();
@@ -33,6 +38,9 @@ export async function solveUrlWithFlareSolverr(targetUrl) {
     url: targetUrl,
     maxTimeout: FLARESOLVERR_TIMEOUT,
   };
+  if (flareSolverrSessionId) {
+    body.session = flareSolverrSessionId;
+  }
   if (cookies.length > 0) {
     body.cookies = cookies;
     console.log(`  FlareSolverr istegine ${cookies.length} adet SAHIBINDEN_COOKIES eklendi.`);
@@ -68,4 +76,53 @@ export function flareSolverrCookiesToPlaywright(cookies) {
     secure: !!c.secure,
     sameSite: c.sameSite || 'Lax',
   }));
+}
+
+export async function createFlareSolverrSession(playwrightCookies) {
+  const sessionId = `sahibinden-${Date.now()}`;
+  const cookies = playwrightCookies.map((c) => ({
+    name: c.name,
+    value: c.value,
+    domain: c.domain || '.sahibinden.com',
+    path: c.path || '/',
+    secure: c.secure || false,
+    httpOnly: c.httpOnly || false,
+    sameSite: c.sameSite || 'Lax',
+  }));
+
+  const body = {
+    cmd: 'sessions.create',
+    session: sessionId,
+    cookies,
+  };
+
+  console.log(`  FlareSolverr session olusturuluyor: ${sessionId} (${cookies.length} cookie)`);
+  const res = await fetch(FLARESOLVERR_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    console.log(`  FlareSolverr session olusturulamadi: HTTP ${res.status}`);
+    return null;
+  }
+
+  const data = await res.json();
+  if (data.status !== 'ok') {
+    console.log(`  FlareSolverr session olusturulamadi: ${data.message}`);
+    return null;
+  }
+
+  flareSolverrSessionId = sessionId;
+  console.log(`  FlareSolverr session hazir: ${sessionId}`);
+  return sessionId;
+}
+
+export function getFlareSolverrSessionId() {
+  return flareSolverrSessionId;
+}
+
+export function getFlareSolverrBatchSize() {
+  return FLARESOLVERR_BATCH_SIZE;
 }
