@@ -53,6 +53,7 @@ async function ensureBrowser() {
       console.log('  Chromium baslatiliyor...');
       browser = await chromium.launch({
         headless: true,
+        channel: 'chrome',
         args: [
           '--no-sandbox',
           '--disable-blink-features=AutomationControlled',
