@@ -436,8 +436,9 @@ async function fetchPage(targetUrl, label = '') {
 async function fetchPageViaFlareSolverr(targetUrl, label) {
   if (stats.creditsUsed >= MAX_CREDITS_PER_RUN) return { html: null, status: 'BUDGET_EXHAUSTED' };
   stats.totalRequests++;
-  const { ok, html } = await applyFlareSolverrCookies(targetUrl);
-  if (ok && html && hasLikelyListingSignals(html)) {
+  const { ok, html, cookies } = await applyFlareSolverrCookies(targetUrl);
+  // FlareSolverr cookie donduyse basarili demektir, HTML'i kullan
+  if (ok && html && cookies.length > 0) {
     stats.successfulRequests++;
     stats.pagesLoaded++;
     stats.creditsUsed++;
