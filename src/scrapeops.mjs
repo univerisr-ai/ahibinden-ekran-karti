@@ -463,7 +463,18 @@ export async function scrapeSegment(priceMin, priceMax) {
   console.log(`\n  Segment: ${label} (Kredi: ${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
 
   const firstUrl = buildSahibindenUrl(0, priceMin, priceMax);
-  const { html: firstHtml, status } = await fetchPageViaFlareSolverr(firstUrl, `${label} (s:1)`);
+  
+  // Ilk sayfayi 3 defa dene (FlareSolverr tutarsiz)
+  let firstHtml = null;
+  let status = 'FAILED';
+  for (let attempt = 0; attempt < 3 && !firstHtml; attempt++) {
+    if (attempt > 0) await sleep(3000);
+    const result = await fetchPageViaFlareSolverr(firstUrl, `${label} (s:1)`);
+    if (result.html && extractTotalCountFromHtml(result.html) > 0) {
+      firstHtml = result.html;
+      status = result.status;
+    }
+  }
 
   if (!firstHtml || status === 'BUDGET_EXHAUSTED') {
     return { htmlPages: [], totalFound: 0, pages: 0, status };
