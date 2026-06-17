@@ -84,6 +84,7 @@ jobs:
           SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
         run: |
           set -o pipefail
+          npm ci --no-optional --ignore-scripts
           node scripts/sahibinden-keepalive.mjs 2>&1 | tee keepalive.log
 
       - name: Kill Camoufox
