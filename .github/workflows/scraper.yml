@@ -162,6 +162,7 @@ jobs:
           CUSTOM_MIN_PRICE: ${{ inputs.min_fiyat || '' }}
           CUSTOM_MAX_PRICE: ${{ inputs.max_fiyat || '' }}
           BYPASS_AI: ${{ inputs.bypass_ai || vars.BYPASS_AI || 'true' }}
+          PARALLEL_SEGMENTS: '2'
         run: |
           npm ci --no-optional --ignore-scripts
           node src/main.mjs 2>&1 | tee scraper.log
