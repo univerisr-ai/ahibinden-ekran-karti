@@ -49,6 +49,7 @@ jobs:
 
       - name: Start Camoufox Server
         id: camoufox_server
+        continue-on-error: true
         shell: bash
         env:
           HOME: /root
