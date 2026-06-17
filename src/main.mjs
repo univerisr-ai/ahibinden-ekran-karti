@@ -519,7 +519,7 @@ async function main() {
     const batch = segments.slice(i, i + PARALLEL_SEGMENTS);
     const results = await Promise.allSettled(
       batch.map(async ([priceMin, priceMax], idx) => {
-        if (idx > 0) await new Promise(r => setTimeout(r, 2000));
+        if (idx > 0) await new Promise(r => setTimeout(r, 1000));
         const result = await scrapeSegment(priceMin, priceMax);
         return { priceMin, priceMax, result };
       })
