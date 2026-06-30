@@ -11,6 +11,8 @@ import { chromium, firefox } from 'playwright';
 import {
   extractTotalCountFromHtml,
   hasLikelyListingSignals,
+  parseAllPages,
+  extractListingId,
 } from './parser.mjs';
 import { loadSahibindenStorageState } from './session_state.mjs';
 import { loadAllSahibindenCookies } from './cookies.mjs';
@@ -380,7 +382,27 @@ export function buildSahibindenUrl(offset, priceMin, priceMax) {
   return url.toString();
 }
 
-export async function scrapeSegment(priceMin, priceMax) {
+// Bir sayfadaki TUM ilanlar daha once gorulmus mu? (incremental erken durdurma icin)
+// date_desc siralamada bu dogruysa daha derin sayfalar da eskidir; o segmenti birakiriz.
+function pageFullySeen(html, label, seenIds) {
+  if (!seenIds || seenIds.size === 0) return false;
+  let ids = [];
+  try {
+    const { listings = [] } = parseAllPages([html], label);
+    ids = listings
+      .map((l) => l.ilan_id || extractListingId(l.url || ''))
+      .filter(Boolean)
+      .map(String);
+  } catch {
+    return false;
+  }
+  if (ids.length === 0) return false; // ilan cikaramadiysak guvenli tarafta kal
+  return ids.every((id) => seenIds.has(id));
+}
+
+export async function scrapeSegment(priceMin, priceMax, opts = {}) {
+  const seenIds = opts.seenIds || null;
+  const stopAfterSeenPages = parseInt(process.env.SEEN_STOP_PAGES || '1', 10);
   const label = `${priceMin.toLocaleString('tr')}-${priceMax.toLocaleString('tr')} TL`;
   console.log(`\n  Segment: ${label} (Kredi: ${stats.creditsUsed}/${MAX_CREDITS_PER_RUN})`);
 
@@ -396,6 +418,12 @@ export async function scrapeSegment(priceMin, priceMax) {
   const totalPages = Math.min(Math.ceil(totalCount / ITEMS_PER_PAGE), MAX_PAGES_PER_SEGMENT);
   console.log(`  ${label}: ${totalCount.toLocaleString('tr')} ilan, ${totalPages} sayfa.`);
 
+  let seenStreak = pageFullySeen(firstHtml, label, seenIds) ? 1 : 0;
+  if (seenStreak >= stopAfterSeenPages) {
+    console.log(`  ⏭️ ${label}: ilk sayfa tamamen gorulmus ilanlardan, segment erken birakiliyor (incremental).`);
+    return { htmlPages, totalFound: totalCount, pages: htmlPages.length, status: 'OK', earlyStopped: true };
+  }
+
   for (let pageIndex = 1; pageIndex < totalPages; pageIndex++) {
     await sleep(REQUEST_DELAY_MS);
     const offset = pageIndex * ITEMS_PER_PAGE;
@@ -407,6 +435,16 @@ export async function scrapeSegment(priceMin, priceMax) {
     }
 
     if (html) htmlPages.push(html);
+
+    if (html && pageFullySeen(html, label, seenIds)) {
+      seenStreak += 1;
+      if (seenStreak >= stopAfterSeenPages) {
+        console.log(`  ⏭️ ${label}: sayfa ${pageIndex + 1} tamamen gorulmus, segment erken birakiliyor (incremental).`);
+        return { htmlPages, totalFound: totalCount, pages: htmlPages.length, status: 'OK', earlyStopped: true };
+      }
+    } else {
+      seenStreak = 0;
+    }
   }
 
   console.log(`  Segment bitti. Toplam sayfa: ${htmlPages.length}`);

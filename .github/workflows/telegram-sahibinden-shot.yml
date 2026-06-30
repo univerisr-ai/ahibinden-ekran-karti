@@ -1,8 +1,8 @@
 name: Telegram sahibinden screenshot
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
+  # NOTE: 5 dakikalik cron kaldirildi (gunde 288 kosu = devasa Actions tuketimi).
+  # Gerekirse manuel "Run workflow" ile tetikleyin.
   workflow_dispatch:
 
 concurrency:

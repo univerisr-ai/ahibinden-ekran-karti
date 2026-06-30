@@ -26,3 +26,6 @@ camoufox-server-*.log
 *.ws
 eski sürümler/
 önceki konuşamalr.md
+
+# Incremental seen-store (Actions cache ile tasinir)
+state/

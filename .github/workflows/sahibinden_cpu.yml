@@ -30,7 +30,21 @@ jobs:
   scrape-cpu:
     name: CPU scrape
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # 120 dk gereksizdi: kotu durumda (WARP/CF blok) scraper devre kesici ile zaten
+    # erken cikiyor. Tavani 30 dk'ya cekerek takilan kosularin dakika israfini onluyoruz.
+    timeout-minutes: 30
+    # GPU scraper ile AYNI camoufox/flaresolverr/WARP altyapisini kullanir; plain
+    # chromium sahibinden tarafindan bloklaniyordu (net::ERR_ABORTED).
+    container:
+      image: ghcr.io/univerisr-ai/ahibinden-ekran-karti/scraper:latest
+      options: --privileged --user root
+
+    services:
+      flaresolverr:
+        image: ghcr.io/flaresolverr/flaresolverr:latest
+        env:
+          LOG_LEVEL: info
+          PROXY_URL: socks5://127.0.0.1:40000
 
     steps:
       - name: Haftalik run politikasi (2 rastgele gun)
@@ -42,14 +56,12 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "Manual tetikleme: policy bypass, CPU kosusu basliyor."
             echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "jitter_seconds=0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           if [ "${{ vars.PIPELINE_PAUSED }}" = "true" ] || [ "${{ vars.CPU_PIPELINE_PAUSED }}" = "true" ]; then
             echo "Run policy: pipeline pause acik oldugu icin CPU schedule kosusu atlanacak."
             echo "should_run=false" >> "$GITHUB_OUTPUT"
-            echo "jitter_seconds=0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -59,153 +71,134 @@ jobs:
           seed_hash="$(printf "%s" "$seed_input" | sha256sum | cut -d' ' -f1)"
           day1_seed=$((16#${seed_hash:0:6}))
           day2_seed=$((16#${seed_hash:6:6}))
-          jitter_seed=$((16#${seed_hash:12:6}))
 
           day1=$(( (day1_seed % 7) + 1 ))
           day2=$(( (day2_seed % 7) + 1 ))
-
           if [ "$day2" -eq "$day1" ]; then
             day2=$(( (day1 % 7) + 1 ))
           fi
 
-          if [ "$day1" -gt "$day2" ]; then
-            tmp="$day1"
-            day1="$day2"
-            day2="$tmp"
-          fi
-
-          jitter_seconds=$(( jitter_seed % 5400 ))
-
-          echo "Week: $week | UTC day: $dow | Picked days: $day1,$day2 | Jitter: ${jitter_seconds}s"
+          echo "Week: $week | UTC day: $dow | Picked days: $day1,$day2"
 
           if [ "$dow" -eq "$day1" ] || [ "$dow" -eq "$day2" ]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
             echo "Run policy: Bugun CPU icin secili gunlerden biri, kosu devam edecek."
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
-            jitter_seconds=0
             echo "Run policy: Bugun CPU icin secili gun degil, schedule kosusu atlanacak."
           fi
-
-          echo "jitter_seconds=${jitter_seconds}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
         if: steps.run_policy.outputs.should_run == 'true'
         uses: actions/checkout@v4
 
-      - name: Node.js kurulumu
-        if: steps.run_policy.outputs.should_run == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Python kurulumu
-        if: steps.run_policy.outputs.should_run == 'true'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Python bagimliliklari
-        if: steps.run_policy.outputs.should_run == 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64
-          pip install DrissionPage pyvirtualdisplay xvfbwrapper requests
-
-      - name: Node bagimliliklari
-        if: steps.run_policy.outputs.should_run == 'true'
-        run: npm ci
-
-      - name: Browser kurulumu
-        if: steps.run_policy.outputs.should_run == 'true'
-        run: npx playwright install chromium --with-deps
-
-      - name: Sahibinden Playwright profil cache
+      - name: Cache Playwright storage state
         if: steps.run_policy.outputs.should_run == 'true'
         uses: actions/cache@v4
         with:
-          path: .playwright/sahibinden-profile
-          key: sahibinden-playwright-profile-v2-${{ runner.os }}-cpu-${{ github.run_id }}
+          path: .playwright/storage-state.json
+          key: sahibinden-storage-state-${{ runner.os }}-cpu-${{ github.run_id }}
           restore-keys: |
-            sahibinden-playwright-profile-v2-${{ runner.os }}-
+            sahibinden-storage-state-${{ runner.os }}-cpu-
 
-      - name: Cloudflare WARP proxy kurulumu
-        if: steps.run_policy.outputs.should_run == 'true' && vars.CPU_DISABLE_WARP_PROXY != 'true'
-        id: warp
-        shell: bash
-        run: |
-          set -u
-          if (
-            set -euo pipefail
-            curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-            sudo apt-get update
-            sudo apt-get install -y cloudflare-warp xvfb
-            warp-cli --accept-tos registration new || warp-cli --accept-tos register
-            warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy
-            warp-cli --accept-tos proxy port 40000 || warp-cli --accept-tos set-proxy-port 40000
-            warp-cli --accept-tos connect
-            sleep 8
-            warp-cli --accept-tos status
-            curl -fsS -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | tee warp-trace.txt
-          ); then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "proxy_url=socks5://127.0.0.1:40000" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::Cloudflare WARP proxy setup failed; continuing without WARP proxy."
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "proxy_url=" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Incremental seen-store cache
+        if: steps.run_policy.outputs.should_run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: state
+          key: sahibinden-seen-cpu-${{ github.run_id }}
+          restore-keys: |
+            sahibinden-seen-cpu-
 
-      - name: Schedule jitter beklemesi
-        if: steps.run_policy.outputs.should_run == 'true' && github.event_name == 'schedule'
+      - name: WARP Proxy
+        if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          JITTER="${{ steps.run_policy.outputs.jitter_seconds }}"
-          echo "Jitter uygulanıyor: ${JITTER}s"
-          sleep "$JITTER"
+          warp-svc > /tmp/warp-svc.log 2>&1 &
+          sleep 4
+          warp-cli --accept-tos registration new 2>/dev/null || warp-cli --accept-tos register
+          warp-cli --accept-tos mode proxy 2>/dev/null || warp-cli --accept-tos set-mode proxy
+          warp-cli --accept-tos proxy port 40000 2>/dev/null || warp-cli --accept-tos set-proxy-port 40000
+          warp-cli --accept-tos connect
+          sleep 8
+          warp-cli --accept-tos status
+          curl -fsS -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | tee warp-trace.txt
+
+      - name: Start Camoufox Server
+        if: steps.run_policy.outputs.should_run == 'true'
+        id: camoufox_server
+        shell: bash
+        env:
+          HOME: /root
+          CAMOUFOX_HEADLESS: false
+          CAMOUFOX_PROXY: socks5://127.0.0.1:40000
+        run: |
+          xvfb-run -a python3 scripts/camoufox-server.py > /tmp/camoufox-server.log 2>&1 &
+          SERVER_PID=$!
+          echo "server_pid=$SERVER_PID" >> "$GITHUB_OUTPUT"
+          WS=""
+          for i in $(seq 1 60); do
+            if grep -q "Websocket endpoint" /tmp/camoufox-server.log 2>/dev/null; then
+              WS=$(grep -oP 'ws://[^\s]+' /tmp/camoufox-server.log | head -1)
+              echo "camoufox_ws=$WS" >> "$GITHUB_OUTPUT"
+              echo "Camoufox server ready: $WS"
+              break
+            fi
+            sleep 2
+          done
+          if [ -z "$WS" ]; then
+            echo "Camoufox server failed to start"
+            cat /tmp/camoufox-server.log
+            exit 1
+          fi
 
       - name: CPU scraper calistir
         if: steps.run_policy.outputs.should_run == 'true'
         shell: bash
         env:
           SAHIBINDEN_PRODUCT_TYPE: 'cpu'
-          USE_WARP_PROXY: ${{ steps.warp.outputs.enabled || 'false' }}
-          SAHIBINDEN_PROXY_SERVER: ${{ secrets.SAHIBINDEN_PROXY_SERVER || vars.SAHIBINDEN_PROXY_SERVER || secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
-          DOLAP_PROXY_SERVER: ${{ secrets.DOLAP_PROXY_SERVER || vars.DOLAP_PROXY_SERVER || '' }}
-          WARP_PROXY_SERVER: ${{ steps.warp.outputs.proxy_url || '' }}
-          HEADLESS: 'false'
-          CHALLENGE_WAIT_MS: '300000'
-          REQUIRE_SAHIBINDEN_COOKIES: 'true'
-          SAHIBINDEN_PERSISTENT_CONTEXT: 'true'
-          SAHIBINDEN_USER_DATA_DIR: .playwright/sahibinden-profile
-          BROWSER_LOCALE: 'tr-TR'
-          BROWSER_TIMEZONE: 'Europe/Istanbul'
-          BROWSER_PLATFORM: 'Win32'
-          EXPECTED_LOCALE: 'tr-TR'
-          EXPECTED_TIMEZONE: 'Europe/Istanbul'
-          EXPECTED_PLATFORM: 'win'
-          MAX_PAGES_PER_SEGMENT: ${{ github.event.inputs.max_pages_per_segment || '60' }}
+          CAMOUFOX_WS_ENDPOINT: ${{ steps.camoufox_server.outputs.camoufox_ws }}
+          FLARESOLVERR_URL: http://flaresolverr:8191/v1
 
+          HEADLESS: 'true'
+          REQUIRE_SAHIBINDEN_COOKIES: 'false'
+          SAHIBINDEN_STORAGE_STATE_FILE: .playwright/storage-state.json
           SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
           SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}
+
+          MAX_PAGES_PER_SEGMENT: ${{ github.event.inputs.max_pages_per_segment || '60' }}
+          PARALLEL_SEGMENTS: '2'
 
           TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
           TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           ENABLE_TELEGRAM: 'false'
+
           ANALYZER_DISPATCH_TOKEN: ${{ secrets.ANALYZER_DISPATCH_TOKEN }}
           ANALYZER_REPO_OWNER: ${{ vars.ANALYZER_REPO_OWNER || 'univerisr-ai' }}
           ANALYZER_REPO_NAME: ${{ vars.ANALYZER_REPO_NAME || '2elAnaliz' }}
           ANALYZER_DISPATCH_EVENT: ${{ vars.ANALYZER_DISPATCH_EVENT || 'telegram_file_ready' }}
 
-          CUSTOM_MIN_PRICE: ${{ github.event.inputs.min_fiyat }}
-          CUSTOM_MAX_PRICE: ${{ github.event.inputs.max_fiyat }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || '' }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          CUSTOM_MIN_PRICE: ${{ github.event.inputs.min_fiyat || '' }}
+          CUSTOM_MAX_PRICE: ${{ github.event.inputs.max_fiyat || '' }}
           BYPASS_AI: 'true'
+
+          # Incremental scraping: repo variable INCREMENTAL_SCRAPE=true yapinca aktiflesir.
+          INCREMENTAL_SCRAPE: ${{ vars.INCREMENTAL_SCRAPE || 'false' }}
+          SEEN_STATE_DIR: state
         run: |
-          set -o pipefail
-          xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" node src/main.mjs 2>&1 | tee scraper.log
+          npm ci --no-optional --ignore-scripts
+          node src/main.mjs 2>&1 | tee scraper.log
+
+      - name: Kill Camoufox
+        if: always() && steps.run_policy.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          kill ${{ steps.camoufox_server.outputs.server_pid }} 2>/dev/null || true
 
       - name: Sonuclari artifact olarak al
         if: always() && steps.run_policy.outputs.should_run == 'true'
@@ -219,6 +212,7 @@ jobs:
             scraper.log
             warp-trace.txt
           retention-days: 7
+          if-no-files-found: ignore
 
       - name: Telegram failure alert
         if: failure() && steps.run_policy.outputs.should_run == 'true'
@@ -239,22 +233,15 @@ jobs:
             exit 0
           fi
 
-          gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed > failed.log 2>/dev/null || true
-
-          summary="$(grep -m 1 -E 'Error:|ERR!|Traceback|Exception|FATAL|KRITIK|CRITICAL|❌' failed.log || true)"
-          if [ -z "$summary" ] && [ -f scraper.log ]; then
-            summary="$(grep -m 1 -E 'Error:|ERR!|Traceback|Exception|FATAL|KRITIK|CRITICAL|❌' scraper.log || true)"
-          fi
+          summary="$(grep -m 1 -E 'Error:|ERR!|Traceback|Exception|FATAL|KRITIK|CRITICAL|DEVRE KESICI|❌' scraper.log 2>/dev/null || true)"
           if [ -z "$summary" ]; then
             summary="Ilk hata ozeti otomatik cikarilamadi; CPU run logunu kontrol et."
           fi
-
           summary="${summary//$'\r'/ }"
           summary="${summary//$'\n'/ }"
 
           message="CPU pipeline alarmi
           Repo: $GITHUB_REPOSITORY
-          Workflow: $GITHUB_WORKFLOW
           Run URL: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
           Ozet: ${summary:0:700}"
 
