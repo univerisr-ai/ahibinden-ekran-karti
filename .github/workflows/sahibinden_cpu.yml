@@ -30,7 +30,9 @@ jobs:
   scrape-cpu:
     name: CPU scrape
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # 120 dk gereksizdi: kotu durumda (WARP/CF blok) scraper devre kesici ile zaten
+    # erken cikiyor. Tavani 30 dk'ya cekerek takilan kosularin dakika israfini onluyoruz.
+    timeout-minutes: 30
 
     steps:
       - name: Haftalik run politikasi (2 rastgele gun)
@@ -129,6 +131,15 @@ jobs:
           restore-keys: |
             sahibinden-playwright-profile-v2-${{ runner.os }}-
 
+      - name: Incremental seen-store cache
+        if: steps.run_policy.outputs.should_run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: state
+          key: sahibinden-seen-cpu-${{ github.run_id }}
+          restore-keys: |
+            sahibinden-seen-cpu-
+
       - name: Cloudflare WARP proxy kurulumu
         if: steps.run_policy.outputs.should_run == 'true' && vars.CPU_DISABLE_WARP_PROXY != 'true'
         id: warp
@@ -187,6 +198,11 @@ jobs:
           EXPECTED_TIMEZONE: 'Europe/Istanbul'
           EXPECTED_PLATFORM: 'win'
           MAX_PAGES_PER_SEGMENT: ${{ github.event.inputs.max_pages_per_segment || '60' }}
+
+          # Incremental scraping: repo variable INCREMENTAL_SCRAPE=true yapinca aktiflesir.
+          # Acikken ayni ~10k ilan her kosuda bastan cekilmez; sadece yeni ilanlar islenir.
+          INCREMENTAL_SCRAPE: ${{ vars.INCREMENTAL_SCRAPE || 'false' }}
+          SEEN_STATE_DIR: state
 
           SAHIBINDEN_STORAGE_STATE_B64: ${{ secrets.SAHIBINDEN_STORAGE_STATE_B64 }}
           SAHIBINDEN_COOKIES: ${{ secrets.SAHIBINDEN_COOKIES }}

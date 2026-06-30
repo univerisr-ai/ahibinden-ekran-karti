@@ -26,7 +26,9 @@ jobs:
   scrape:
     name: Scrape & Analyze
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # Scraper devre kesici (consecutive-failure abort) eklendigi icin 120 dk tavanina
+    # gerek yok; takilan kosular dakika yemesin diye 30 dk'ya cektik.
+    timeout-minutes: 30
     container:
       image: ghcr.io/univerisr-ai/ahibinden-ekran-karti/scraper:latest
       options: --privileged --user root
@@ -80,6 +82,15 @@ jobs:
           key: sahibinden-storage-state-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             sahibinden-storage-state-${{ runner.os }}-
+
+      - name: Incremental seen-store cache
+        if: steps.run_policy.outputs.should_run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: state
+          key: sahibinden-seen-gpu-${{ github.run_id }}
+          restore-keys: |
+            sahibinden-seen-gpu-
 
       - name: WARP Proxy
         if: steps.run_policy.outputs.should_run == 'true'
@@ -163,6 +174,10 @@ jobs:
           CUSTOM_MAX_PRICE: ${{ inputs.max_fiyat || '' }}
           BYPASS_AI: ${{ inputs.bypass_ai || vars.BYPASS_AI || 'true' }}
           PARALLEL_SEGMENTS: '2'
+
+          # Incremental scraping: repo variable INCREMENTAL_SCRAPE=true yapinca aktiflesir.
+          INCREMENTAL_SCRAPE: ${{ vars.INCREMENTAL_SCRAPE || 'false' }}
+          SEEN_STATE_DIR: state
         run: |
           npm ci --no-optional --ignore-scripts
           node src/main.mjs 2>&1 | tee scraper.log

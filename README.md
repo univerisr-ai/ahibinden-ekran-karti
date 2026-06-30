@@ -264,3 +264,28 @@ Bu yontem:
 ### Neden bunu oneriyorum
 
 Sahibinden yardim iceriklerinde `Favori Aramalarim` ile uygun ilan geldiginde e-posta ve mobil bildirim alinabildigi yaziyor. Bu resmi yontem, GitHub veya baska bulut IP'lerinin bot dogrulamasina takilmasindan daha guvenilir.
+
+---
+
+## ⚙️ CI Maliyet Optimizasyonu & Incremental Scraping
+
+Bu repo GitHub Actions dakikalarini asagidaki onlemlerle korur:
+
+- **Tek keepalive:** Cift calisan keepalive workflow'larindan WARP+camoufox geoip yuzunden her gun `InvalidIP` ile cokeni kaldirildi. `sahibinden_keepalive.yml` (proxysiz camoufox) kalir. `camoufox-server.py` artik `geoip`'i yalnizca `CAMOUFOX_GEOIP=true` iken dener.
+- **Devre kesici:** `MAX_CONSECUTIVE_FAILED_SEGMENTS` (varsayilan 3) ust uste sonuc donmeyen segment olunca kosuyu erken bitirir. WARP/Cloudflare blogunda 30+ dk bosa hammer yapan durum ortadan kalkti. Scraper job timeout'lari 120 → 30 dk.
+- **5-dk cron kaldirildi:** `telegram-sahibinden-shot.yml` artik yalnizca manuel (`workflow_dispatch`).
+
+### Incremental scraping (opsiyonel — varsayilan KAPALI)
+
+Ayni ~10.000 ilani her kosuda bastan cekmemek icin `INCREMENTAL_SCRAPE` ozelligi eklendi.
+
+**Acmak icin:** repo'da `Settings → Secrets and variables → Actions → Variables` altinda `INCREMENTAL_SCRAPE = true` ekleyin.
+
+Acikken:
+- Gorulen ilan ID'leri `state/seen-<urun>.json` icinde tutulur ve Actions cache ile kosular arasi tasinir.
+- `date_desc` siralamada bir segmentin sayfasi tamamen gorulmus ilanlardan olusunca o segmentte derine inmek birakilir (sayfa/sure/CI tasarrufu).
+- Yalnizca yeni ilanlar (`is_new`) islenir ve raporlanir.
+
+Ilgili env degiskenleri: `SEEN_STATE_DIR`, `SEEN_TTL_DAYS` (45), `SEEN_MAX_ENTRIES` (80000), `SEEN_STOP_PAGES` (1).
+
+> Not: Acmadan once cikti tuketen tarafin (or. gpupusula.shop) "delta/yeni-ilan" akisini destekledigini dogrulayin; ozellik tam veri yerine yalnizca yeni ilanlari ureten bir moda gecirir.

@@ -28,6 +28,13 @@ import { initSession, scrapeSegment, getStats, saveChallengeProofScreenshot, clo
 import { parseAllPages, deduplicateListings, filterInvalidListings } from './parser.mjs';
 import { evaluateAllListings, selectTopOpportunities, fallbackSelection } from './ai_evaluator.mjs';
 import { buildAnalyzerDispatchPayload } from './analyzer_dispatch_payload.mjs';
+import { loadSeen, saveSeen } from './seen_store.mjs';
+
+// Incremental scraping: varsayilan KAPALI. Acmak icin INCREMENTAL_SCRAPE=true.
+// Acikken run'lar arasi gorulen ilan ID'leri tutulur, date_desc segmentlerde
+// tamamen gorulmus sayfaya ulasinca derine inmeyi birakir (sayfa/sure/CI tasarrufu),
+// yeni ilanlar is_new=true ile isaretlenir.
+const INCREMENTAL = (process.env.INCREMENTAL_SCRAPE || 'false').toLowerCase() === 'true';
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 let telegramTargetModeLogged = false;
@@ -514,19 +521,51 @@ async function main() {
   const PARALLEL_SEGMENTS = parseInt(process.env.PARALLEL_SEGMENTS || '3', 10);
   console.log(`\n  📋 ${segments.length} segment, ${PARALLEL_SEGMENTS} paralel`);
 
+  // Incremental: gorulen ilan hafizasini yukle (kapaliysa null).
+  const seenStore = INCREMENTAL ? loadSeen(PRODUCT_TYPE) : null;
+  const seenIds = seenStore ? seenStore.ids : null;
+  if (seenStore) {
+    console.log(`  🧠 Incremental ACIK — ${seenStore.loaded} gorulen ilan hafizada (${seenStore.file}).`);
+  }
+
+  // Devre kesici: WARP/Cloudflare blogu ya da gecersiz cookie durumunda her sayfa
+  // net::ERR_ABORTED ile dusup tum fiyat merdiveni bosa denenirken ~30 dk yaniyordu.
+  // Ardisik MAX_CONSECUTIVE_FAILED segment bos/FAILED donerse kosuyu erken bitiriyoruz.
+  const MAX_CONSECUTIVE_FAILED = parseInt(process.env.MAX_CONSECUTIVE_FAILED_SEGMENTS || '3', 10);
+  let consecutiveFailed = 0;
+  let circuitTripped = false;
+
   const segmentResults = [];
-  for (let i = 0; i < segments.length; i += PARALLEL_SEGMENTS) {
+  for (let i = 0; i < segments.length && !circuitTripped; i += PARALLEL_SEGMENTS) {
     const batch = segments.slice(i, i + PARALLEL_SEGMENTS);
     const results = await Promise.allSettled(
       batch.map(async ([priceMin, priceMax], idx) => {
         if (idx > 0) await new Promise(r => setTimeout(r, 1000));
-        const result = await scrapeSegment(priceMin, priceMax);
+        const result = await scrapeSegment(priceMin, priceMax, { seenIds });
         return { priceMin, priceMax, result };
       })
     );
     for (const r of results) {
-      if (r.status === 'fulfilled') segmentResults.push(r.value);
+      if (r.status === 'fulfilled') {
+        segmentResults.push(r.value);
+        const pages = r.value?.result?.htmlPages?.length || 0;
+        const failed = pages === 0 && r.value?.result?.status !== 'BUDGET_EXHAUSTED';
+        consecutiveFailed = failed ? consecutiveFailed + 1 : 0;
+      } else {
+        consecutiveFailed += 1;
+      }
+      if (consecutiveFailed >= MAX_CONSECUTIVE_FAILED) {
+        circuitTripped = true;
+        console.log(`\n  🛑 DEVRE KESICI: ${consecutiveFailed} segment ust uste sonuc dondurmedi (muhtemelen WARP/Cloudflare blogu veya gecersiz cookie). Kosu erken sonlandiriliyor.`);
+        break;
+      }
     }
+  }
+
+  if (circuitTripped && segmentResults.every(s => (s?.result?.htmlPages?.length || 0) === 0)) {
+    await sendTelegram('🛑 Scraper devre kesici devreye girdi: hicbir segment yuklenemedi (WARP/Cloudflare/cookie). Kosu erken sonlandirildi.');
+    await closeBrowser();
+    process.exit(1);
   }
 
   // ADIM 3: Parse
@@ -555,6 +594,22 @@ async function main() {
   allListings = deduplicateListings(allListings);
   const totalClean = allListings.length;
   console.log(`  🔄 Tekrarsız: ${totalClean.toLocaleString('tr')}`);
+
+  // ADIM 4b: Incremental — yeni ilanlari ayir, hafizayi guncelle.
+  if (seenStore) {
+    let newCount = 0;
+    for (const l of allListings) {
+      const id = String(l.ilan_id || l.url || '');
+      l.is_new = !!id && !seenIds.has(id);
+      if (l.is_new) newCount += 1;
+    }
+    // Bu kosuda gorulen TUM ID'leri hafizaya yaz (yeni + tekrar gorulen).
+    const allIds = allListings.map((l) => String(l.ilan_id || l.url || '')).filter(Boolean);
+    saveSeen(PRODUCT_TYPE, seenIds, allIds);
+    console.log(`  🆕 Incremental: ${totalClean.toLocaleString('tr')} ilanin ${newCount.toLocaleString('tr')} tanesi YENI.`);
+    // Downstream (AI/rapor/cikti) yalnizca yeni ilanlarla calissin — ayni 10k tekrar gonderilmesin.
+    allListings = allListings.filter((l) => l.is_new);
+  }
 
   // ADIM 5: AI
   let topDeals = [];

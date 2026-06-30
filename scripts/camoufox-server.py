@@ -46,7 +46,11 @@ if fingerprint_json:
 
 if proxy_url:
     kwargs['proxy'] = {'server': proxy_url}
-    kwargs['geoip'] = True
+    # geoip, proxy IP'sinin cografi konumunu bir IP servisinden cozmeye calisir.
+    # GitHub runner'larinda proxy gercekte baglanmadiginda bu "InvalidIP: Failed to
+    # get IP address" ile TUM kosuyu cokertiyordu. Artik opt-in (CAMOUFOX_GEOIP=true).
+    if os.environ.get('CAMOUFOX_GEOIP', 'false').strip().lower() == 'true':
+        kwargs['geoip'] = True
 
 try:
     config = launch_options(**kwargs)
