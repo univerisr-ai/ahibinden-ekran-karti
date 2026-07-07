@@ -51,8 +51,10 @@ async function ensureBrowser() {
       browser = await firefox.connect(CAMOUFOX_WS_ENDPOINT);
     } else {
       console.log('  Chromium baslatiliyor...');
+      const proxyServer = String(process.env.WARP_PROXY_SERVER || '').trim();
       browser = await chromium.launch({
-        headless: true,
+        headless: process.env.HEADLESS !== 'false',
+        proxy: proxyServer ? { server: proxyServer } : undefined,
         args: [
           '--no-sandbox',
           '--disable-blink-features=AutomationControlled',
@@ -450,18 +452,6 @@ export async function initSession() {
       return { ok: false, code: 'LOGIN_REQUIRED' };
     }
 
-    // Bana Ozel sayfasi acildi ΓåÆ session gecerli
-    if (url.includes('banaozel')) {
-      console.log('  Session dogrulandi, login kalindi.');
-      const saved = loadSahibindenStorageState();
-      return {
-        ok: true,
-        code: 'OK',
-        cookieSource: saved.source,
-        cookieCount: saved.cookieCount,
-      };
-    }
-
     // Cloudflare challenge sayfasi
     if (isChallengePage(html)) {
       const fsOk = await applyFlareSolverrCookies(url);
@@ -477,6 +467,18 @@ export async function initSession() {
       }
       console.log('  Cloudflare engeli asilamadi.');
       return { ok: false, code: 'CF_BLOCKED' };
+    }
+
+    // Bana Ozel sayfasi acildi ΓåÆ session gecerli
+    if (url.includes('banaozel')) {
+      console.log('  Session dogrulandi, login kalindi.');
+      const saved = loadSahibindenStorageState();
+      return {
+        ok: true,
+        code: 'OK',
+        cookieSource: saved.source,
+        cookieCount: saved.cookieCount,
+      };
     }
 
     console.log('  Bilinmeyen yonlendirme.');

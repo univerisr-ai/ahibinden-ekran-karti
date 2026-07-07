@@ -15,11 +15,13 @@ on:
         description: 'Segment basina maksimum sayfa'
         required: true
         default: '40'
-  schedule:
+  # schedule devre disi: Cloudflare bu duz-Chromium botunu 2026-06-13'ten beri engelliyor.
+  # Calisan GPU kaynagi scraper.yml (camoufox + WARP). Bu workflow manuel testler icin duruyor.
+  # schedule:
     # Haftada iki yenileme penceresi; GitHub cron yogunluguna takilmamak icin garip dakikalar.
     # Turkiye saati: Sali 07:57, Cumartesi 21:13.
-    - cron: '57 4 * * 2'
-    - cron: '13 18 * * 6'
+    # - cron: '57 4 * * 2'
+    # - cron: '13 18 * * 6'
 
 concurrency:
   group: sahibinden-profile-cache
@@ -275,7 +277,8 @@ jobs:
         if [ "$scraper_code" -ne 0 ]; then
           case "$status" in
             SCRAPE_BLOCKED|SCRAPE_AUTH_REQUIRED|SCRAPE_AUTH_EXPIRED|SCRAPE_EMPTY)
-              echo "Soft scraper status: $status; artifactler yuklensin diye workflow devam ediyor."
+              echo "Soft scraper status: $status; artifact yuklemesi icin devam, kosu sonda basarisiz isaretlenecek."
+              echo "SOFT_FAIL=1" >> "$GITHUB_ENV"
               exit 0
               ;;
             *)
@@ -386,3 +389,9 @@ jobs:
 
         console.log(`Analyzer dispatch tetiklendi: ${owner}/${repo}, artifact=${artifactName}, listings=${listingCount}`);
         NODE
+
+    - name: Bos taramayi basarisiz isaretle
+      if: always() && (env.SOFT_FAIL == '1' || steps.scrape_status.outputs.listing_count == '0')
+      run: |
+        echo "::error::Tarama 0 ilanla bitti (status=${{ steps.scrape_status.outputs.status }}). Analyzer 'success' filtresi bu kosuyu gormemeli."
+        exit 1

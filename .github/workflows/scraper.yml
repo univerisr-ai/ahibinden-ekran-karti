@@ -53,19 +53,14 @@ jobs:
             echo "should_run=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          week="$(date -u +%G-%V)"
-          dow="$(date -u +%u)"
-          seed_input="${GITHUB_REPOSITORY}|${week}|sahibinden-weekly-two-days"
-          seed_hash="$(printf "%s" "$seed_input" | sha256sum | cut -d' ' -f1)"
-          day1_seed=$((16#${seed_hash:0:6}))
-          day2_seed=$((16#${seed_hash:6:6}))
-          allowed_days="$((day1_seed % 7 + 1)) $((day2_seed % 7 + 1))"
-          if echo " $allowed_days " | grep -q " $dow "; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "jitter_seconds=$((day1_seed % 3600))" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-          fi
+          # Gunluk kosu: Sahibinden GPU verisinin tek calisan kaynagi bu workflow.
+          # Kisa jitter yine de uygulanir ki her gun ayni saniyede istek atilmasin.
+          day_seed_input="${GITHUB_REPOSITORY}|$(date -u +%F)|sahibinden-daily"
+          day_seed_hash="$(printf "%s" "$day_seed_input" | sha256sum | cut -d' ' -f1)"
+          jitter_seconds=$(( 16#${day_seed_hash:0:6} % 600 ))
+          echo "Gunluk kosu aktif | Jitter: ${jitter_seconds}s"
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+          echo "jitter_seconds=${jitter_seconds}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
         if: steps.run_policy.outputs.should_run == 'true'

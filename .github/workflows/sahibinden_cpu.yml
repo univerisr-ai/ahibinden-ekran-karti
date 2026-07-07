@@ -30,7 +30,7 @@ jobs:
   scrape-cpu:
     name: CPU scrape
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 30
 
     steps:
       - name: Haftalik run politikasi (2 rastgele gun)
@@ -74,7 +74,7 @@ jobs:
             day2="$tmp"
           fi
 
-          jitter_seconds=$(( jitter_seed % 5400 ))
+          jitter_seconds=$(( jitter_seed % 600 ))
 
           echo "Week: $week | UTC day: $dow | Picked days: $day1,$day2 | Jitter: ${jitter_seconds}s"
 

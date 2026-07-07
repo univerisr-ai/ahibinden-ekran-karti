@@ -511,7 +511,7 @@ async function main() {
 
   // ADIM 2: Segmentleri paralel cek (3'erli)
   const segments = getActiveSegments();
-  const PARALLEL_SEGMENTS = parseInt(process.env.PARALLEL_SEGMENTS || '3', 10);
+  const PARALLEL_SEGMENTS = parseInt(process.env.PARALLEL_SEGMENTS || '1', 10);
   console.log(`\n  📋 ${segments.length} segment, ${PARALLEL_SEGMENTS} paralel`);
 
   const segmentResults = [];
@@ -526,6 +526,11 @@ async function main() {
     );
     for (const r of results) {
       if (r.status === 'fulfilled') segmentResults.push(r.value);
+    }
+
+    if (i === 0 && getStats().pagesLoaded === 0) {
+      console.log('  ⛔ Ilk partide hic sayfa yuklenemedi — kaynak tamamen engelli, kalan segmentler atlanacak.');
+      break;
     }
   }
 
@@ -670,7 +675,12 @@ async function main() {
       ? `${PRODUCT_LABEL} scraper ilanlari cekti; dosya analiz edilmeden 2elAnaliz servisine iletildi.`
       : `${PRODUCT_LABEL} scraper calisti ancak temiz ilan bulunamadi; bos/az veri analyzer servisine iletildi.`;
 
+  if (totalClean === 0) {
+    console.log('  ⛔ Temiz ilan 0 — analyzer dispatch atlanacak (bos veriyle analiz kosusu tetiklenmez).');
+  }
+
   try {
+    if (totalClean === 0) throw new Error('SKIP_DISPATCH_EMPTY');
     await triggerAnalyzerDispatch({
       totalClean,
       isFallback,
@@ -693,13 +703,22 @@ async function main() {
       timestamp: new Date().toISOString(),
     });
   } catch (dispatchErr) {
-    console.log(`  ⚠️ Analyzer dispatch hatasi: ${dispatchErr.message}`);
-    pipelineMessages.push({
-      service: 'scraper',
-      status: 'ANALIZ_DISPATCH_HATA',
-      message: `Analyzer dispatch basarisiz oldu: ${dispatchErr.message}`,
-      timestamp: new Date().toISOString(),
-    });
+    if (dispatchErr.message === 'SKIP_DISPATCH_EMPTY') {
+      pipelineMessages.push({
+        service: 'scraper',
+        status: 'ANALIZ_DISPATCH_ATLANDI',
+        message: 'Temiz ilan 0 oldugu icin analyzer dispatch tetiklenmedi.',
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      console.log(`  ⚠️ Analyzer dispatch hatasi: ${dispatchErr.message}`);
+      pipelineMessages.push({
+        service: 'scraper',
+        status: 'ANALIZ_DISPATCH_HATA',
+        message: `Analyzer dispatch basarisiz oldu: ${dispatchErr.message}`,
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
   fs.writeFileSync(pipelineMessagePath, JSON.stringify(pipelineMessages, null, 2), 'utf-8');
 
