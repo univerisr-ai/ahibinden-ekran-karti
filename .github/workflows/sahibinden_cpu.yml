@@ -33,7 +33,7 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Haftalik run politikasi (2 rastgele gun)
+      - name: Gunluk run politikasi
         id: run_policy
         shell: bash
         run: |
@@ -53,40 +53,12 @@ jobs:
             exit 0
           fi
 
-          week="$(date -u +%G-%V)"
-          dow="$(date -u +%u)" # 1=Mon ... 7=Sun
-          seed_input="${GITHUB_REPOSITORY}|${week}|sahibinden-cpu-weekly-two-days"
-          seed_hash="$(printf "%s" "$seed_input" | sha256sum | cut -d' ' -f1)"
-          day1_seed=$((16#${seed_hash:0:6}))
-          day2_seed=$((16#${seed_hash:6:6}))
-          jitter_seed=$((16#${seed_hash:12:6}))
-
-          day1=$(( (day1_seed % 7) + 1 ))
-          day2=$(( (day2_seed % 7) + 1 ))
-
-          if [ "$day2" -eq "$day1" ]; then
-            day2=$(( (day1 % 7) + 1 ))
-          fi
-
-          if [ "$day1" -gt "$day2" ]; then
-            tmp="$day1"
-            day1="$day2"
-            day2="$tmp"
-          fi
-
-          jitter_seconds=$(( jitter_seed % 600 ))
-
-          echo "Week: $week | UTC day: $dow | Picked days: $day1,$day2 | Jitter: ${jitter_seconds}s"
-
-          if [ "$dow" -eq "$day1" ] || [ "$dow" -eq "$day2" ]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "Run policy: Bugun CPU icin secili gunlerden biri, kosu devam edecek."
-          else
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-            jitter_seconds=0
-            echo "Run policy: Bugun CPU icin secili gun degil, schedule kosusu atlanacak."
-          fi
-
+          # Gunluk kosu: GPU gibi CPU da her gun taranir; CF_BLOCKED gunleri ertesi gun telafi edilir.
+          day_seed_input="${GITHUB_REPOSITORY}|$(date -u +%F)|sahibinden-cpu-daily"
+          day_seed_hash="$(printf "%s" "$day_seed_input" | sha256sum | cut -d' ' -f1)"
+          jitter_seconds=$(( 16#${day_seed_hash:0:6} % 600 ))
+          echo "Gunluk CPU kosusu aktif | Jitter: ${jitter_seconds}s"
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
           echo "jitter_seconds=${jitter_seconds}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
