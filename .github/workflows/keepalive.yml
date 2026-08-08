@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     container:
-      image: ghcr.io/univerisr-ai/ahibinden-ekran-karti/scraper:latest
+      image: ghcr.io/demiralpdev/ahibinden-ekran-karti/scraper:latest
       options: --privileged --user root
 
     steps:

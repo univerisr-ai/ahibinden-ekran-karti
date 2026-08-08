@@ -328,7 +328,7 @@ jobs:
       if: success() && steps.scrape_status.outputs.status == 'SCRAPE_COMPLETED'
       env:
         ANALYZER_DISPATCH_TOKEN: ${{ secrets.ANALYZER_DISPATCH_TOKEN }}
-        ANALYZER_REPO_OWNER: ${{ vars.ANALYZER_REPO_OWNER || 'univerisr-ai' }}
+        ANALYZER_REPO_OWNER: ${{ vars.ANALYZER_REPO_OWNER || 'demiralpdev' }}
         ANALYZER_REPO_NAME: ${{ vars.ANALYZER_REPO_NAME || '2elAnaliz' }}
         ANALYZER_DISPATCH_EVENT: ${{ vars.ANALYZER_DISPATCH_EVENT || 'telegram_file_ready' }}
       run: |
@@ -352,7 +352,7 @@ jobs:
         const artifactName = `scraper-results-${runId || 'local'}`;
         const listingCount = Number(meta.listingCount ?? output.totalClean ?? output.allListings?.length ?? 0);
         const scrapeStatus = meta.scrapeStatus || (listingCount > 0 ? 'SCRAPE_COMPLETED' : 'SCRAPE_EMPTY');
-        const owner = process.env.ANALYZER_REPO_OWNER || 'univerisr-ai';
+        const owner = process.env.ANALYZER_REPO_OWNER || 'demiralpdev';
         const repo = process.env.ANALYZER_REPO_NAME || '2elAnaliz';
         const eventType = process.env.ANALYZER_DISPATCH_EVENT || 'telegram_file_ready';
 

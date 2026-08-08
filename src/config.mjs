@@ -33,7 +33,7 @@ export const TELEGRAM_CHAT_ID =
 export const ENABLE_TELEGRAM = (process.env.ENABLE_TELEGRAM || 'false').toLowerCase() === 'true';
 
 export const ANALYZER_DISPATCH_TOKEN = process.env.ANALYZER_DISPATCH_TOKEN || '';
-export const ANALYZER_REPO_OWNER = process.env.ANALYZER_REPO_OWNER || 'univerisr-ai';
+export const ANALYZER_REPO_OWNER = process.env.ANALYZER_REPO_OWNER || 'demiralpdev';
 export const ANALYZER_REPO_NAME = process.env.ANALYZER_REPO_NAME || '2elAnaliz';
 export const ANALYZER_DISPATCH_EVENT = process.env.ANALYZER_DISPATCH_EVENT || 'telegram_file_ready';
 

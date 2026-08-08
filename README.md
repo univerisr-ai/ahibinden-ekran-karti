@@ -128,7 +128,7 @@ GitHub Variables (opsiyonel):
 
 - `AI_PROVIDER` (ornek: `openrouter` veya `gemini`)
 - `OPENROUTER_MODEL` (ornek: `anthropic/claude-3.5-sonnet`)
-- (opsiyonel, relay) `ANALYZER_REPO_OWNER` (varsayilan: `univerisr-ai`)
+- (opsiyonel, relay) `ANALYZER_REPO_OWNER` (varsayilan: `demiralpdev`)
 - (opsiyonel, relay) `ANALYZER_REPO_NAME` (varsayilan: `2elAnaliz`)
 - (opsiyonel, relay) `ANALYZER_DISPATCH_EVENT` (varsayilan: `telegram_file_ready`)
 
@@ -188,7 +188,7 @@ Repo kokune `cookies.json` koyarsaniz, `SAHIBINDEN_COOKIES` yokken lokalde otoma
 | `CUSTOM_MAX_PRICE` | Workflow dispatch max fiyat |
 | `BYPASS_AI` | AI analizini atla/aktif et |
 | `ANALYZER_DISPATCH_TOKEN` | 2elAnaliz reposuna `repository_dispatch` atmak icin PAT / token |
-| `ANALYZER_REPO_OWNER` | Analyzer repo owner (varsayilan `univerisr-ai`) |
+| `ANALYZER_REPO_OWNER` | Analyzer repo owner (varsayilan `demiralpdev`) |
 | `ANALYZER_REPO_NAME` | Analyzer repo adi (varsayilan `2elAnaliz`) |
 | `ANALYZER_DISPATCH_EVENT` | Repository dispatch event tipi (varsayilan `telegram_file_ready`) |
 | `FINGERPRINT_DIAGNOSTIC` | Runtime profil ozeti ve imza loglarini ac/kapat |
